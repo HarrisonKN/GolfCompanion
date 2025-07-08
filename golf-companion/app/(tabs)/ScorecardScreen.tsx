@@ -15,6 +15,12 @@ export default function ScorecardScreen() {
     setModalVisible(false);
   };
 
+  const removePlayer = (index: number) => {
+  const updatedPlayers = [...players];
+  updatedPlayers.splice(index, 1);
+  setPlayers(updatedPlayers);
+};
+
   const updateScore = (playerIndex: number, holeIndex: number, value: string) => {
     const newPlayers = [...players];
     newPlayers[playerIndex].scores[holeIndex] = value;
@@ -23,13 +29,16 @@ export default function ScorecardScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView horizontal>
+      <ScrollView horizontal contentContainerStyle={styles.scrollContainer}>
         <View style={styles.table}>
           <View style={styles.headerRow}>
             <Text style={styles.cell}>Hole</Text>
             {players.map((player, idx) => (
-              <Text key={idx} style={styles.cell}>{player.name}</Text>
-            ))}
+            <View key={idx} style={styles.cellWithRemove}>
+              <Text style={styles.playerName}>{player.name}</Text>
+              <Text style={styles.removeBtn} onPress={() => removePlayer(idx)}>✕</Text>
+            </View>
+          ))}
           </View>
 
           {Array.from({ length: holeCount }).map((_, holeIndex) => (
@@ -70,12 +79,12 @@ export default function ScorecardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 10, backgroundColor: '#136D15' },
+  container: { flex: 1, padding: 0, backgroundColor: '#040D12' },
   table: { flexDirection: 'column',
-    backgroundColor: '#fff',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 20,
+    backgroundColor: '#6B6B6B',
+    padding: 0,
+    borderRadius: 0,
+    marginTop: 30,
 
     // 👇 Shadow for iOS
     shadowColor: '#000',
@@ -84,24 +93,28 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
 
     // 👇 Elevation for Android
-    elevation: 3,
+    elevation: 10,
   },
-  headerRow: { flexDirection: 'row', backgroundColor: '#e0e0e0' },
-  row: { flexDirection: 'row' },
+  headerRow: { flexDirection: 'row', backgroundColor: '#6B6B6B' },
+  row: { flexDirection: 'row'},
   cell: {
-     padding: 10, 
+     padding: 0, 
      borderWidth: 1, 
      borderColor: '#ccc',
-     borderRadius: 12,
+     borderRadius: 0,
      minWidth: 80,
     textAlign: 'center',
      },
   cellInput: {
-    borderWidth: 1,
-    padding: 8,
-    minWidth: 80,
-    textAlign: 'center',
-  },
+  backgroundColor: '#1E1E1E',
+  color: '#FFFFFF',
+  padding: 8,
+  minWidth: 80,
+  borderWidth: 1,
+  borderColor: '#444',
+  borderRadius: 0,
+  textAlign: 'center',
+},
   modalView: {
     marginTop: 200,
     marginHorizontal: 20,
@@ -130,5 +143,32 @@ const styles = StyleSheet.create({
   marginBottom: 10,
   fontWeight: '600',
   textAlign: 'center',
+},
+scrollContainer: {
+  flexGrow: 1,
+  justifyContent: 'center',
+},
+cellWithRemove: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  borderWidth: 1,
+  borderColor: '#ccc',
+  minWidth: 80,
+  paddingHorizontal: 5,
+  paddingVertical: 8,
+  borderRadius: 0,
+  backgroundColor: '#6B6B6B',
+},
+
+playerName: {
+  flex: 1,
+  textAlign: 'left',
+},
+
+removeBtn: {
+  color: 'red',
+  fontWeight: 'bold',
+  paddingHorizontal: 6,
 },
 });

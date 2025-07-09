@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function TabLayout() {
@@ -24,20 +25,11 @@ export default function TabLayout() {
     }}
   />
   <Tabs.Screen
-    name="explore"
-    options={{
-      title: 'Explore',
-      tabBarIcon: ({ color }) => (
-        <IconSymbol size={28} name="paperplane.fill" color={color} />
-      ),
-    }}
-  />
-  <Tabs.Screen
     name="scorecard"
     options={{
       title: 'Scorecard',
       tabBarIcon: ({ color }) => (
-        <IconSymbol size={28} name="list.bullet" color={color} />
+        <MaterialIcons name="view-list" size={28} color={color} />
       ),
     }}
   />
@@ -46,7 +38,16 @@ export default function TabLayout() {
     options={{
       title: 'Course View',
       tabBarIcon: ({ color }) => (
-        <IconSymbol size={28} name="map.fill" color={color} />
+        <MaterialIcons name="golf-course" size={28}  color={color} />
+      ),
+    }}
+  />
+  <Tabs.Screen
+    name="discord"
+    options={{
+      title: 'Discord',
+      tabBarIcon: ({ color }) => (
+        <MaterialIcons size={28} name="audiotrack" color={color} />
       ),
     }}
   />

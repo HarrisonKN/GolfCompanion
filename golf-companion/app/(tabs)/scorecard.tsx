@@ -47,58 +47,113 @@ export default function ScorecardScreen() {
     <View style={styles.container}>
       {/* ------------ STICKY HEADER Row ------------- */}
       <View style={[styles.headerRow, styles.stickyHeader]}>
-        <View style={styles.cell}>
-          <Text style={styles.holeCellText}>Hole</Text>
-        </View>
-        {players.map((player, idx) => (
-          <View key={idx} style={styles.cellWithRemove}>
-            <Text style={styles.playerName}>{player.name}</Text>
-            <Text
-              style={styles.removeBtn}
-              onPress={() => setConfirmRemoveIndex(idx)}
-            >
-              ✕
-            </Text>
-          </View>
-        ))}
       </View>
 
       {/* ------------ SCROLLABLE Table Body ------------- */}
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        style={styles.scrollBody}
-      >
-        <View style={styles.table}>
-          {/* Score Rows */}
-          {Array.from({ length: holeCount }).map((_, holeIndex) => (
-            <View key={holeIndex} style={styles.row}>
-              <View style={styles.cell}>
-                <Text style={styles.holeCellText}>{holeIndex + 1}</Text>
+      <ScrollView horizontal style={styles.horizontalScroll}>
+        <View style={styles.tableContainer}>
+          {/* Header Row: Hole Numbers */}
+          <View style={styles.row}>
+            <View style={styles.headerCell}>
+              <Text style={styles.headerText}>Hole</Text>
+            </View>
+            {Array.from({ length: holeCount }).map((_, i) => (
+              <View key={i} style={styles.cell}>
+                <Text style={styles.cellText}>{i + 1}</Text>
               </View>
-              {players.map((player, playerIndex) => (
-                <TouchableOpacity
-                  key={playerIndex}
-                  style={styles.cellInput}
-                  onPress={() => {
-                    setSelectedCell({ playerIndex, holeIndex });
-                    setScoreModalVisible(true);
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: player.scores[holeIndex] ? '#EEE' : '#888',
-                      textAlign: 'center',
-                      fontSize: 14,
+            ))}
+            <View style={styles.inOutCell}><Text style={styles.cellText}>IN</Text></View>
+            <View style={styles.inOutCell}><Text style={styles.cellText}>OUT</Text></View>
+            <View style={styles.inOutCell}><Text style={styles.cellText}>Total</Text></View>
+            <View style={styles.emptyCell} />
+          </View>
+
+          {/* Row: Par */}
+          <View style={styles.row}>
+            <View style={styles.headerCell}>
+              <Text style={styles.headerText}>Par</Text>
+            </View>
+            {Array.from({ length: holeCount }).map((_, i) => (
+              <View key={i} style={styles.cell}>
+                <Text style={styles.cellText}>{i % 2 === 0 ? 4 : 3}</Text>
+              </View>
+            ))}
+
+            {/* Calculate Par Totals */}
+            <View style={styles.inOutCell}>
+              <Text style={styles.cellText}>
+              {
+                Array.from({ length: 9 }).reduce(
+                  (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
+                  0
+                )
+              }
+              </Text>
+            </View>
+            <View style={styles.inOutCell}>
+              <Text style={styles.cellText}>
+                {
+                  Array.from({ length: 9 }).reduce(
+                    (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
+                    0
+                  )
+                }
+              </Text>
+            </View>
+            <View style={styles.inOutCell}>
+              <Text style={styles.cellText}>
+                {
+                  Array.from({ length: 18 }).reduce(
+                    (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
+                    0
+                  )
+                }
+              </Text>
+            </View>
+            <View style={styles.emptyCell} />
+          </View>
+
+          {/* Player Rows */}
+          {players.map((player, playerIndex) => {
+            const parseScore = (text: string) =>
+              parseInt(text.split('/')[0]?.trim()) || 0;
+
+            const inScore = player.scores.slice(0, 9).reduce((sum, val) => sum + parseScore(val), 0);
+            const outScore = player.scores.slice(9, 18).reduce((sum, val) => sum + parseScore(val), 0);
+
+            return (
+              <View key={playerIndex} style={styles.row}>
+                <View style={styles.headerCell}>
+                  <Text style={styles.cellText}>{player.name}</Text>
+                </View>
+                {player.scores.map((score, holeIndex) => (
+                  <TouchableOpacity
+                    key={holeIndex}
+                    style={styles.cell}
+                    onPress={() => {
+                      setSelectedCell({ playerIndex, holeIndex });
+                      setScoreModalVisible(true);
                     }}
                   >
-                    {player.scores[holeIndex] || 'Tap'}
-                  </Text>
+                    <Text style={styles.cellText}>{score || 'Tap'}</Text>
+                  </TouchableOpacity>
+                ))}
+                <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore}</Text></View>
+                <View style={styles.inOutCell}><Text style={styles.cellText}>{outScore}</Text></View>
+                <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore + outScore}</Text></View>
+                <TouchableOpacity
+                  style={styles.removeCell}
+                  onPress={() => setConfirmRemoveIndex(playerIndex)}
+                >
+                  <Text style={styles.removeText}>✕</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          ))}
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
+
+
 
       {/* Add Player Button */}
       <TouchableOpacity
@@ -309,5 +364,92 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
     fontSize: 16,
+  },
+
+  
+  cellText: {
+    color: '#EEE',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  
+  rowHeader: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    paddingRight: 10,
+    width: 80,
+  },
+  
+  rowHeaderWithRemove: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingRight: 10,
+    width: 100,
+  },
+  horizontalScroll: {
+    flexGrow: 0,
+    marginTop: 20,
+  },
+  
+  
+  headerCell: {
+    backgroundColor: '#2E2E2E',
+    width: 70,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  
+  
+  removeCell: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#3B0000',
+    borderWidth: 1,
+    borderColor: '#700',
+  },
+  
+  removeText: {
+    color: 'red',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  
+  headerText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  
+  emptyCell: {
+    width: 40,
+    height: 40,
+    backgroundColor: 'transparent',
+  },
+
+  inOutCell: {
+    backgroundColor: '#1F1F1F',
+    width: 60,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  tableContainer: {
+    paddingHorizontal: 16, // padding on left and right to prevent touching edges
+    paddingVertical: 8,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    // optional shadow if you want
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });

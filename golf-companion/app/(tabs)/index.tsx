@@ -1,3 +1,6 @@
+//HOME PAGE
+
+
 // app/(tabs)/index.tsx
 
 import { Image } from 'expo-image';
@@ -38,23 +41,17 @@ export default function HomeScreen() {
       
       {/* Step 2 */}
       <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
+        <ThemedText type="subtitle">Feature 2: On Course DISCORD</ThemedText>
         <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
+          {`Make a party with your friends and talk to each other when split apart on the course `}
         </ThemedText>
       </ThemedView>
 
       {/* Step 3 */}
       <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
+        <ThemedText type="subtitle">Feature 3: Spotify</ThemedText>
         <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText>{' '}
-          to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory.
-          This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
+          {`Join a Spotify session with your friends and listen to music together while you play!`}
         </ThemedText>
       </ThemedView>
     </ParallaxScrollView>

@@ -1,4 +1,4 @@
-import { supabase } from "@/components/supabase"; // make sure you have this!
+import { supabase } from "@/components/supabase";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -7,16 +7,21 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
   Marker,
   Polyline,
   Region,
 } from "react-native-maps";
 
-import { useLocalSearchParams } from "expo-router";
+type Course = {
+  id: string;
+  name: string;
+};
 
 type Hole = {
   id: string;
+  course_id: string;
   hole_number: number;
   par: number | null;
   yardage: number | null;
@@ -24,25 +29,31 @@ type Hole = {
   tee_longitude: number | null;
   green_latitude: number | null;
   green_longitude: number | null;
-  course_id: string;
 };
 
 export default function CourseViewScreen() {
-  const { courseId } = useLocalSearchParams();
-  const myCourseId = courseId || "55f35035-2cb2-4693-9554-9536e07e3cc2";
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
+
+  const [courses, setCourses] = useState<Course[]>([]);
   const [holes, setHoles] = useState<Hole[]>([]);
-  const mapRef = useRef<MapView | null>(null);
+
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedHoleNumber, setSelectedHoleNumber] = useState<number | null>(null);
+
+  const [courseOpen, setCourseOpen] = useState(false);
+  const [holeOpen, setHoleOpen] = useState(false);
+
+  const [courseItems, setCourseItems] = useState<any[]>([]);
+  const [holeItems, setHoleItems] = useState<any[]>([]);
+
+  const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission Denied",
-          "Location permission is required to use this feature."
-        );
+        Alert.alert("Permission Denied", "Location permission is required.");
         return;
       }
 
@@ -58,26 +69,75 @@ export default function CourseViewScreen() {
     })();
   }, []);
 
-  // Fetch holes from Supabase
   useEffect(() => {
-    console.log("courseId param:", courseId);
-    console.log("Using courseId:", myCourseId);
+    const fetchCourses = async () => {
+      const { data, error } = await supabase
+        .from("GolfCourses")
+        .select("*")
+        .order("name");
+      if (error) console.error(error);
+      else {
+        setCourses(data);
+        setCourseItems(
+          data.map((course) => ({
+            label: course.name,
+            value: course.id,
+          }))
+        );
+      }
+    };
+    fetchCourses();
+  }, []);
 
+  useEffect(() => {
+    if (!selectedCourseId) return;
     const fetchHoles = async () => {
       const { data, error } = await supabase
         .from("holes")
         .select("*")
-        .eq("course_id", myCourseId)
+        .eq("course_id", selectedCourseId)
         .order("hole_number", { ascending: true });
-
-        console.log("Fetched holes:", data);
-        console.log("Error:", error);
       if (error) console.error(error);
-      else setHoles(data);
+      else {
+        setHoles(data);
+        setHoleItems(
+          data.map((hole) => ({
+            label: `Hole ${hole.hole_number}`,
+            value: hole.hole_number,
+          }))
+        );
+      }
     };
-
     fetchHoles();
-  }, [courseId]);
+  }, [selectedCourseId]);
+
+  const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
+
+  useEffect(() => {
+    if (!selectedHole || !mapRef.current) return;
+
+    if (
+      selectedHole.tee_latitude != null &&
+      selectedHole.tee_longitude != null &&
+      selectedHole.green_latitude != null &&
+      selectedHole.green_longitude != null
+    ) {
+      const centerLat =
+        (selectedHole.tee_latitude + selectedHole.green_latitude) / 2;
+      const centerLon =
+        (selectedHole.tee_longitude + selectedHole.green_longitude) / 2;
+
+      mapRef.current.animateToRegion(
+        {
+          latitude: centerLat,
+          longitude: centerLon,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        },
+        500
+      );
+    }
+  }, [selectedHole]);
 
   if (!region) {
     return (
@@ -89,6 +149,46 @@ export default function CourseViewScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.overlayContainer}>
+        <DropDownPicker
+          placeholder="Select a course..."
+          open={courseOpen}
+          value={selectedCourseId}
+          items={courseItems}
+          setOpen={setCourseOpen}
+          setValue={(callback) => {
+            const newValue = callback(selectedCourseId);
+            setSelectedCourseId(newValue);
+            setSelectedHoleNumber(null);
+          }}
+          setItems={setCourseItems}
+          style={styles.dropdown}
+          dropDownContainerStyle={styles.dropdownContainer}
+          placeholderStyle={styles.placeholder}
+          textStyle={styles.text}
+          listItemLabelStyle={styles.listItemLabel}
+          zIndex={2000}
+        />
+
+        {selectedCourseId && (
+          <DropDownPicker
+            placeholder="Select a hole..."
+            open={holeOpen}
+            value={selectedHoleNumber}
+            items={holeItems}
+            setOpen={setHoleOpen}
+            setValue={setSelectedHoleNumber}
+            setItems={setHoleItems}
+            style={styles.dropdown}
+            dropDownContainerStyle={styles.dropdownContainer}
+            placeholderStyle={styles.placeholder}
+            textStyle={styles.text}
+            listItemLabelStyle={styles.listItemLabel}
+            zIndex={1000}
+          />
+        )}
+      </View>
+
       <MapView
         ref={mapRef}
         style={{ flex: 1 }}
@@ -96,94 +196,77 @@ export default function CourseViewScreen() {
         showsUserLocation
         showsMyLocationButton
         mapType="hybrid"
-        onMapReady={() => {
-          // Optionally fit all hole markers
-          if (holes.length) {
-            const coords = holes
-            .flatMap((hole) => [
-              hole.tee_latitude !== null && hole.tee_longitude !== null
-                ? {
-                    latitude: hole.tee_latitude,
-                    longitude: hole.tee_longitude,
-                  }
-                : null,
-              hole.green_latitude !== null && hole.green_longitude !== null
-                ? {
-                    latitude: hole.green_latitude,
-                    longitude: hole.green_longitude,
-                  }
-                : null,
-            ])
-            .filter(
-              (c): c is { latitude: number; longitude: number } => c !== null
-            );
-            mapRef.current?.fitToCoordinates(coords, {
-              edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-              animated: true,
-            });
-          }
-        }}
       >
-        {holes.map((hole) => (
-  <React.Fragment key={hole.id}>
-    {hole.tee_latitude && hole.tee_longitude && (
-      <Marker
-        key={`tee-${hole.id}`}
-        coordinate={{
-          latitude: hole.tee_latitude,
-          longitude: hole.tee_longitude,
-        }}
-        pinColor="blue"
-        title={`Hole ${hole.hole_number} Tee`}
-      />
-    )}
-    {hole.green_latitude && hole.green_longitude && (
-      <Marker
-        key={`green-${hole.id}`}
-        coordinate={{
-          latitude: hole.green_latitude,
-          longitude: hole.green_longitude,
-        }}
-        pinColor="green"
-        title={`Hole ${hole.hole_number} Green`}
-      />
-    )}
-    {hole.tee_latitude &&
-      hole.green_latitude &&
-      hole.tee_longitude &&
-      hole.green_longitude && (
-        <Polyline
-          key={`line-${hole.id}`}
-          coordinates={[
-            {
-              latitude: hole.tee_latitude,
-              longitude: hole.tee_longitude,
-            },
-            {
-              latitude: hole.green_latitude,
-              longitude: hole.green_longitude,
-            },
-          ]}
-          strokeColor="#00BFFF"
-          strokeWidth={2}
-        />
-      )}
-  </React.Fragment>
-))}
+        {selectedHole && selectedHole.tee_latitude && selectedHole.green_latitude && (
+          <>
+            <Marker
+              coordinate={{
+                latitude: selectedHole.tee_latitude!,
+                longitude: selectedHole.tee_longitude!,
+              }}
+              pinColor="blue"
+              title={`Hole ${selectedHole.hole_number} Tee`}
+            />
+            <Marker
+              coordinate={{
+                latitude: selectedHole.green_latitude!,
+                longitude: selectedHole.green_longitude!,
+              }}
+              pinColor="green"
+              title={`Hole ${selectedHole.hole_number} Green`}
+            />
+            <Polyline
+              coordinates={[
+                {
+                  latitude: selectedHole.tee_latitude!,
+                  longitude: selectedHole.tee_longitude!,
+                },
+                {
+                  latitude: selectedHole.green_latitude!,
+                  longitude: selectedHole.green_longitude!,
+                },
+              ]}
+              strokeColor="#00BFFF"
+              strokeWidth={2}
+            />
+          </>
+        )}
       </MapView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#040D12",
-  },
+  container: { flex: 1 },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#040D12",
+  },
+  overlayContainer: {
+    position: "absolute",
+    top: 20,
+    alignSelf: "center",
+    width: "90%",
+    zIndex: 10,
+  },
+  dropdown: {
+    backgroundColor: "rgba(0,0,0,0.8)",
+    borderColor: "#555",
+    marginBottom: 8,
+  },
+  dropdownContainer: {
+    backgroundColor: "rgba(0,0,0,0.9)",
+    borderColor: "#555",
+  },
+  placeholder: {
+    color: "#ccc",
+  },
+  text: {
+    color: "#fff",
+  },
+  listItemLabel: {
+    color: "#fff",
   },
 });

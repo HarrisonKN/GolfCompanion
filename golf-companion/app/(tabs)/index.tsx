@@ -34,10 +34,8 @@ export default function HomeScreen() {
       {/* Step 1 */}
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Select Scorecard Screen to Begin tracking your scores!</ThemedText>
-
-          to open developer tools.
-      </ThemedView>
-
+        </ThemedView>
+      
       {/* Step 2 */}
       <ThemedView style={styles.stepContainer}>
         <ThemedText type="subtitle">Step 2: Explore</ThemedText>

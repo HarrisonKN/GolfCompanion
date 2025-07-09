@@ -74,21 +74,27 @@ export default function ScoreEntryModal({ visible, onClose, onSave }: Props) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   container: {
-    width: "80%",
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: '#1e1e1e',
     padding: 20,
+    borderRadius: 12,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    width: '85%',
   },
   title: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 16,
     textAlign: "center",
+    color: '#fff',
   },
   counterRow: {
     flexDirection: "row",
@@ -98,6 +104,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
+    color: '#fff',
   },
   counter: {
     flexDirection: "row",
@@ -117,6 +124,7 @@ const styles = StyleSheet.create({
   value: {
     marginHorizontal: 16,
     fontSize: 18,
+    color: "#fff",
   },
   actions: {
     flexDirection: "row",
@@ -125,9 +133,13 @@ const styles = StyleSheet.create({
   },
   cancel: {
     marginRight: 16,
+    backgroundColor: "#555",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
   },
   cancelText: {
-    color: "#888",
+    color: "#fff",
   },
   save: {
     backgroundColor: "#4CAF50",

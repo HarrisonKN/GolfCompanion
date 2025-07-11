@@ -1,15 +1,18 @@
 import ScoreEntryModal from '@/components/ScoreEntryModal';
 import React, { useState } from 'react';
 import {
-    Button,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Button,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  Dimensions,
 } from 'react-native';
+
+const ACCENT = '#2979FF';
 
 export default function ScorecardScreen() {
   const holeCount = 18;
@@ -20,7 +23,6 @@ export default function ScorecardScreen() {
 
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
-  // Remove Players
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
 
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
@@ -44,138 +46,153 @@ export default function ScorecardScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* ------------ STICKY HEADER Row ------------- */}
-      <View style={[styles.headerRow, styles.stickyHeader]}>
+    <View style={styles.gradientBg}>
+      {/* Scorecard Title */}
+      <View style={styles.topHeader}>
+        <Text style={styles.scorecardTitle}>Scorecard</Text>
+        <View style={styles.titleUnderline} />
       </View>
 
-      {/* ------------ SCROLLABLE Table Body ------------- */}
-      <ScrollView horizontal style={styles.horizontalScroll}>
-        <View style={styles.tableContainer}>
-          {/* Header Row: Hole Numbers */}
-          <View style={styles.row}>
-            <View style={styles.headerCell}>
-              <Text style={styles.headerText}>Hole</Text>
-            </View>
-            {Array.from({ length: holeCount }).map((_, i) => (
-              <View key={i} style={styles.cell}>
-                <Text style={styles.cellText}>{i + 1}</Text>
+      {/* Scorecard Table - Glassy Card */}
+      <View style={styles.cardWrapper}>
+        <ScrollView
+          horizontal
+          style={styles.horizontalScroll}
+          contentContainerStyle={{ minWidth: Dimensions.get('window').width + 400 }}
+          showsHorizontalScrollIndicator={false}
+        >
+          <View style={styles.tableContainer}>
+            {/* Header Row: Hole Numbers */}
+            <View style={styles.row}>
+              <View style={styles.nameCell}>
+                <Text style={styles.headerText}>Hole</Text>
               </View>
-            ))}
-            <View style={styles.inOutCell}><Text style={styles.cellText}>IN</Text></View>
-            <View style={styles.inOutCell}><Text style={styles.cellText}>OUT</Text></View>
-            <View style={styles.inOutCell}><Text style={styles.cellText}>Total</Text></View>
-            <View style={styles.emptyCell} />
-          </View>
-
-          {/* Row: Par */}
-          <View style={styles.row}>
-            <View style={styles.headerCell}>
-              <Text style={styles.headerText}>Par</Text>
-            </View>
-            {Array.from({ length: holeCount }).map((_, i) => (
-              <View key={i} style={styles.cell}>
-                <Text style={styles.cellText}>{i % 2 === 0 ? 4 : 3}</Text>
-              </View>
-            ))}
-
-            {/* Calculate Par Totals */}
-            <View style={styles.inOutCell}>
-              <Text style={styles.cellText}>
-              {
-                Array.from({ length: 9 }).reduce(
-                  (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
-                  0
-                )
-              }
-              </Text>
-            </View>
-            <View style={styles.inOutCell}>
-              <Text style={styles.cellText}>
-                {
-                  Array.from({ length: 9 }).reduce(
-                    (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
-                    0
-                  )
-                }
-              </Text>
-            </View>
-            <View style={styles.inOutCell}>
-              <Text style={styles.cellText}>
-                {
-                  Array.from({ length: 18 }).reduce(
-                    (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
-                    0
-                  )
-                }
-              </Text>
-            </View>
-            <View style={styles.emptyCell} />
-          </View>
-
-          {/* Player Rows */}
-          {players.map((player, playerIndex) => {
-            const parseScore = (text: string) =>
-              parseInt(text.split('/')[0]?.trim()) || 0;
-
-            const inScore = player.scores.slice(0, 9).reduce((sum, val) => sum + parseScore(val), 0);
-            const outScore = player.scores.slice(9, 18).reduce((sum, val) => sum + parseScore(val), 0);
-
-            return (
-              <View key={playerIndex} style={styles.row}>
-                <View style={styles.headerCell}>
-                  <Text style={styles.cellText}>{player.name}</Text>
+              {Array.from({ length: holeCount }).map((_, i) => (
+                <View key={i} style={styles.cell}>
+                  <Text style={styles.cellText}>{i + 1}</Text>
                 </View>
-                {player.scores.map((score, holeIndex) => (
-                  <TouchableOpacity
-                    key={holeIndex}
-                    style={styles.cell}
-                    onPress={() => {
-                      setSelectedCell({ playerIndex, holeIndex });
-                      setScoreModalVisible(true);
-                    }}
-                  >
-                    <Text style={styles.cellText}>{score || 'Tap'}</Text>
-                  </TouchableOpacity>
-                ))}
-                <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore}</Text></View>
-                <View style={styles.inOutCell}><Text style={styles.cellText}>{outScore}</Text></View>
-                <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore + outScore}</Text></View>
-                <TouchableOpacity
-                  style={styles.removeCell}
-                  onPress={() => setConfirmRemoveIndex(playerIndex)}
-                >
-                  <Text style={styles.removeText}>✕</Text>
-                </TouchableOpacity>
+              ))}
+              <View style={styles.inOutCell}><Text style={styles.cellText}>IN</Text></View>
+              <View style={styles.inOutCell}><Text style={styles.cellText}>OUT</Text></View>
+              <View style={styles.inOutCell}><Text style={styles.cellText}>Total</Text></View>
+              <View style={styles.emptyCell} />
+            </View>
+
+            {/* Row: Par */}
+            <View style={styles.row}>
+              <View style={styles.nameCell}>
+                <Text style={styles.headerText}>Par</Text>
               </View>
-            );
-          })}
-        </View>
-      </ScrollView>
+              {Array.from({ length: holeCount }).map((_, i) => (
+                <View key={i} style={styles.cell}>
+                  <Text style={styles.cellText}>{i % 2 === 0 ? 4 : 3}</Text>
+                </View>
+              ))}
+              <View style={styles.inOutCell}>
+                <Text style={styles.cellText}>
+                  {
+                    Array.from({ length: 9 }).reduce(
+                      (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
+                      0
+                    )
+                  }
+                </Text>
+              </View>
+              <View style={styles.inOutCell}>
+                <Text style={styles.cellText}>
+                  {
+                    Array.from({ length: 9 }).reduce(
+                      (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
+                      0
+                    )
+                  }
+                </Text>
+              </View>
+              <View style={styles.inOutCell}>
+                <Text style={styles.cellText}>
+                  {
+                    Array.from({ length: 18 }).reduce(
+                      (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
+                      0
+                    )
+                  }
+                </Text>
+              </View>
+              <View style={styles.emptyCell} />
+            </View>
 
+            {/* Player Rows */}
+            {players.map((player, playerIndex) => {
+              const parseScore = (text: string) =>
+                parseInt(text.split('/')[0]?.trim()) || 0;
 
+              const inScore = player.scores.slice(0, 9).reduce((sum, val) => sum + parseScore(val), 0);
+              const outScore = player.scores.slice(9, 18).reduce((sum, val) => sum + parseScore(val), 0);
 
-      {/* Add Player Button */}
-      <TouchableOpacity
-        onPress={() => setAddPlayerModalVisible(true)}
-        style={styles.addPlayerButton}
-      >
-        <Text style={styles.addPlayerButtonText}>Add Player</Text>
-      </TouchableOpacity>
+              return (
+                <View key={playerIndex} style={styles.playerCard}>
+                  <View style={styles.row}>
+                    <View style={styles.nameCell}>
+                      <Text style={styles.playerNameText}>{player.name}</Text>
+                    </View>
+                    {player.scores.map((score, holeIndex) => (
+                      <TouchableOpacity
+                        key={holeIndex}
+                        style={styles.cellTouchable}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setSelectedCell({ playerIndex, holeIndex });
+                          setScoreModalVisible(true);
+                        }}
+                      >
+                        <View style={styles.cell}>
+                          <Text style={styles.cellText}>{score || 'Tap'}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore}</Text></View>
+                    <View style={styles.inOutCell}><Text style={styles.cellText}>{outScore}</Text></View>
+                    <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore + outScore}</Text></View>
+                    <TouchableOpacity
+                      style={styles.removeCell}
+                      onPress={() => setConfirmRemoveIndex(playerIndex)}
+                    >
+                      <Text style={styles.removeText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* Add Player Button - floating */}
+      <View style={styles.addPlayerButtonContainer}>
+        <TouchableOpacity
+          onPress={() => setAddPlayerModalVisible(true)}
+          style={styles.addPlayerButton}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.addPlayerButtonText}>+ Add Player</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Add Player Modal */}
       <Modal visible={addPlayerModalVisible} transparent animationType="slide">
-        <View style={styles.modalView}>
-          <Text style={styles.modalText}>Enter Player Name:</Text>
-          <TextInput
-            placeholder="Name"
-            placeholderTextColor="#FFFFFF"
-            value={newPlayerName}
-            onChangeText={setNewPlayerName}
-            style={styles.modalInput}
-          />
-          <Button title="Add" onPress={addPlayer} />
-          <Button title="Cancel" onPress={() => setAddPlayerModalVisible(false)} />
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>Enter Player Name:</Text>
+            <TextInput
+              placeholder="Name"
+              placeholderTextColor="#fff"
+              value={newPlayerName}
+              onChangeText={setNewPlayerName}
+              style={styles.modalInput}
+            />
+            <Button title="Add" onPress={addPlayer} color={ACCENT} />
+            <Button title="Cancel" onPress={() => setAddPlayerModalVisible(false)} color="#555" />
+          </View>
         </View>
       </Modal>
 
@@ -185,28 +202,30 @@ export default function ScorecardScreen() {
         transparent
         animationType="slide"
       >
-        <View style={styles.modalView}>
-          <Text style={styles.modalText}>
-            Are you sure you want to remove this player?
-          </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <TouchableOpacity
-              style={[styles.confirmButton, { backgroundColor: '#e53935' }]}
-              onPress={() => {
-                if (confirmRemoveIndex !== null) {
-                  removePlayer(confirmRemoveIndex);
-                }
-                setConfirmRemoveIndex(null);
-              }}
-            >
-              <Text style={styles.confirmButtonText}>Yes</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.confirmButton, { backgroundColor: '#555' }]}
-              onPress={() => setConfirmRemoveIndex(null)}
-            >
-              <Text style={styles.confirmButtonText}>No</Text>
-            </TouchableOpacity>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>
+              Are you sure you want to remove this player?
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <TouchableOpacity
+                style={[styles.confirmButton, { backgroundColor: '#e53935' }]}
+                onPress={() => {
+                  if (confirmRemoveIndex !== null) {
+                    removePlayer(confirmRemoveIndex);
+                  }
+                  setConfirmRemoveIndex(null);
+                }}
+              >
+                <Text style={styles.confirmButtonText}>Yes</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmButton, { backgroundColor: '#555' }]}
+                onPress={() => setConfirmRemoveIndex(null)}
+              >
+                <Text style={styles.confirmButtonText}>No</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -231,225 +250,223 @@ export default function ScorecardScreen() {
 
 // ------------------- STYLES -------------------------
 const styles = StyleSheet.create({
-  // ------------ TABLE Styling ----------------------------
-  container: { flex: 1, padding: 0, backgroundColor: '#040D12' },
-  table: {
-    flexDirection: 'column',
-    backgroundColor: '#2A2A2A',
-    padding: 0,
-    borderRadius: 8,
-    marginTop: 0, // Remove extra margin now that header is separate
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 10,
-  },
-  headerRow: { flexDirection: 'row' },
-  stickyHeader: {
-    flexDirection: 'row',
-    marginTop:50,
-    backgroundColor: '#333',
-    borderBottomWidth: 1,
-    borderBottomColor: '#444',
-    alignSelf: 'center', // 👈 this centers it horizontally
-    zIndex: 1,
-  },
-  scrollBody: {
-    marginTop: 0, // Adjust this to match header height if needed
-  },
-  row: { flexDirection: 'row' },
-  cell: {
-    backgroundColor: '#333',
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#444',
-    minWidth: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  holeCellText: {
-    color: '#FFF',
-    fontWeight: '600',
-  },
-  cellInput: {
-    backgroundColor: '#1E1E1E',
-    paddingVertical: 12,
-    marginVertical: 2,
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    minWidth: 80,
-    maxWidth: 80,
-    justifyContent: 'center',
-  },
-  cellWithRemove: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#444',
-    minWidth: 80,
-    paddingHorizontal: 5,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#333',
-  },
-  // ---------------- Add Player Styling ----------------
-  playerName: {
+  gradientBg: {
     flex: 1,
-    textAlign: 'left',
-    color: '#fff',
+    backgroundColor: '#16213e',
   },
-  addPlayerButton: {
-    backgroundColor: '#2979FF',
-    paddingVertical: 14,
-    margin: 16,
-    borderRadius: 8,
-  },
-  addPlayerButtonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  modalView: {
-    marginTop: 200,
-    marginHorizontal: 20,
-    backgroundColor: '#1e1e1e',
-    padding: 20,
-    borderRadius: 12,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#555',
-    backgroundColor: '#333',
-    color: '#eee',
-    padding: 10,
-    marginVertical: 10,
-    borderRadius: 8,
-    fontSize: 16,
-  },
-  modalText: {
-    color: '#ffffff',
-    fontSize: 18,
-    marginBottom: 10,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center', // Center horizontally
-  },
-  // ---------------- Remove Player Styling ----------------
-  removeBtn: {
-    color: 'red',
-    fontWeight: 'bold',
-    paddingHorizontal: 6,
-  },
-  confirmButton: {
-    flex: 1,
-    paddingVertical: 12,
-    marginHorizontal: 8,
-    borderRadius: 8,
-  },
-  confirmButtonText: {
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-
-  
-  cellText: {
-    color: '#EEE',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  
-  rowHeader: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    paddingRight: 10,
-    width: 80,
-  },
-  
-  rowHeaderWithRemove: {
-    flexDirection: 'row',
+  topHeader: {
+    paddingTop: 38,
+    paddingBottom: 8,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: 10,
-    width: 100,
+    backgroundColor: 'transparent',
+  },
+  scorecardTitle: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textShadowColor: 'rgba(41,121,255,0.18)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  titleUnderline: {
+    width: 120,
+    height: 4,
+    backgroundColor: ACCENT,
+    borderRadius: 2,
+    marginTop: 6,
+    marginBottom: 2,
+    opacity: 0.8,
+  },
+  cardWrapper: {
+    marginHorizontal: 0,
+    marginBottom: 0,
+    marginTop: 32,
   },
   horizontalScroll: {
     flexGrow: 0,
-    marginTop: 20,
+    width: '100%',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
-  
-  
-  headerCell: {
-    backgroundColor: '#2E2E2E',
-    width: 70,
+  tableContainer: {
+    backgroundColor: 'rgba(28,61,70,0.92)',
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginVertical: 12,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#23485c',
+    minWidth: 900,
+  },
+  row: { flexDirection: 'row' },
+  cell: {
+    backgroundColor: '#23485c',
+    padding: 10,
+    minWidth: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    marginHorizontal: 1,
+    borderWidth: 1,
+    borderColor: '#2e5c7a',
+  },
+  cellTouchable: {
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  cellText: {
+    color: '#fff',
+    fontSize: 15,
+    textAlign: 'center',
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  playerCard: {
+    backgroundColor: 'rgba(41,121,255,0.08)',
+    borderRadius: 18,
+    marginVertical: 8,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#23485c',
+  },
+  nameCell: {
+    backgroundColor: ACCENT,
+    width: 120,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 12,
+    marginHorizontal: 1,
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: ACCENT,
   },
-  
-  
-  removeCell: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#3B0000',
-    borderWidth: 1,
-    borderColor: '#700',
-  },
-  
-  removeText: {
-    color: 'red',
+  playerNameText: {
+    color: '#fff',
+    fontWeight: '800',
     fontSize: 18,
-    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
-  
   headerText: {
-    color: '#FFF',
-    fontWeight: 'bold',
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 18,
+    letterSpacing: 1,
   },
-  
+  inOutCell: {
+    backgroundColor: '#23485c',
+    width: 54,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 10,
+    marginHorizontal: 1,
+    borderWidth: 1,
+    borderColor: '#2e5c7a',
+  },
   emptyCell: {
     width: 40,
     height: 40,
     backgroundColor: 'transparent',
   },
-
-  inOutCell: {
-    backgroundColor: '#1F1F1F',
-    width: 60,
+  removeCell: {
+    width: 40,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#23485c',
+    borderRadius: 10,
+    marginLeft: 4,
     borderWidth: 1,
-    borderColor: '#444',
+    borderColor: '#2e5c7a',
   },
-  tableContainer: {
-    paddingHorizontal: 16, // padding on left and right to prevent touching edges
-    paddingVertical: 8,
-    backgroundColor: '#2A2A2A',
-    borderRadius: 8,
-    // optional shadow if you want
-    shadowColor: '#000',
+  removeText: {
+    color: '#e53935',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  addPlayerButtonContainer: {
+    position: 'absolute',
+    bottom: 32,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  addPlayerButton: {
+    backgroundColor: ACCENT,
+    paddingVertical: 18,
+    paddingHorizontal: 56,
+    borderRadius: 28,
+    shadowColor: ACCENT,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  addPlayerButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '800',
+    fontSize: 20,
+    letterSpacing: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(22,33,62,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalView: {
+    backgroundColor: '#23485c',
+    padding: 32,
+    borderRadius: 20,
+    elevation: 12,
+    shadowColor: ACCENT,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    minWidth: 280,
+    borderWidth: 1,
+    borderColor: ACCENT,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: ACCENT,
+    backgroundColor: '#18303d',
+    color: '#fff',
+    padding: 16,
+    marginVertical: 14,
+    borderRadius: 10,
+    fontSize: 17,
+  },
+  modalText: {
+    color: '#fff',
+    fontSize: 22,
+    marginBottom: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  confirmButton: {
+    flex: 1,
+    paddingVertical: 16,
+    marginHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: ACCENT,
+  },
+  confirmButtonText: {
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '700',
+    fontSize: 17,
   },
 });

@@ -29,15 +29,17 @@ export default function AccountsScreen() {
     try {
       setLoading(true);
 
-      const user = supabase.auth.getUser();
-      const { data: userData, error: userError } = await user;
-      if (userError || !userData.user) {
-        router.replace('/login');
-        return;
-      }
+      console.log('Fetching user...');
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+      console.log('No user found or session expired. Redirecting...');
+      router.replace('/login');
+      return;
+     }
 
       // Get user ID
-      const userId = userData.user.id;
+      const userId = user.id;
 
       // Fetch profile info from 'profiles' table
       const { data: profileData, error: profileError } = await supabase
@@ -59,6 +61,7 @@ export default function AccountsScreen() {
 
       setProfile(profileData);
     } catch (error: any) {
+      console.error('Profile fetch error:', error.message);
       Alert.alert('Error loading profile', error.message);
     } finally {
       setLoading(false);

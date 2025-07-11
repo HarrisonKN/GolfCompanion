@@ -6,6 +6,7 @@ import {
   Alert,
   StyleSheet,
   View,
+  Text,
 } from "react-native";
 
 
@@ -51,6 +52,9 @@ export default function CourseViewScreen() {
   const [courseItems, setCourseItems] = useState<any[]>([]);
   const [holeItems, setHoleItems] = useState<any[]>([]);
 
+  const [courseError, setCourseError] = useState<string | null>(null);
+  const [holeError, setHoleError] = useState<string | null>(null);
+
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
@@ -79,8 +83,10 @@ export default function CourseViewScreen() {
         .from("GolfCourses")
         .select("*")
         .order("name");
-      if (error) console.error(error);
-      else {
+      if (error) {
+        console.error(error);
+        setCourseError("Failed to load courses. Please try again.");
+      } else {
         setCourses(data);
         setCourseItems(
           data.map((course) => ({
@@ -88,6 +94,7 @@ export default function CourseViewScreen() {
             value: course.id,
           }))
         );
+        setCourseError(null);
       }
     };
     fetchCourses();
@@ -101,8 +108,10 @@ export default function CourseViewScreen() {
         .select("*")
         .eq("course_id", selectedCourseId)
         .order("hole_number", { ascending: true });
-      if (error) console.error(error);
-      else {
+      if (error) {
+        console.error(error);
+        setHoleError("Failed to load holes. Please try again.");
+      } else {
         setHoles(data);
         setHoleItems(
           data.map((hole) => ({
@@ -110,6 +119,7 @@ export default function CourseViewScreen() {
             value: hole.hole_number,
           }))
         );
+        setHoleError(null);
       }
     };
     fetchHoles();
@@ -154,6 +164,11 @@ export default function CourseViewScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.overlayContainer}>
+        {courseError && (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={{ color: 'red', textAlign: 'center' }}>{courseError}</Text>
+          </View>
+        )}
         <DropDownPicker
           placeholder="Select a course..."
           open={courseOpen}
@@ -175,6 +190,12 @@ export default function CourseViewScreen() {
         />
 
         {selectedCourseId && (
+          <>
+          {holeError && (
+            <View style={{ marginBottom: 8 }}>
+              <Text style={{ color: 'red', textAlign: 'center' }}>{holeError}</Text>
+            </View>
+          )}
           <DropDownPicker
             placeholder="Select a hole..."
             open={holeOpen}
@@ -190,6 +211,7 @@ export default function CourseViewScreen() {
             listItemLabelStyle={styles.listItemLabel}
             zIndex={1000}
           />
+          </>
         )}
       </View>
 

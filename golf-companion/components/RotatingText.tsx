@@ -33,7 +33,7 @@ export default function RotatingText({
         useNativeDriver: true,
       }).start(() => {
         setIndex((prev) => (prev + 1) % texts.length);
-        translateY.setValue(30);
+        translateY.setValue(10);
         animateIn();
       });
     }, rotationInterval);
@@ -62,5 +62,6 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 24,
     color: "black",
+    backgroundColor: "transparent",
   },
 });

@@ -43,15 +43,25 @@ export default function TabLayout() {
     }}
   />
   <Tabs.Screen
-    name="discord"
+    name="voiceChat"
     options={{
-      title: 'Discord',
+      title: 'VoiceChat',
       tabBarIcon: ({ color }) => (
         <MaterialIcons size={28} name="audiotrack" color={color} />
       ),
     }}
   />
+  <Tabs.Screen
+    name="account"
+    options={{
+      title: 'Account',
+      tabBarIcon: ({ color }) => (
+        <MaterialIcons name="account-circle" size={28} color={color} />
+      ),
+    }}
+  />
 </Tabs>
+
     
   );
 }

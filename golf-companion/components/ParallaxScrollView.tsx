@@ -1,17 +1,16 @@
-import type { PropsWithChildren, ReactElement } from 'react';
-import { StyleSheet } from 'react-native';
+import { useState, useRef, type PropsWithChildren, type ReactElement } from 'react';
+import { StyleSheet, View, LayoutChangeEvent } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
   useAnimatedStyle,
   useScrollViewOffset,
+  useSharedValue,
 } from 'react-native-reanimated';
 
 import { ThemedView } from '@/components/ThemedView';
 import { useBottomTabOverflow } from '@/components/ui/TabBarBackground';
 import { useColorScheme } from '@/hooks/useColorScheme';
-
-const HEADER_HEIGHT = 250;
 
 type Props = PropsWithChildren<{
   headerImage: ReactElement;
@@ -27,18 +26,31 @@ export default function ParallaxScrollView({
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollViewOffset(scrollRef);
   const bottom = useBottomTabOverflow();
+
+  const [headerHeight, setHeaderHeight] = useState(200)
+  const headerHeightShared = useSharedValue(200);
+
+  const onHeaderLayout = (event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    setHeaderHeight(height);
+    headerHeightShared.value = height;
+  };
+
   const headerAnimatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
         {
           translateY: interpolate(
             scrollOffset.value,
-            [-HEADER_HEIGHT, 0, HEADER_HEIGHT],
-            [-HEADER_HEIGHT / 2, 0, HEADER_HEIGHT * 0.75]
+            [-headerHeightShared.value, 0, headerHeightShared.value],
+            [-headerHeightShared.value / 2, 0, headerHeightShared.value * 0.75]
           ),
         },
         {
-          scale: interpolate(scrollOffset.value, [-HEADER_HEIGHT, 0, HEADER_HEIGHT], [2, 1, 1]),
+          scale: interpolate(
+            scrollOffset.value,
+            [-headerHeightShared.value, 0, headerHeightShared.value],
+            [2, 1, 1]),
         },
       ],
     };
@@ -52,12 +64,18 @@ export default function ParallaxScrollView({
         scrollIndicatorInsets={{ bottom }}
         contentContainerStyle={{ paddingBottom: bottom }}>
         <Animated.View
+          onLayout={onHeaderLayout}
           style={[
-            styles.header,
             { backgroundColor: headerBackgroundColor[colorScheme] },
             headerAnimatedStyle,
-          ]}>
-          {headerImage}
+        ]}
+        >
+          <View
+            onLayout={onHeaderLayout}
+            style={{ padding: 0, margin: 0 }}
+          >
+            {headerImage}
+          </View>
         </Animated.View>
         <ThemedView style={styles.content}>{children}</ThemedView>
       </Animated.ScrollView>
@@ -70,13 +88,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: HEADER_HEIGHT,
     overflow: 'hidden',
   },
   content: {
     flex: 1,
-    padding: 32,
-    gap: 16,
-    overflow: 'hidden',
+    paddingHorizontal: 24,
   },
 });

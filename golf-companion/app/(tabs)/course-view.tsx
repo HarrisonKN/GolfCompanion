@@ -52,11 +52,11 @@ export default function CourseViewScreen() {
   const mapRef = useRef<MapView>(null);
   const mountedRef = useRef(true);
 
-  const DEFAULT_REGION: Region = {
-    latitude: 37.7749,
-    longitude: -122.4194,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
+  const DEFAULT_REGION = region || {
+  latitude: -37.8136,
+  longitude: 144.9631,
+  latitudeDelta: 0.05,
+  longitudeDelta: 0.05,
   };
 
   const safeSetState = (setter: any, value: any) => {
@@ -281,12 +281,13 @@ export default function CourseViewScreen() {
       </View>
 
       <MapView
-        ref={mapRef}
-        style={{ flex: 1 }}
-        region={region || DEFAULT_REGION}
-        showsUserLocation={!!location}
-        showsMyLocationButton={!!location}
-        mapType="hybrid"
+         ref={mapRef}
+         style={{ flex: 1 }}
+         region={DEFAULT_REGION}
+         showsUserLocation={true}
+         showsMyLocationButton={true}
+         followsUserLocation={true}
+         mapType="hybrid"
       >
         {selectedHole && (
           <>

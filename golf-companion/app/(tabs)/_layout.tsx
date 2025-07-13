@@ -39,9 +39,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="voiceChat"
+        name="golfHub"
         options={{
-          title: 'VoiceChat',
+          title: 'GolfHub',
           tabBarIcon: ({ color }) => (
             <MaterialIcons size={28} name="audiotrack" color={color} />
           ),

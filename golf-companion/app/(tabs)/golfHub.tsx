@@ -5,7 +5,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
-
 // ------------------- MOCK DATA -------------------------
 // Mock data for voice chat groups
 const mockGroups = [
@@ -21,9 +20,8 @@ const mockTrack = {
   albumArt: 'https://picsum.photos/100', // Replace with real album art url
 };
 
-
-// ------------------- Socials LOGIC -------------------------
-export default function SocialScreen() {
+// ------------------- GolfHub LOGIC -------------------------
+export default function GolfHubScreen() {
   const [groups, setGroups] = useState(mockGroups);
   const [joinedGroupId, setJoinedGroupId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -46,13 +44,12 @@ export default function SocialScreen() {
     setSpotifyConnected(!spotifyConnected);
   };
 
-
   // ------------------- UI Setup -------------------------
   return (
     <ThemedView style={styles.screen}>
       {/* Header */}
       <View style={styles.header}>
-        <ThemedText type="title" style={styles.title}>VoiceChat</ThemedText>
+        <ThemedText type="title" style={styles.title}>GolfHub</ThemedText>
         <Pressable
           style={styles.createButton}
           onPress={() => {

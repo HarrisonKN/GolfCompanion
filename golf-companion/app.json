@@ -12,22 +12,22 @@
       "supportsTablet": true
     },
     "android": {
-    "adaptiveIcon": {
-      "foregroundImage": "./assets/images/golf-logo.png",
-      "backgroundColor": "#003b23"
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/golf-logo.png",
+        "backgroundColor": "#003b23"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.golfcompanion",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDc_Fjev9H5OlUY228wrGz8q4x2y_kMX4k"
+        }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
-    "edgeToEdgeEnabled": true,
-    "package": "com.anonymous.golfcompanion",
-    "config": {
-      "googleMaps": {
-        "apiKey": "AIzaSyDc_Fjev9H5OlUY228wrGz8q4x2y_kMX4k"
-      }
-    },
-    "permissions": [
-      "ACCESS_COARSE_LOCATION",
-      "ACCESS_FINE_LOCATION"
-    ]
-  },
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -43,7 +43,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#003b23"
         }
-      ]
+      ],
+      "react-native-permissions"
     ],
     "experiments": {
       "typedRoutes": true

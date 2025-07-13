@@ -1,23 +1,31 @@
-import React, { Dispatch, SetStateAction, useState } from "react";
+import React from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-
-interface Props {
+type ScoreEntryModalProps = {
   visible: boolean;
   onClose: () => void;
+  score: number;
+  putts: number;
+  onScoreChange: (score: number) => void;
+  onPuttsChange: (putts: number) => void;
   onSave: (score: number, putts: number) => void;
-}
+};
 
-export default function ScoreEntryModal({ visible, onClose, onSave }: Props) {
-  const [score, setScore] = useState(0);
-  const [putts, setPutts] = useState(0);
-
+const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
+  visible,
+  onClose,
+  score,
+  putts,
+  onScoreChange,
+  onPuttsChange,
+  onSave,
+}) => {
   const increment = (
-  value: number,
-  setter: Dispatch<SetStateAction<number>>
-    ) => () => {
-    setter((prev) => Math.max(0, prev + value));
-    };
+    value: number,
+    setter: (value: number) => void
+  ) => () => {
+    setter(Math.max(0, value));
+  };
 
   return (
     <Modal transparent visible={visible} animationType="slide">
@@ -28,11 +36,17 @@ export default function ScoreEntryModal({ visible, onClose, onSave }: Props) {
           <View style={styles.counterRow}>
             <Text style={styles.label}>Score</Text>
             <View style={styles.counter}>
-              <TouchableOpacity onPress={increment(-1, setScore)} style={styles.button}>
+              <TouchableOpacity
+                onPress={increment(score - 1, onScoreChange)}
+                style={styles.button}
+              >
                 <Text style={styles.buttonText}>-</Text>
               </TouchableOpacity>
               <Text style={styles.value}>{score}</Text>
-              <TouchableOpacity onPress={increment(1, setScore)} style={styles.button}>
+              <TouchableOpacity
+                onPress={increment(score + 1, onScoreChange)}
+                style={styles.button}
+              >
                 <Text style={styles.buttonText}>+</Text>
               </TouchableOpacity>
             </View>
@@ -41,11 +55,17 @@ export default function ScoreEntryModal({ visible, onClose, onSave }: Props) {
           <View style={styles.counterRow}>
             <Text style={styles.label}>Putts</Text>
             <View style={styles.counter}>
-              <TouchableOpacity onPress={increment(-1, setPutts)} style={styles.button}>
+              <TouchableOpacity
+                onPress={increment(putts - 1, onPuttsChange)}
+                style={styles.button}
+              >
                 <Text style={styles.buttonText}>-</Text>
               </TouchableOpacity>
               <Text style={styles.value}>{putts}</Text>
-              <TouchableOpacity onPress={increment(1, setPutts)} style={styles.button}>
+              <TouchableOpacity
+                onPress={increment(putts + 1, onPuttsChange)}
+                style={styles.button}
+              >
                 <Text style={styles.buttonText}>+</Text>
               </TouchableOpacity>
             </View>
@@ -69,32 +89,32 @@ export default function ScoreEntryModal({ visible, onClose, onSave }: Props) {
       </View>
     </Modal>
   );
-}
+};
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   container: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: "#1e1e1e",
     padding: 20,
     borderRadius: 12,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.8,
     shadowRadius: 4,
-    width: '85%',
+    width: "85%",
   },
   title: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 16,
     textAlign: "center",
-    color: '#fff',
+    color: "#fff",
   },
   counterRow: {
     flexDirection: "row",
@@ -104,7 +124,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
   },
   counter: {
     flexDirection: "row",
@@ -152,3 +172,5 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
+
+export default ScoreEntryModal;

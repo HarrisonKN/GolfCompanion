@@ -1,7 +1,7 @@
 // ------------------- IMPORTS -------------------------
 
 import ScoreEntryModal from '@/components/ScoreEntryModal';
-import React, { useState , useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Modal,
@@ -16,9 +16,9 @@ import {
 import { supabase } from "@/components/supabase";
 import DropDownPicker from "react-native-dropdown-picker";
 
+// ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
 const CELL_WIDTH = 60; // You can adjust this value for your needs
-
 
 type Course = {
   id: string;
@@ -42,22 +42,52 @@ export default function ScorecardScreen() {
   const [courseOpen, setCourseOpen] = useState(false);
 
   const [parValues, setParValues] = useState<number[]>(Array(holeCount).fill(4));
-  
 
-  const [players, setPlayers] = useState([
-    { name: 'Player 1', scores: Array(holeCount).fill('') },
-  ]);
+  const [players, setPlayers] = useState<any[]>([]);
 
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
 
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
-  const [selectedCell, setSelectedCell] = useState<{
-    playerIndex: number;
-    holeIndex: number;
-  } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ playerIndex: number; holeIndex: number } | null>(null);
 
+  const [modalScore, setModalScore] = useState(0);
+  const [modalPutts, setModalPutts] = useState(0);
+
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
+
+  // Fetch courses from Supabase
+  useEffect(() => {
+    const fetchCourses = async () => {
+      const { data, error } = await supabase
+        .from("GolfCourses")
+        .select("id, name, par_values");
+      if (!error && data) {
+        setCourses(data);
+        setCourseItems(
+          data.map((course) => ({
+            label: course.name,
+            value: course.id,
+          }))
+        );
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  // Update par values when course changes
+  useEffect(() => {
+    if (!selectedCourseId) return;
+    const course = courses.find((c) => c.id === selectedCourseId);
+    if (course && Array.isArray(course.par_values)) {
+      setParValues(course.par_values);
+    } else {
+      setParValues(Array(holeCount).fill(4)); // fallback
+    }
+  }, [selectedCourseId, courses]);
+
+  // Add/remove player logic
   const addPlayer = () => {
     if (!newPlayerName.trim()) return;
     const newPlayer = { name: newPlayerName, scores: Array(holeCount).fill('') };
@@ -72,35 +102,6 @@ export default function ScorecardScreen() {
     setPlayers(updatedPlayers);
   };
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      const { data, error } = await supabase
-        .from("GolfCourses")
-        .select("id, name, par_values");
-  
-      if (!error && data) {
-        setCourses(data);
-        setCourseItems(
-          data.map((course) => ({
-            label: course.name,
-            value: course.id,
-          }))
-        );
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedCourseId) return;
-    const course = courses.find((c) => c.id === selectedCourseId);
-    if (course && Array.isArray(course.par_values)) {
-      setParValues(course.par_values);
-    } else {
-      setParValues(Array(holeCount).fill(4)); // fallback
-    }
-  }, [selectedCourseId, courses]);
-
   // ------------------- SCORECARD UI -------------------------
   return (
     <View style={styles.gradientBg}>
@@ -110,6 +111,7 @@ export default function ScorecardScreen() {
         <View style={styles.titleUnderline} />
       </View>
 
+      {/* Course Dropdown */}
       <View style={{ marginBottom: 16 }}>
         <DropDownPicker
           placeholder="Select a course..."
@@ -209,8 +211,8 @@ export default function ScorecardScreen() {
               const parseScore = (text: string) =>
                 parseInt(text.split('/')[0]?.trim()) || 0;
 
-              const inScore = player.scores.slice(0, 9).reduce((sum, val) => sum + parseScore(val), 0);
-              const outScore = player.scores.slice(9, 18).reduce((sum, val) => sum + parseScore(val), 0);
+              const inScore = player.scores.slice(0, 9).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+              const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
               const totalScore = inScore + outScore;
 
               return (
@@ -220,7 +222,7 @@ export default function ScorecardScreen() {
                       <Text style={styles.playerNameText}>{player.name}</Text>
                     </View>
                     {/* Holes 1-9 */}
-                    {player.scores.slice(0, 9).map((score, holeIndex) => (
+                    {player.scores.slice(0, 9).map((score: string, holeIndex: number) => (
                       <TouchableOpacity
                         key={holeIndex}
                         style={styles.cellTouchable}
@@ -246,7 +248,7 @@ export default function ScorecardScreen() {
                       <Text style={styles.cellText}>{inScore}</Text>
                     </View>
                     {/* Holes 10-18 */}
-                    {player.scores.slice(9, 18).map((score, holeIndex) => (
+                    {player.scores.slice(9, 18).map((score: string, holeIndex: number) => (
                       <TouchableOpacity
                         key={holeIndex + 9}
                         style={styles.cellTouchable}
@@ -292,13 +294,22 @@ export default function ScorecardScreen() {
 
       {/* Add Player Button - floating */}
       <View style={styles.addPlayerButtonContainer}>
-        <TouchableOpacity
-          onPress={() => setAddPlayerModalVisible(true)}
-          style={styles.addPlayerButton}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.addPlayerButtonText}>+ Add Player</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 16 }}>
+          <TouchableOpacity
+            onPress={() => setAddPlayerModalVisible(true)}
+            style={[styles.addPlayerButton, styles.smallButton]}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addPlayerButtonText}>+ Add Player</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setSaveModalVisible(true)}
+            style={[styles.addPlayerButton, styles.smallButton, { backgroundColor: '#2e5c7a' }]}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addPlayerButtonText}>Save</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Add Player Modal */}
@@ -352,11 +363,48 @@ export default function ScorecardScreen() {
           </View>
         </View>
       </Modal>
+      
+      {/* Save Scorecard Modal */}
+      <Modal visible={saveModalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalView}>
+            <Text style={styles.modalText}>Save Scorecard</Text>
+            <TouchableOpacity
+              style={[styles.confirmButton, styles.smallButton, { marginBottom: 12 }]}
+              onPress={() => {
+                // TODO: Implement upload to account logic here
+                setSaveModalVisible(false);
+              }}
+            >
+              <Text style={styles.confirmButtonText}>Upload to Account</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.confirmButton, styles.smallButton]}
+              onPress={() => {
+                // TODO: Implement save as image logic here
+                setSaveModalVisible(false);
+              }}
+            >
+              <Text style={styles.confirmButtonText}>Save as Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.confirmButton, styles.smallButton, { backgroundColor: '#555', marginTop: 12 }]}
+              onPress={() => setSaveModalVisible(false)}
+            >
+              <Text style={styles.confirmButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Score Entry Modal */}
       <ScoreEntryModal
         visible={scoreModalVisible}
         onClose={() => setScoreModalVisible(false)}
+        score={modalScore}
+        putts={modalPutts}
+        onScoreChange={setModalScore}
+        onPuttsChange={setModalPutts}
         onSave={(score, putts) => {
           if (selectedCell) {
             const { playerIndex, holeIndex } = selectedCell;
@@ -364,7 +412,10 @@ export default function ScorecardScreen() {
             newPlayers[playerIndex].scores[holeIndex] = `${score} / ${putts}`;
             setPlayers(newPlayers);
             setSelectedCell(null);
+            setModalScore(0);
+            setModalPutts(0);
           }
+          setScoreModalVisible(false);
         }}
       />
     </View>
@@ -681,5 +732,12 @@ const styles = StyleSheet.create({
   },
   listItemLabel: {
     color: '#fff',
+  },
+  smallButton: {
+    flex: 0,
+    minWidth: 120,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
   },
 });

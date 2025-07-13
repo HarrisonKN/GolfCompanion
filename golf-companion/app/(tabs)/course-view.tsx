@@ -3,7 +3,6 @@ import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   View,
   Text,
@@ -83,15 +82,23 @@ export default function CourseViewScreen() {
       // Location permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === "granted") {
-        const currentLocation = await Location.getCurrentPositionAsync({});
-        setLocation(currentLocation);
-        setRegion({
-          latitude: currentLocation.coords.latitude,
-          longitude: currentLocation.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-        addDebugInfo("Location obtained.");
+        addDebugInfo("Location permission granted, requesting location...");
+        try {
+          const currentLocation = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Lowest,
+            timeout: 3000,
+          });
+          setLocation(currentLocation);
+          setRegion({
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+          addDebugInfo("Location obtained quickly.");
+        } catch (locationError: any) {
+          addDebugInfo(`Location lookup failed or timed out: ${locationError.message}`);
+        }
       } else {
         addDebugInfo("Location permission denied.");
       }
@@ -109,7 +116,6 @@ export default function CourseViewScreen() {
         .from("GolfCourses")
         .select("*")
         .order("name");
-
       if (error) throw error;
       setCourses(data || []);
       setCourseItems(
@@ -126,14 +132,12 @@ export default function CourseViewScreen() {
 
   const fetchHoles = async () => {
     if (!selectedCourseId) return;
-
     try {
       const { data, error } = await supabase
         .from("holes")
         .select("*")
         .eq("course_id", selectedCourseId)
         .order("hole_number", { ascending: true });
-
       if (error) throw error;
       setHoles(data || []);
       setHoleItems(
@@ -236,7 +240,6 @@ export default function CourseViewScreen() {
           listItemLabelStyle={styles.listItemLabel}
           zIndex={2000}
         />
-
         {selectedCourseId && (
           <DropDownPicker
             placeholder="Select a hole..."
@@ -258,7 +261,6 @@ export default function CourseViewScreen() {
           />
         )}
       </View>
-
       <MapView
         ref={mapRef}
         style={{ flex: 1 }}

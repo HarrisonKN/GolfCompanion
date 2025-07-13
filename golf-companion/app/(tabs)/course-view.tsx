@@ -1,3 +1,4 @@
+// ------------------- IMPORTS -------------------------
 import { supabase, testSupabaseConnection } from "@/components/supabase";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
@@ -17,6 +18,8 @@ import MapView, {
   Region,
 } from "react-native-maps";
 
+
+// ------------------- TYPES -------------------------
 type Course = {
   id: string;
   name: string;
@@ -34,6 +37,7 @@ type Hole = {
   green_longitude: number | null;
 };
 
+// ------------------- COURSEVIEW LOGIC -------------------------
 export default function CourseViewScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -235,6 +239,8 @@ export default function CourseViewScreen() {
     );
   }
 
+
+  // ------------------- COURSE VIEW UI -------------------------
   return (
     <View style={styles.container}>
       <View style={styles.overlayContainer}>
@@ -328,6 +334,7 @@ export default function CourseViewScreen() {
   );
 }
 
+// ------------------- UI Styling -------------------------
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: {

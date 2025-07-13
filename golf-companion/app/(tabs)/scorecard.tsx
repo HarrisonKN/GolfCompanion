@@ -1,5 +1,7 @@
+// ------------------- IMPORTS -------------------------
+
 import ScoreEntryModal from '@/components/ScoreEntryModal';
-import React, { useState } from 'react';
+import React, { useState , useEffect} from 'react';
 import {
   Button,
   Modal,
@@ -11,11 +13,36 @@ import {
   View,
   Dimensions,
 } from 'react-native';
+import { supabase } from "@/components/supabase";
+import DropDownPicker from "react-native-dropdown-picker";
 
 const ACCENT = '#2979FF';
+const CELL_WIDTH = 60; // You can adjust this value for your needs
 
+
+type Course = {
+  id: string;
+  name: string;
+  par_values: number[];
+};
+
+type CourseDropdownItem = {
+  label: string;
+  value: string;
+};
+
+// ------------------- SCORECARD LOGIC -------------------------
 export default function ScorecardScreen() {
   const holeCount = 18;
+
+  // Dropdown state
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseItems, setCourseItems] = useState<CourseDropdownItem[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [courseOpen, setCourseOpen] = useState(false);
+
+  const [parValues, setParValues] = useState<number[]>(Array(holeCount).fill(4));
+  
 
   const [players, setPlayers] = useState([
     { name: 'Player 1', scores: Array(holeCount).fill('') },
@@ -45,12 +72,60 @@ export default function ScorecardScreen() {
     setPlayers(updatedPlayers);
   };
 
+  useEffect(() => {
+    const fetchCourses = async () => {
+      const { data, error } = await supabase
+        .from("GolfCourses")
+        .select("id, name, par_values");
+  
+      if (!error && data) {
+        setCourses(data);
+        setCourseItems(
+          data.map((course) => ({
+            label: course.name,
+            value: course.id,
+          }))
+        );
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCourseId) return;
+    const course = courses.find((c) => c.id === selectedCourseId);
+    if (course && Array.isArray(course.par_values)) {
+      setParValues(course.par_values);
+    } else {
+      setParValues(Array(holeCount).fill(4)); // fallback
+    }
+  }, [selectedCourseId, courses]);
+
+  // ------------------- SCORECARD UI -------------------------
   return (
     <View style={styles.gradientBg}>
       {/* Scorecard Title */}
       <View style={styles.topHeader}>
         <Text style={styles.scorecardTitle}>Scorecard</Text>
         <View style={styles.titleUnderline} />
+      </View>
+
+      <View style={{ marginBottom: 16 }}>
+        <DropDownPicker
+          placeholder="Select a course..."
+          open={courseOpen}
+          value={selectedCourseId}
+          items={courseItems}
+          setOpen={setCourseOpen}
+          setValue={setSelectedCourseId}
+          setItems={setCourseItems}
+          style={styles.dropdown}
+          dropDownContainerStyle={styles.dropdownContainer}
+          placeholderStyle={styles.placeholder}
+          textStyle={styles.text}
+          listItemLabelStyle={styles.listItemLabel}
+          zIndex={2000}
+        />
       </View>
 
       {/* Scorecard Table - Glassy Card */}
@@ -62,64 +137,72 @@ export default function ScorecardScreen() {
           showsHorizontalScrollIndicator={false}
         >
           <View style={styles.tableContainer}>
-            {/* Header Row: Hole Numbers */}
-            <View style={styles.row}>
-              <View style={styles.nameCell}>
-                <Text style={styles.headerText}>Hole</Text>
-              </View>
-              {Array.from({ length: holeCount }).map((_, i) => (
-                <View key={i} style={styles.cell}>
-                  <Text style={styles.cellText}>{i + 1}</Text>
+            {/* --- Combined Header Section --- */}
+            <View style={styles.headerUnified}>
+              {/* Header Row: Hole Numbers */}
+              <View style={styles.headerRow}>
+                <View style={styles.headerNameCell}>
+                  <Text style={styles.headerText}>Hole</Text>
                 </View>
-              ))}
-              <View style={styles.inOutCell}><Text style={styles.cellText}>IN</Text></View>
-              <View style={styles.inOutCell}><Text style={styles.cellText}>OUT</Text></View>
-              <View style={styles.inOutCell}><Text style={styles.cellText}>Total</Text></View>
-              <View style={styles.emptyCell} />
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <View key={i} style={styles.headerHoleCell}>
+                    <Text style={styles.cellText}>{i + 1}</Text>
+                  </View>
+                ))}
+                <View style={styles.headerInOutCell}><Text style={styles.cellText}>IN</Text></View>
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <View key={i + 9} style={styles.headerHoleCell}>
+                    <Text style={styles.cellText}>{i + 10}</Text>
+                  </View>
+                ))}
+                <View style={styles.headerInOutCell}><Text style={styles.cellText}>OUT</Text></View>
+                <View style={styles.headerInOutCell}><Text style={styles.cellText}>Total</Text></View>
+                <View style={styles.headerEmptyCell} />
+              </View>
+              {/* Divider between Hole and Par */}
+              <View style={styles.headerSubDivider} />
+              {/* Par Row */}
+              <View style={styles.headerRow}>
+                <View style={styles.headerNameCell}>
+                  <Text style={styles.headerText}>Par</Text>
+                </View>
+                {/* Holes 1-9 */}
+                {parValues.slice(0, 9).map((par, i) => (
+                  <View key={i} style={styles.headerCell}>
+                    <Text style={styles.cellText}>{par}</Text>
+                  </View>
+                ))}
+                {/* IN */}
+                <View style={styles.headerInOutCell}>
+                  <Text style={styles.cellText}>
+                    {parValues.slice(0, 9).reduce((sum, val) => sum + val, 0)}
+                  </Text>
+                </View>
+                {/* Holes 10-18 */}
+                {parValues.slice(9, 18).map((par, i) => (
+                  <View key={i + 9} style={styles.headerCell}>
+                    <Text style={styles.cellText}>{par}</Text>
+                  </View>
+                ))}
+                {/* OUT */}
+                <View style={styles.headerInOutCell}>
+                  <Text style={styles.cellText}>
+                    {parValues.slice(9, 18).reduce((sum, val) => sum + val, 0)}
+                  </Text>
+                </View>
+                {/* TOTAL */}
+                <View style={styles.headerInOutCell}>
+                  <Text style={styles.cellText}>
+                    {parValues.reduce((sum, val) => sum + val, 0)}
+                  </Text>
+                </View>
+                <View style={styles.headerEmptyCell} />
+              </View>
             </View>
+            {/* --- End Combined Header Section --- */}
 
-            {/* Row: Par */}
-            <View style={styles.row}>
-              <View style={styles.nameCell}>
-                <Text style={styles.headerText}>Par</Text>
-              </View>
-              {Array.from({ length: holeCount }).map((_, i) => (
-                <View key={i} style={styles.cell}>
-                  <Text style={styles.cellText}>{i % 2 === 0 ? 4 : 3}</Text>
-                </View>
-              ))}
-              <View style={styles.inOutCell}>
-                <Text style={styles.cellText}>
-                  {
-                    Array.from({ length: 9 }).reduce(
-                      (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
-                      0
-                    )
-                  }
-                </Text>
-              </View>
-              <View style={styles.inOutCell}>
-                <Text style={styles.cellText}>
-                  {
-                    Array.from({ length: 9 }).reduce(
-                      (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
-                      0
-                    )
-                  }
-                </Text>
-              </View>
-              <View style={styles.inOutCell}>
-                <Text style={styles.cellText}>
-                  {
-                    Array.from({ length: 18 }).reduce(
-                      (sum: number, _, i: number) => sum + (i % 2 === 0 ? 4 : 3),
-                      0
-                    )
-                  }
-                </Text>
-              </View>
-              <View style={styles.emptyCell} />
-            </View>
+            {/* Divider between header and player rows */}
+            <View style={styles.headerDivider} />
 
             {/* Player Rows */}
             {players.map((player, playerIndex) => {
@@ -128,6 +211,7 @@ export default function ScorecardScreen() {
 
               const inScore = player.scores.slice(0, 9).reduce((sum, val) => sum + parseScore(val), 0);
               const outScore = player.scores.slice(9, 18).reduce((sum, val) => sum + parseScore(val), 0);
+              const totalScore = inScore + outScore;
 
               return (
                 <View key={playerIndex} style={styles.playerCard}>
@@ -135,7 +219,8 @@ export default function ScorecardScreen() {
                     <View style={styles.nameCell}>
                       <Text style={styles.playerNameText}>{player.name}</Text>
                     </View>
-                    {player.scores.map((score, holeIndex) => (
+                    {/* Holes 1-9 */}
+                    {player.scores.slice(0, 9).map((score, holeIndex) => (
                       <TouchableOpacity
                         key={holeIndex}
                         style={styles.cellTouchable}
@@ -146,13 +231,51 @@ export default function ScorecardScreen() {
                         }}
                       >
                         <View style={styles.cell}>
-                          <Text style={styles.cellText}>{score || 'Tap'}</Text>
+                          <Text
+                            style={styles.cellText}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                          >
+                            {score || 'Tap'}
+                          </Text>
                         </View>
                       </TouchableOpacity>
                     ))}
-                    <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore}</Text></View>
-                    <View style={styles.inOutCell}><Text style={styles.cellText}>{outScore}</Text></View>
-                    <View style={styles.inOutCell}><Text style={styles.cellText}>{inScore + outScore}</Text></View>
+                    {/* IN column */}
+                    <View style={styles.inOutCell}>
+                      <Text style={styles.cellText}>{inScore}</Text>
+                    </View>
+                    {/* Holes 10-18 */}
+                    {player.scores.slice(9, 18).map((score, holeIndex) => (
+                      <TouchableOpacity
+                        key={holeIndex + 9}
+                        style={styles.cellTouchable}
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
+                          setScoreModalVisible(true);
+                        }}
+                      >
+                        <View style={styles.cell}>
+                          <Text
+                            style={styles.cellText}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                          >
+                            {score || 'Tap'}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    {/* OUT column */}
+                    <View style={styles.inOutCell}>
+                      <Text style={styles.cellText}>{outScore}</Text>
+                    </View>
+                    {/* TOTAL column */}
+                    <View style={styles.inOutCell}>
+                      <Text style={styles.cellText}>{totalScore}</Text>
+                    </View>
+                    {/* Remove player button */}
                     <TouchableOpacity
                       style={styles.removeCell}
                       onPress={() => setConfirmRemoveIndex(playerIndex)}
@@ -248,7 +371,7 @@ export default function ScorecardScreen() {
   );
 }
 
-// ------------------- STYLES -------------------------
+// ------------------- SCORECARD STYLING -------------------------
 const styles = StyleSheet.create({
   gradientBg: {
     flex: 1,
@@ -281,7 +404,7 @@ const styles = StyleSheet.create({
   cardWrapper: {
     marginHorizontal: 0,
     marginBottom: 0,
-    marginTop: 32,
+    marginTop: 12,
   },
   horizontalScroll: {
     flexGrow: 0,
@@ -304,17 +427,73 @@ const styles = StyleSheet.create({
     borderColor: '#23485c',
     minWidth: 900,
   },
-  row: { flexDirection: 'row' },
-  cell: {
+  headerUnified: {
     backgroundColor: '#23485c',
-    padding: 10,
-    minWidth: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: ACCENT,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  headerDivider: {
+    height: 1,
+    backgroundColor: '#23485c',
+    marginVertical: 8,
+  },
+  headerSubDivider: {
+    height: 2,
+    backgroundColor: ACCENT,
+    opacity: 0.7,
+    marginVertical: 0,
+    borderRadius: 1,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerCell: {
+    backgroundColor: '#23485c',
+    minWidth: CELL_WIDTH,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 10,
-    marginHorizontal: 1,
-    borderWidth: 1,
+    borderRightWidth: 1,
     borderColor: '#2e5c7a',
+    flex: 1,
+  },
+  headerHoleCell: {
+    backgroundColor: '#29507A',
+    minWidth: CELL_WIDTH,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: '#2e5c7a',
+    flex: 1,
+  },
+  headerNameCell: {
+    backgroundColor: ACCENT,
+    width: 120,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: '#23485c',
+  },
+  headerInOutCell: {
+    backgroundColor: '#2e5c7a',
+    minWidth: CELL_WIDTH,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: '#23485c',
+    flex: 1,
+  },
+  headerEmptyCell: {
+    width: 40,
+    height: 40,
+    backgroundColor: 'transparent',
   },
   cellTouchable: {
     borderRadius: 10,
@@ -338,6 +517,10 @@ const styles = StyleSheet.create({
     elevation: 1,
     borderWidth: 1,
     borderColor: '#23485c',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   nameCell: {
     backgroundColor: ACCENT,
@@ -468,5 +651,35 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '700',
     fontSize: 17,
+  },
+  cell: {
+    backgroundColor: '#23485c',
+    minWidth: CELL_WIDTH,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: '#2e5c7a',
+    flex: 1,
+  },
+  dropdown: {
+    backgroundColor: '#23485c',
+    borderColor: ACCENT,
+    minHeight: 44,
+    marginTop: 8,
+  },
+  dropdownContainer: {
+    backgroundColor: '#23485c',
+    borderColor: ACCENT,
+  },
+  placeholder: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  text: {
+    color: '#fff',
+  },
+  listItemLabel: {
+    color: '#fff',
   },
 });

@@ -1,3 +1,4 @@
+// ------------------- IMPORTS -------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import Toast from 'react-native-toast-message';
@@ -5,6 +6,7 @@ import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
 
+// ------------------- SIGNUP LOGIC -------------------------
 export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -128,6 +130,7 @@ export default function SignupScreen() {
     }
   };
 
+  // ------------------- SIGNUP UI -------------------------
   return (
     <View style={styles.container}>
       <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
@@ -191,6 +194,7 @@ export default function SignupScreen() {
   );
 }
 
+// ------------------- SIGNUP STYLING -------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,

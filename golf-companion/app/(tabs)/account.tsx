@@ -50,7 +50,7 @@ export default function AccountsScreen() {
       try {
         setIsRedirecting(true);
         setTimeout(() => {
-          router.replace(path);
+          router.replace(path as any);
         }, 100);
       } catch (error) {
         console.error('Navigation error:', error);

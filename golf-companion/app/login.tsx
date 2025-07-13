@@ -1,9 +1,11 @@
+// ------------------- IMPORTS -------------------------
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import React, { useState } from 'react';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
 
+// ------------------- LOGIN LOGIC -------------------------
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,6 +43,7 @@ export default function LoginScreen() {
     }
   };
 
+  // ------------------- LOGIN UI -------------------------
   return (
     <View style={styles.container}>
       <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
@@ -99,6 +102,7 @@ export default function LoginScreen() {
   );
 }
 
+// ------------------- LOGIN STYLING -------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,

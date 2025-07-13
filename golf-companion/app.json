@@ -39,7 +39,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/golf-logo.png",
-          "imageWidth": 400,
+          "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#003b23"
         }

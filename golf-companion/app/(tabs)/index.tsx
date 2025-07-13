@@ -13,10 +13,40 @@ import ParallaxScrollView from '@/components/ParallaxScrollView';
 import RotatingText from '@/components/RotatingText';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-
+import { useAuth } from '@/components/AuthContext';
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
+  const { user, loading } = useAuth();
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+        headerImage={
+          <ThemedView style={styles.headerRow}>
+            <Image
+              source={require('@/assets/images/golf-logo.png')}
+              style={styles.logo}
+              contentFit="contain"
+            />
+            <ThemedView style={styles.rotatingTextContainer}>
+              <ThemedText style={[styles.text]} type="title">Golf</ThemedText>
+              <RotatingText
+                texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
+                rotationInterval={2000}
+              />
+            </ThemedView>
+          </ThemedView>
+        }
+      >
+        <ThemedView style={styles.authContainer}>
+          <ThemedText type="subtitle" style={styles.authTitle}>Loading...</ThemedText>
+        </ThemedView>
+      </ParallaxScrollView>
+    );
+  }
 
   // ------------------- UI Setup -------------------------
   return (
@@ -40,24 +70,41 @@ export default function HomeScreen() {
           </ThemedView>
         }
       >
-        {/* Auth Buttons */}
+        {/* Conditional Auth/Welcome Section */}
         <ThemedView style={styles.authContainer}>
-          <ThemedText type="subtitle" style={styles.authTitle}>Get Started</ThemedText>
-          <ThemedView style={styles.buttonRow}>
-            <Pressable
-              style={styles.authButton}
-              onPress={() => router.push('/login')}
-            >
-              <ThemedText style={styles.authButtonText}>Login</ThemedText>
-            </Pressable>
-
-            <Pressable
-              style={styles.authButton}
-              onPress={() => router.push('/signup')}
-            >
-              <ThemedText style={styles.authButtonText}>Sign Up</ThemedText>
-            </Pressable>
-          </ThemedView>
+          {user ? (
+            <>
+              <ThemedText type="subtitle" style={styles.authTitle}>Welcome Back!</ThemedText>
+              <ThemedText style={styles.welcomeText}>
+                Ready for another round? Check out your scores and course views.
+              </ThemedText>
+              {/* Example: Add a button for logged-in users */}
+              <Pressable
+                style={styles.authButton}
+                onPress={() => router.push('/course-view')}
+              >
+                <ThemedText style={styles.authButtonText}>Go to Course View</ThemedText>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <ThemedText type="subtitle" style={styles.authTitle}>Get Started</ThemedText>
+              <ThemedView style={styles.buttonRow}>
+                <Pressable
+                  style={styles.authButton}
+                  onPress={() => router.push('/login')}
+                >
+                  <ThemedText style={styles.authButtonText}>Login</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={styles.authButton}
+                  onPress={() => router.push('/signup')}
+                >
+                  <ThemedText style={styles.authButtonText}>Sign Up</ThemedText>
+                </Pressable>
+              </ThemedView>
+            </>
+          )}
         </ThemedView>
 
         {/* App Overview */}
@@ -68,7 +115,7 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {/* Scorecard Feature */}
+        {/* Rest of your feature cards remain the same */}
         <ThemedView style={styles.featureCard}>
           <ThemedText type="subtitle">📋 Digital Scorecard</ThemedText>
           <ThemedText style={styles.featureText}>
@@ -76,7 +123,6 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {/* Course View Feature */}
         <ThemedView style={styles.featureCard}>
           <ThemedText type="subtitle">🗺️ Course View</ThemedText>
           <ThemedText style={styles.featureText}>
@@ -84,7 +130,6 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {/* Voice Chat Feature */}
         <ThemedView style={styles.featureCard}>
           <ThemedText type="subtitle">🎙️ Group Voice Chat</ThemedText>
           <ThemedText style={styles.featureText}>
@@ -92,7 +137,6 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {/* Spotify Feature */}
         <ThemedView style={styles.featureCard}>
           <ThemedText type="subtitle">🎵 Sync Music with Spotify</ThemedText>
           <ThemedText style={styles.featureText}>
@@ -101,9 +145,9 @@ export default function HomeScreen() {
         </ThemedView>
 
       </ParallaxScrollView>  
-    <Toast/>
+      <Toast/>
     </>
-    );
+  );
 }
 
 // ------------------- UI Styling -------------------------
@@ -204,5 +248,10 @@ const styles = StyleSheet.create({
   },
   text: {
     backgroundColor: '#1c3d46',
-  }
+  },
+  welcomeText: {
+    textAlign: 'center',
+    marginTop: 8,
+    fontSize: 14,
+  },
 });

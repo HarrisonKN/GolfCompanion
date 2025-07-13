@@ -14,7 +14,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/golf-logo.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#003b23"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.golfcompanion",
@@ -51,6 +51,6 @@
       "supabaseUrl": "https://emgqdjhbmkjepbjdpnmh.supabase.co/",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZ3FkamhibWtqZXBiamRwbm1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMzIyMDAsImV4cCI6MjA2NzYwODIwMH0.9HuTa44l_E_NTOpgOSIpe8LKnZEi_sjaOSbMVjU3NLc"
     },
-    "owner": "harrisonkn"
+    "owner": "GolfCompanion"
   }
 }

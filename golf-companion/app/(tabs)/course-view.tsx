@@ -30,6 +30,8 @@ type Hole = {
   yardage: number | null;
   tee_latitude: number | null;
   tee_longitude: number | null;
+  fairway_latitude: number | null;
+  fairway_longitude: number | null;
   green_latitude: number | null;
   green_longitude: number | null;
 };
@@ -47,48 +49,12 @@ export default function CourseViewScreen() {
   const [holeItems, setHoleItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>("");
-
-  const mapRef = useRef<MapView>(null);
   const mountedRef = useRef(true);
-
-  const DEFAULT_REGION = region || {
-  latitude: -37.8136,
-  longitude: 144.9631,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-  };
+  const mapRef = useRef<MapView>(null);
 
   const safeSetState = (setter: any, value: any) => {
-    if (mountedRef.current) setter(value);
-  };
-
-  const addDebugInfo = (info: string) => {
-    console.log(`[CourseView] ${info}`);
-    safeSetState(setDebugInfo, (prev: string) => `${prev}\n${new Date().toLocaleTimeString()}: ${info}`);
-  };
-
-  const getSafeLocation = async (timeoutMs = 5000) => {
-    try {
-      const { status } = await Location.getForegroundPermissionsAsync();
-      if (status !== "granted") {
-        addDebugInfo("Location permission denied.");
-        return null;
-      }
-
-      addDebugInfo("Location permission granted, requesting location...");
-      const locationPromise = Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Lowest,
-      });
-
-      const timeoutPromise = new Promise<null>((_, reject) =>
-        setTimeout(() => reject(new Error("Location request timed out")), timeoutMs)
-      );
-
-      return await Promise.race([locationPromise, timeoutPromise]);
-    } catch (err: any) {
-      addDebugInfo(`Location error: ${err.message}`);
-      return null;
+    if (mountedRef.current) {
+      setter(value);
     }
   };
 
@@ -96,38 +62,32 @@ export default function CourseViewScreen() {
     try {
       setLoading(true);
       setConnectionError(null);
-      setRegion(DEFAULT_REGION);
-      addDebugInfo("Starting initialization...");
 
       // Supabase connection
       const connectionTest = await Promise.race([
         testSupabaseConnection(),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Connection test timeout")), 10000)
+          setTimeout(() => reject(new Error("Connection timeout")), 10000)
         ),
       ]);
-      if (!connectionTest) {
-        throw new Error("Connection test failed.");
-      }
-      addDebugInfo("Supabase connection successful.");
+      if (!connectionTest) throw new Error("Supabase connection failed.");
 
-      // Location
-      const loc = await getSafeLocation();
-      if (loc) {
-        setLocation(loc);
+      // Location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Lowest,
+        });
+        setLocation(currentLocation);
         setRegion({
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         });
-        addDebugInfo("Location set.");
-      } else {
-        addDebugInfo("Using default location.");
       }
     } catch (error: any) {
       setConnectionError(error.message);
-      addDebugInfo(`Initialization error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -139,9 +99,7 @@ export default function CourseViewScreen() {
         .from("GolfCourses")
         .select("*")
         .order("name");
-
       if (error) throw error;
-
       setCourses(data || []);
       setCourseItems(
         (data || []).map((course) => ({
@@ -149,9 +107,8 @@ export default function CourseViewScreen() {
           value: course.id,
         }))
       );
-      addDebugInfo(`Fetched ${data?.length || 0} courses.`);
     } catch (error: any) {
-      addDebugInfo(`Course fetch error: ${error.message}`);
+      setConnectionError(`Course fetch error: ${error.message}`);
     }
   };
 
@@ -162,10 +119,8 @@ export default function CourseViewScreen() {
         .from("holes")
         .select("*")
         .eq("course_id", selectedCourseId)
-        .order("hole_number", { ascending: true });
-
+        .order("hole_number");
       if (error) throw error;
-
       setHoles(data || []);
       setHoleItems(
         (data || []).map((hole) => ({
@@ -173,9 +128,8 @@ export default function CourseViewScreen() {
           value: hole.hole_number,
         }))
       );
-      addDebugInfo(`Fetched ${data?.length || 0} holes.`);
     } catch (error: any) {
-      addDebugInfo(`Hole fetch error: ${error.message}`);
+      setConnectionError(`Hole fetch error: ${error.message}`);
     }
   };
 
@@ -201,12 +155,25 @@ export default function CourseViewScreen() {
 
   useEffect(() => {
     if (selectedHole && mapRef.current) {
-      const centerLat = (selectedHole.tee_latitude! + selectedHole.green_latitude!) / 2;
-      const centerLon = (selectedHole.tee_longitude! + selectedHole.green_longitude!) / 2;
-      mapRef.current.animateToRegion(
+      const latitudes = [selectedHole.tee_latitude, selectedHole.green_latitude];
+      const longitudes = [selectedHole.tee_longitude, selectedHole.green_longitude];
+      if (selectedHole.fairway_latitude && selectedHole.fairway_longitude) {
+        latitudes.push(selectedHole.fairway_latitude);
+        longitudes.push(selectedHole.fairway_longitude);
+      }
+      const safeLatitudes = latitudes.filter((n): n is number => n != null);
+const safeLongitudes = longitudes.filter((n): n is number => n != null);
+
+const centerLat =
+  safeLatitudes.reduce((a, b) => a + b, 0) / safeLatitudes.length;
+
+const centerLon =
+  safeLongitudes.reduce((a, b) => a + b, 0) / safeLongitudes.length;
+
+      mapRef.current?.animateToRegion(
         {
-          latitude: centerLat,
-          longitude: centerLon,
+          latitude: centerLat!,
+          longitude: centerLon!,
           latitudeDelta: 0.005,
           longitudeDelta: 0.005,
         },
@@ -227,13 +194,20 @@ export default function CourseViewScreen() {
   if (connectionError) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>⚠️ {connectionError}</Text>
+        <Text style={styles.errorText}>{connectionError}</Text>
         <Pressable onPress={initializeApp} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
       </View>
     );
   }
+
+  const currentRegion = region || {
+    latitude: -37.8136,
+    longitude: 144.9631,
+    latitudeDelta: 0.05,
+    longitudeDelta: 0.05,
+  };
 
   return (
     <View style={styles.container}>
@@ -251,7 +225,7 @@ export default function CourseViewScreen() {
           }}
           setItems={setCourseItems}
           style={styles.dropdown}
-          dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 300 }]}
+          dropDownContainerStyle={styles.dropdownContainer}
           placeholderStyle={styles.placeholder}
           textStyle={styles.text}
           listItemLabelStyle={styles.listItemLabel}
@@ -271,7 +245,7 @@ export default function CourseViewScreen() {
             }}
             setItems={setHoleItems}
             style={styles.dropdown}
-            dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 400 }]}
+            dropDownContainerStyle={styles.dropdownContainer}
             placeholderStyle={styles.placeholder}
             textStyle={styles.text}
             listItemLabelStyle={styles.listItemLabel}
@@ -281,13 +255,12 @@ export default function CourseViewScreen() {
       </View>
 
       <MapView
-         ref={mapRef}
-         style={{ flex: 1 }}
-         region={DEFAULT_REGION}
-         showsUserLocation={true}
-         showsMyLocationButton={true}
-         followsUserLocation={true}
-         mapType="hybrid"
+        ref={mapRef}
+        style={{ flex: 1 }}
+        region={currentRegion}
+        showsUserLocation={!!location}
+        showsMyLocationButton={!!location}
+        mapType="hybrid"
       >
         {selectedHole && (
           <>
@@ -313,6 +286,14 @@ export default function CourseViewScreen() {
                   latitude: selectedHole.tee_latitude!,
                   longitude: selectedHole.tee_longitude!,
                 },
+                ...(selectedHole.fairway_latitude && selectedHole.fairway_longitude
+                  ? [
+                      {
+                        latitude: selectedHole.fairway_latitude,
+                        longitude: selectedHole.fairway_longitude,
+                      },
+                    ]
+                  : []),
                 {
                   latitude: selectedHole.green_latitude!,
                   longitude: selectedHole.green_longitude!,
@@ -335,7 +316,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#FAFAFA",
-    padding: 20,
   },
   loadingText: {
     marginTop: 10,
@@ -344,20 +324,18 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#EF4444",
+    fontSize: 16,
     textAlign: "center",
-    fontSize: 14,
-    fontWeight: "600",
   },
   retryButton: {
-    backgroundColor: "#3B82F6",
-    padding: 10,
     marginTop: 10,
+    padding: 10,
+    backgroundColor: "#3B82F6",
     borderRadius: 8,
   },
   retryButtonText: {
     color: "white",
     fontWeight: "700",
-    textAlign: "center",
   },
   overlayContainer: {
     position: "absolute",

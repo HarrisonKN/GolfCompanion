@@ -1,12 +1,9 @@
-// ------------------- IMPORTS -------------------------
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
-import { supabase } from '@/components/supabase';
-
-// ------------------- SIGNUP LOGIC -------------------------
+import { supabase, testSupabaseConnection } from '@/components/supabase';
 
 export default function SignupScreen() {
   const [name, setName] = useState('');
@@ -14,9 +11,40 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const validateInputs = () => {
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Please enter your name.');
+      return false;
+    }
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email.');
+      return false;
+    }
+    if (!password.trim()) {
+      Alert.alert('Validation Error', 'Please enter a password.');
+      return false;
+    }
+    if (password.length < 6) {
+      Alert.alert('Validation Error', 'Password must be at least 6 characters long.');
+      return false;
+    }
+    return true;
+  };
+
   const handleSignup = async () => {
+    if (!validateInputs()) return;
+
     setLoading(true);
     try {
+      // Test connection first
+      const connectionTest = await testSupabaseConnection();
+      if (!connectionTest) {
+        Alert.alert('Connection Error', 'Unable to connect to the server. Please check your internet connection.');
+        return;
+      }
+
+      console.log('Starting signup process...');
+      
       // 1. Sign up user with Supabase auth
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -27,15 +55,18 @@ export default function SignupScreen() {
       });
 
       if (signUpError) {
-        Alert.alert('Signup failed', signUpError.message);
+        console.error('Signup error:', signUpError);
+        Alert.alert('Signup Failed', signUpError.message);
         return;
       }
 
       const userId = data?.user?.id;
       if (!userId) {
-        Alert.alert('Signup failed', 'No user ID returned');
+        Alert.alert('Signup Failed', 'No user ID returned from signup');
         return;
       }
+
+      console.log('User created successfully:', userId);
 
       // 2. Check if profile already exists to avoid duplicates
       const { data: existingProfiles, error: selectError } = await supabase
@@ -44,12 +75,13 @@ export default function SignupScreen() {
         .eq('id', userId);
 
       if (selectError) {
-        Alert.alert('Error', 'Profile Already Exists'); //dont know if this is needed, could be 2 checks already
-        return;
+        console.error('Profile check error:', selectError);
+        // Don't fail completely, just log the error
       }
 
-      if (existingProfiles.length === 0) {
+      if (!existingProfiles || existingProfiles.length === 0) {
         // 3. Insert new profile if none exists
+        console.log('Creating profile for user:', userId);
         const { error: insertError } = await supabase.from('profiles').insert({
           id: userId,
           full_name: name,
@@ -63,45 +95,56 @@ export default function SignupScreen() {
         });
 
         if (insertError) {
+          console.error('Profile creation error:', insertError);
           // Handle duplicate key error
           if (insertError.code === '23505') {
             console.log('Profile already exists, skipping insert.');
           } else {
-            Alert.alert('Profile creation failed', insertError.message);
+            Alert.alert('Profile Creation Failed', insertError.message);
             return;
           }
+        } else {
+          console.log('Profile created successfully');
         }
       }
 
       Toast.show({
         type: 'success',
-        text1: 'Signup successful!',
-        text2: 'Please check your email to confirm.',
+        text1: 'Signup Successful!',
+        text2: 'Welcome to Golf Companion',
         position: 'top',
-        visibilityTime: 4000,
+        visibilityTime: 3000,
       });
+
       setTimeout(() => {
         router.replace('/(tabs)/account');
       }, 500);
+
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      Alert.alert('Signup Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-
-  // ------------------- UI Setup -------------------------
   return (
     <View style={styles.container}>
+      <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
+        <Text style={styles.backButtonText}>{'<'} Back</Text>
+      </Pressable>
+
       <ThemedText type="title" style={styles.title}>
         Create Account
       </ThemedText>
 
       <TextInput
-        placeholder="Name"
+        placeholder="Full Name"
         placeholderTextColor="#888"
         style={styles.input}
         value={name}
         onChangeText={setName}
+        editable={!loading}
       />
 
       <TextInput
@@ -112,31 +155,34 @@ export default function SignupScreen() {
         style={styles.input}
         value={email}
         onChangeText={setEmail}
+        editable={!loading}
       />
 
       <TextInput
-        placeholder="Password"
+        placeholder="Password (min 6 characters)"
         placeholderTextColor="#888"
         secureTextEntry
         style={styles.input}
         value={password}
         onChangeText={setPassword}
+        editable={!loading}
       />
 
       <Pressable
         style={({ pressed }) => [
           styles.button,
           pressed && styles.buttonPressed,
+          loading && styles.buttonDisabled,
         ]}
         onPress={handleSignup}
         disabled={loading}
       >
         <ThemedText style={styles.buttonText}>
-          {loading ? 'Signing up...' : 'Sign Up'}
+          {loading ? 'Creating Account...' : 'Sign Up'}
         </ThemedText>
       </Pressable>
 
-      <Pressable onPress={() => router.push('/login')}>
+      <Pressable onPress={() => router.push('/login')} disabled={loading}>
         <ThemedText style={styles.linkText}>
           Already have an account? <Text style={styles.linkHighlight}>Login</Text>
         </ThemedText>
@@ -145,13 +191,22 @@ export default function SignupScreen() {
   );
 }
 
-// ------------------- UI Styling -------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 30,
     justifyContent: 'center',
     backgroundColor: '#FAFAFA',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 30,
+  },
+  backButtonText: {
+    color: '#3B82F6',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   title: {
     fontSize: 32,
@@ -193,6 +248,9 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     backgroundColor: '#2563EB',
+  },
+  buttonDisabled: {
+    backgroundColor: '#9CA3AF',
   },
   buttonText: {
     color: '#fff',

@@ -1,30 +1,52 @@
-// ------------------- IMPORTS -------------------------
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, Alert } from 'react-native';
 import React, { useState } from 'react';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
-import { supabase } from '@/components/supabase';
-
-// ------------------- LOGIN LOGIC -------------------------
+import { supabase, testSupabaseConnection } from '@/components/supabase';
 
 export default function LoginScreen() {
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) Alert.alert('Login failed', error.message);
-    else router.replace('/(tabs)/account');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Validation Error', 'Please enter both email and password.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Test connection first
+      const connectionTest = await testSupabaseConnection();
+      if (!connectionTest) {
+        Alert.alert('Connection Error', 'Unable to connect to the server. Please check your internet connection.');
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (error) {
+        console.error('Login error:', error);
+        Alert.alert('Login Failed', error.message);
+      } else {
+        console.log('Login successful');
+        router.replace('/(tabs)/account');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      Alert.alert('Login Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-
-// ------------------- UI Setup -------------------------
   return (
     <View style={styles.container}>
-      <Pressable onPress={() => router.replace('/')} style={{ marginBottom: 20 }}>
-        <Text style={{ color: '#3B82F6', fontWeight: 'bold', fontSize: 16 }}>{'<'} Back</Text>
+      <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
+        <Text style={styles.backButtonText}>{'<'} Back</Text>
       </Pressable>
+      
       <ThemedText type="title" style={styles.title}>
         Welcome Back
       </ThemedText>
@@ -39,6 +61,7 @@ export default function LoginScreen() {
         importantForAutofill="yes"
         value={email}
         onChangeText={setEmail}
+        editable={!loading}
       />
 
       <TextInput
@@ -50,19 +73,24 @@ export default function LoginScreen() {
         importantForAutofill="yes"
         value={password}
         onChangeText={setPassword}
+        editable={!loading}
       />
 
       <Pressable
         style={({ pressed }) => [
           styles.button,
           pressed && styles.buttonPressed,
+          loading && styles.buttonDisabled,
         ]}
         onPress={handleLogin}
+        disabled={loading}
       >
-        <ThemedText style={styles.buttonText}>Login</ThemedText>
+        <ThemedText style={styles.buttonText}>
+          {loading ? 'Logging in...' : 'Login'}
+        </ThemedText>
       </Pressable>
 
-      <Pressable onPress={() => router.push('/signup')}>
+      <Pressable onPress={() => router.push('/signup')} disabled={loading}>
         <ThemedText style={styles.linkText}>
           Don't have an account? <Text style={styles.linkHighlight}>Sign Up</Text>
         </ThemedText>
@@ -71,13 +99,22 @@ export default function LoginScreen() {
   );
 }
 
-// ------------------- UI Styling -------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 30,
     justifyContent: 'center',
     backgroundColor: '#FAFAFA',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 30,
+  },
+  backButtonText: {
+    color: '#3B82F6',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   title: {
     fontSize: 32,
@@ -119,6 +156,9 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     backgroundColor: '#2563EB',
+  },
+  buttonDisabled: {
+    backgroundColor: '#9CA3AF',
   },
   buttonText: {
     color: '#fff',

@@ -45,244 +45,135 @@ export default function CourseViewScreen() {
   const [holeOpen, setHoleOpen] = useState(false);
   const [courseItems, setCourseItems] = useState<any[]>([]);
   const [holeItems, setHoleItems] = useState<any[]>([]);
-  const [courseError, setCourseError] = useState<string | null>(null);
-  const [holeError, setHoleError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [debugInfo, setDebugInfo] = useState<string>("");
   const mountedRef = useRef(true);
-
   const mapRef = useRef<MapView>(null);
 
-  // Handle mounting state
-  useEffect(() => {
-    setIsMounted(true);
-    return () => {
-      mountedRef.current = false;
-      setIsMounted(false);
-    };
-  }, []);
-
-  // Safe state setter that only updates if component is mounted
   const safeSetState = (setter: any, value: any) => {
-    if (mountedRef.current && isMounted) {
+    if (mountedRef.current) {
       setter(value);
     }
   };
 
   const addDebugInfo = (info: string) => {
     console.log(`[CourseView] ${info}`);
-    safeSetState(setDebugInfo, prev => `${prev}\n${new Date().toLocaleTimeString()}: ${info}`);
+    safeSetState(setDebugInfo, (prev: string) => `${prev}\n${new Date().toLocaleTimeString()}: ${info}`);
   };
 
   const initializeApp = async () => {
-    if (!isMounted) return;
-
     try {
-      addDebugInfo('Starting initialization...');
-      safeSetState(setLoading, true);
-      safeSetState(setConnectionError, null);
-      
-      // Test Supabase connection with timeout
-      addDebugInfo('Testing Supabase connection...');
-      const connectionPromise = testSupabaseConnection();
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection test timeout')), 10000);
-      });
+      setLoading(true);
+      setConnectionError(null);
 
-      let connectionTest;
-      try {
-        connectionTest = await Promise.race([connectionPromise, timeoutPromise]);
-      } catch (error: any) {
-        addDebugInfo(`Connection test failed: ${error.message}`);
-        safeSetState(setConnectionError, `Connection test failed: ${error.message}`);
-        return;
-      }
-
+      // Test Supabase connection
+      addDebugInfo("Testing Supabase connection...");
+      const connectionTest = await Promise.race([
+        testSupabaseConnection(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Connection test timeout")), 10000)
+        ),
+      ]);
       if (!connectionTest) {
-        addDebugInfo('Connection test returned false');
-        safeSetState(setConnectionError, 'Unable to connect to database. Please check your connection.');
-        return;
+        throw new Error("Connection test failed.");
       }
-      addDebugInfo('Supabase connection successful');
+      addDebugInfo("Supabase connection successful.");
 
-      // Get location permission
-      addDebugInfo('Requesting location permission...');
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          addDebugInfo('Location permission denied');
-          Alert.alert("Permission Denied", "Location permission is required for full functionality.");
-          // Continue without location - just don't set region
-        } else {
-          addDebugInfo('Location permission granted, getting current location...');
-          try {
-            let currentLocation = await Location.getCurrentPositionAsync({
-              timeout: 10000,
-              accuracy: Location.Accuracy.Balanced,
-            });
-            addDebugInfo('Current location retrieved successfully');
-            safeSetState(setLocation, currentLocation);
-
-            safeSetState(setRegion, {
-              latitude: currentLocation.coords.latitude,
-              longitude: currentLocation.coords.longitude,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
-            });
-          } catch (locationError: any) {
-            addDebugInfo(`Location error: ${locationError.message}`);
-            // Continue without location
-          }
-        }
-      } catch (permissionError: any) {
-        addDebugInfo(`Permission error: ${permissionError.message}`);
-        // Continue without location
+      // Location permission
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        const currentLocation = await Location.getCurrentPositionAsync({});
+        setLocation(currentLocation);
+        setRegion({
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+        addDebugInfo("Location obtained.");
+      } else {
+        addDebugInfo("Location permission denied.");
       }
-
-      addDebugInfo('Initialization completed successfully');
-      safeSetState(setConnectionError, null);
     } catch (error: any) {
+      setConnectionError(error.message);
       addDebugInfo(`Initialization error: ${error.message}`);
-      console.error('Initialization error:', error);
-      safeSetState(setConnectionError, `Initialization failed: ${error.message}`);
     } finally {
-      safeSetState(setLoading, false);
+      setLoading(false);
     }
   };
 
   const fetchCourses = async () => {
-    if (connectionError || !isMounted) {
-      addDebugInfo('Skipping course fetch - connection error or not mounted');
-      return;
-    }
-
     try {
-      addDebugInfo('Starting course fetch...');
-      safeSetState(setCourseError, null);
-      
-      // Add timeout to course fetch
-      const coursePromise = supabase
+      const { data, error } = await supabase
         .from("GolfCourses")
         .select("*")
         .order("name");
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Course fetch timeout')), 15000);
-      });
-
-      const { data, error } = await Promise.race([coursePromise, timeoutPromise]) as any;
-      
-      if (error) {
-        addDebugInfo(`Course fetch error: ${error.message}`);
-        console.error('Course fetch error:', error);
-        safeSetState(setCourseError, `Failed to load courses: ${error.message}`);
-        return;
-      }
-
-      addDebugInfo(`Courses fetched successfully: ${data?.length || 0} courses`);
-      safeSetState(setCourses, data || []);
-      safeSetState(setCourseItems, 
+      if (error) throw error;
+      setCourses(data || []);
+      setCourseItems(
         (data || []).map((course) => ({
           label: course.name,
           value: course.id,
         }))
       );
+      addDebugInfo(`Fetched ${data?.length || 0} courses.`);
     } catch (error: any) {
-      addDebugInfo(`Course fetch catch error: ${error.message}`);
-      console.error('Course fetch error:', error);
-      safeSetState(setCourseError, `Failed to load courses: ${error.message}`);
+      addDebugInfo(`Course fetch error: ${error.message}`);
     }
   };
 
   const fetchHoles = async () => {
-    if (!selectedCourseId || connectionError || !isMounted) {
-      addDebugInfo('Skipping hole fetch - no course selected, connection error, or not mounted');
-      return;
-    }
+    if (!selectedCourseId) return;
 
     try {
-      addDebugInfo(`Starting hole fetch for course: ${selectedCourseId}`);
-      safeSetState(setHoleError, null);
-      
-      // Add timeout to hole fetch
-      const holePromise = supabase
+      const { data, error } = await supabase
         .from("holes")
         .select("*")
         .eq("course_id", selectedCourseId)
         .order("hole_number", { ascending: true });
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Hole fetch timeout')), 15000);
-      });
-
-      const { data, error } = await Promise.race([holePromise, timeoutPromise]) as any;
-      
-      if (error) {
-        addDebugInfo(`Hole fetch error: ${error.message}`);
-        console.error('Hole fetch error:', error);
-        safeSetState(setHoleError, `Failed to load holes: ${error.message}`);
-        return;
-      }
-
-      addDebugInfo(`Holes fetched successfully: ${data?.length || 0} holes`);
-      safeSetState(setHoles, data || []);
-      safeSetState(setHoleItems,
+      if (error) throw error;
+      setHoles(data || []);
+      setHoleItems(
         (data || []).map((hole) => ({
           label: `Hole ${hole.hole_number}`,
           value: hole.hole_number,
         }))
       );
+      addDebugInfo(`Fetched ${data?.length || 0} holes.`);
     } catch (error: any) {
-      addDebugInfo(`Hole fetch catch error: ${error.message}`);
-      console.error('Hole fetch error:', error);
-      safeSetState(setHoleError, `Failed to load holes: ${error.message}`);
+      addDebugInfo(`Hole fetch error: ${error.message}`);
     }
   };
 
-  // Initialize app when component mounts
   useFocusEffect(
     React.useCallback(() => {
-      if (isMounted) {
-        addDebugInfo('Component focused, initializing app...');
-        initializeApp();
-      }
-    }, [isMounted])
+      mountedRef.current = true;
+      initializeApp();
+      return () => {
+        mountedRef.current = false;
+      };
+    }, [])
   );
 
-  // Fetch courses when connection is established
   useEffect(() => {
-    if (!connectionError && isMounted) {
-      addDebugInfo('Connection established, fetching courses...');
-      fetchCourses();
-    }
-  }, [connectionError, isMounted]);
+    if (!connectionError) fetchCourses();
+  }, [connectionError]);
 
-  // Fetch holes when course is selected
   useEffect(() => {
-    if (selectedCourseId && !connectionError && isMounted) {
-      addDebugInfo(`Course selected: ${selectedCourseId}, fetching holes...`);
-      fetchHoles();
-    }
-  }, [selectedCourseId, connectionError, isMounted]);
+    if (selectedCourseId) fetchHoles();
+  }, [selectedCourseId]);
 
   const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
 
   useEffect(() => {
-    if (!selectedHole || !mapRef.current || !isMounted) return;
-
-    if (
-      selectedHole.tee_latitude != null &&
-      selectedHole.tee_longitude != null &&
-      selectedHole.green_latitude != null &&
-      selectedHole.green_longitude != null
-    ) {
-      addDebugInfo(`Animating map to hole ${selectedHole.hole_number}`);
+    if (selectedHole && mapRef.current) {
       const centerLat =
-        (selectedHole.tee_latitude + selectedHole.green_latitude) / 2;
+        (selectedHole.tee_latitude! + selectedHole.green_latitude!) / 2;
       const centerLon =
-        (selectedHole.tee_longitude + selectedHole.green_longitude) / 2;
+        (selectedHole.tee_longitude! + selectedHole.green_longitude!) / 2;
 
       mapRef.current.animateToRegion(
         {
@@ -294,19 +185,9 @@ export default function CourseViewScreen() {
         500
       );
     }
-  }, [selectedHole, isMounted]);
+  }, [selectedHole]);
 
-  const handleRetry = () => {
-    addDebugInfo('Retry button pressed, resetting...');
-    safeSetState(setConnectionError, null);
-    safeSetState(setCourseError, null);
-    safeSetState(setHoleError, null);
-    safeSetState(setDebugInfo, '');
-    initializeApp();
-  };
-
-  // Early returns for loading and error states
-  if (!isMounted) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3B82F6" />
@@ -315,71 +196,41 @@ export default function CourseViewScreen() {
     );
   }
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading course data...</Text>
-        {debugInfo && (
-          <View style={styles.debugContainer}>
-            <Text style={styles.debugText}>Debug Info:</Text>
-            <Text style={styles.debugLog}>{debugInfo}</Text>
-          </View>
-        )}
-      </View>
-    );
-  }
-
   if (connectionError) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.errorText}>⚠️ {connectionError}</Text>
-        <Text style={styles.errorSubText}>Please check your internet connection and try again.</Text>
-        <Pressable onPress={handleRetry} style={styles.retryButton}>
+        <Pressable onPress={initializeApp} style={styles.retryButton}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </Pressable>
-        {debugInfo && (
-          <View style={styles.debugContainer}>
-            <Text style={styles.debugText}>Debug Info:</Text>
-            <Text style={styles.debugLog}>{debugInfo}</Text>
-          </View>
-        )}
       </View>
     );
   }
 
-  // Default region if location not available
-  const defaultRegion = {
+  const currentRegion = region || {
     latitude: 37.7749,
     longitude: -122.4194,
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   };
 
-  const currentRegion = region || defaultRegion;
-
   return (
     <View style={styles.container}>
       <View style={styles.overlayContainer}>
-        {courseError && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{courseError}</Text>
-          </View>
-        )}
         <DropDownPicker
           placeholder="Select a course..."
           open={courseOpen}
           value={selectedCourseId}
           items={courseItems}
           setOpen={setCourseOpen}
-          setValue={(callback) => {
-            const newValue = callback(selectedCourseId);
-            safeSetState(setSelectedCourseId, newValue);
-            safeSetState(setSelectedHoleNumber, null);
+          setValue={(cb) => {
+            const v = cb(selectedCourseId);
+            setSelectedCourseId(v);
+            setSelectedHoleNumber(null);
           }}
           setItems={setCourseItems}
           style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownContainer}
+          dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 300 }]}
           placeholderStyle={styles.placeholder}
           textStyle={styles.text}
           listItemLabelStyle={styles.listItemLabel}
@@ -387,31 +238,24 @@ export default function CourseViewScreen() {
         />
 
         {selectedCourseId && (
-          <>
-            {holeError && (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{holeError}</Text>
-              </View>
-            )}
-            <DropDownPicker
-              placeholder="Select a hole..."
-              open={holeOpen}
-              value={selectedHoleNumber}
-              items={holeItems}
-              setOpen={setHoleOpen}
-              setValue={(callback) => {
-                const newValue = callback(selectedHoleNumber);
-                safeSetState(setSelectedHoleNumber, newValue);
-              }}
-              setItems={setHoleItems}
-              style={styles.dropdown}
-              dropDownContainerStyle={styles.dropdownContainer}
-              placeholderStyle={styles.placeholder}
-              textStyle={styles.text}
-              listItemLabelStyle={styles.listItemLabel}
-              zIndex={1000}
-            />
-          </>
+          <DropDownPicker
+            placeholder="Select a hole..."
+            open={holeOpen}
+            value={selectedHoleNumber}
+            items={holeItems}
+            setOpen={setHoleOpen}
+            setValue={(cb) => {
+              const v = cb(selectedHoleNumber);
+              setSelectedHoleNumber(v);
+            }}
+            setItems={setHoleItems}
+            style={styles.dropdown}
+            dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 400 }]}
+            placeholderStyle={styles.placeholder}
+            textStyle={styles.text}
+            listItemLabelStyle={styles.listItemLabel}
+            zIndex={1000}
+          />
         )}
       </View>
 
@@ -423,7 +267,7 @@ export default function CourseViewScreen() {
         showsMyLocationButton={!!location}
         mapType="hybrid"
       >
-        {selectedHole && selectedHole.tee_latitude && selectedHole.green_latitude && (
+        {selectedHole && (
           <>
             <Marker
               coordinate={{
@@ -476,55 +320,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#6B7280",
   },
-  debugContainer: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 8,
-    maxHeight: 200,
-  },
-  debugText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 5,
-  },
-  debugLog: {
-    fontSize: 12,
-    color: "#6B7280",
-    fontFamily: "monospace",
-  },
-  errorContainer: {
-    marginBottom: 8,
-    padding: 10,
-    backgroundColor: "rgba(239, 68, 68, 0.1)",
-    borderRadius: 8,
-  },
   errorText: {
     color: "#EF4444",
     textAlign: "center",
     fontSize: 14,
     fontWeight: "600",
   },
-  errorSubText: {
-    color: "#6B7280",
-    textAlign: "center",
-    fontSize: 14,
-    marginTop: 5,
-  },
   retryButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 10,
-    paddingHorizontal: 30,
-    borderRadius: 12,
-    marginTop: 15,
-    marginBottom: 10,
+    backgroundColor: "#3B82F6",
+    padding: 10,
+    marginTop: 10,
+    borderRadius: 8,
   },
   retryButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
-    textAlign: 'center',
+    color: "white",
+    fontWeight: "700",
+    textAlign: "center",
   },
   overlayContainer: {
     position: "absolute",
@@ -542,13 +353,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.9)",
     borderColor: "#555",
   },
-  placeholder: {
-    color: "#ccc",
-  },
-  text: {
-    color: "#fff",
-  },
-  listItemLabel: {
-    color: "#fff",
-  },
+  placeholder: { color: "#ccc" },
+  text: { color: "#fff" },
+  listItemLabel: { color: "#fff" },
 });

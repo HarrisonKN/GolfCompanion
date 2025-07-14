@@ -12,9 +12,12 @@ import {
   TouchableOpacity,
   View,
   Dimensions,
+  Alert
 } from 'react-native';
 import { supabase } from "@/components/supabase";
 import DropDownPicker from "react-native-dropdown-picker";
+import { useAuth } from '@/components/AuthContext';
+import { router } from 'expo-router';
 
 // ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
@@ -34,6 +37,8 @@ type CourseDropdownItem = {
 // ------------------- SCORECARD LOGIC -------------------------
 export default function ScorecardScreen() {
   const holeCount = 18;
+
+  const { user } = useAuth();
 
   // Dropdown state
   const [courses, setCourses] = useState<Course[]>([]);
@@ -100,6 +105,51 @@ export default function ScorecardScreen() {
     const updatedPlayers = [...players];
     updatedPlayers.splice(index, 1);
     setPlayers(updatedPlayers);
+  };
+
+  const uploadScorecard = async () => {
+    if (!user) {
+      Alert.alert(
+        'Login Required',
+        'You must be logged in to upload your scorecard.',
+        [
+          {
+            text: 'Go to Login',
+            onPress: () => router.replace('/login'),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    // Prepare round data
+    const roundData = {
+      user_id: user.id,
+      course_name: courses.find(c => c.id === selectedCourseId)?.name || 'Unknown Course',
+      date: new Date().toISOString().slice(0, 10),
+      score: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
+        const score = parseInt(val.split('/')[0]?.trim()) || 0;
+        return sum + score;
+      }, 0) : null,
+      fairways_hit: null, // You can add logic to calculate these if you track them
+      greens_in_reg: null,
+      putts: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
+        const putts = parseInt(val.split('/')[1]?.trim()) || 0;
+        return sum + putts;
+      }, 0) : null,
+      scorecard: JSON.stringify(players), // Save the full scorecard for later retrieval
+      course_id: selectedCourseId,
+    };
+
+    const { error } = await supabase.from('golf_rounds').insert(roundData);
+
+    if (error) {
+      Alert.alert('Upload Failed', error.message);
+    } else {
+      Alert.alert('Success', 'Scorecard uploaded to your account!');
+      setSaveModalVisible(false);
+    }
   };
 
   // ------------------- SCORECARD UI -------------------------
@@ -371,10 +421,7 @@ export default function ScorecardScreen() {
             <Text style={styles.modalText}>Save Scorecard</Text>
             <TouchableOpacity
               style={[styles.confirmButton, styles.smallButton, { marginBottom: 12 }]}
-              onPress={() => {
-                // TODO: Implement upload to account logic here
-                setSaveModalVisible(false);
-              }}
+              onPress={uploadScorecard}
             >
               <Text style={styles.confirmButtonText}>Upload to Account</Text>
             </TouchableOpacity>

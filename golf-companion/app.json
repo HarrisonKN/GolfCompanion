@@ -44,7 +44,22 @@
           "backgroundColor": "#003b23"
         }
       ],
-      "react-native-permissions"
+      [
+        "react-native-permissions",
+        {
+          "permissions": {
+            "ios": [
+              "Camera",
+              "Microphone",
+              "PhotoLibrary"
+            ],
+            "android": [
+              "android.permission.ACCESS_FINE_LOCATION",
+              "android.permission.ACCESS_COARSE_LOCATION"
+            ]
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

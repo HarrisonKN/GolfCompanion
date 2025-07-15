@@ -54,11 +54,17 @@
       [
         "react-native-permissions",
         {
-          "iosPermissions": [
-            "NSMicrophoneUsageDescription",
-            "NSCameraUsageDescription",
-            "NSPhotoLibraryUsageDescription"
-          ]
+          "permissions": {
+            "ios": [
+              "Camera",
+              "Microphone",
+              "PhotoLibrary"
+            ],
+            "android": [
+              "android.permission.ACCESS_FINE_LOCATION",
+              "android.permission.ACCESS_COARSE_LOCATION"
+            ]
+          }
         }
       ]
     ],

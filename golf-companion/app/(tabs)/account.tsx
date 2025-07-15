@@ -13,15 +13,30 @@ type UserProfile = {
   handicap: number | null;
   rounds_played: number | null;
   average_score: number | null;
+  best_score: number | null;
+  fairways_hit: number | null;
+  putts_per_round: number | null;
   last_round_course_name: string | null;
   last_round_date: string | null;
   last_round_score: number | null;
+};
+
+type RoundHistory = {
+  id: string;
+  course_name: string;
+  date: string;
+  score: number;
+  fairways_hit?: number;
+  greens_in_reg?: number;
+  putts?: number;
+  scorecard?: string;
 };
 
 // ------------------- ACCOUNTS LOGIC -------------------------
 export default function AccountsScreen() {
   const { user, loading: authLoading, signOut } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [rounds, setRounds] = useState<RoundHistory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRedirecting, setIsRedirecting] = useState(false);
@@ -134,6 +149,21 @@ export default function AccountsScreen() {
     }
   };
 
+  const fetchRounds = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('golf_rounds')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      safeSetState(setRounds, data || []);
+    } catch (err) {
+      console.error('Round history fetch error:', err);
+    }
+  };
+
   // Use useFocusEffect to handle screen focus properly
   useFocusEffect(
     React.useCallback(() => {
@@ -145,6 +175,7 @@ export default function AccountsScreen() {
 
       if (!authLoading && user && isMounted) {
         fetchProfile();
+        fetchRounds();
       }
     }, [user, authLoading, isMounted])
   );
@@ -231,8 +262,9 @@ export default function AccountsScreen() {
 // ------------------- ACCOUNTS UI -------------------------
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
+      {/* Smaller Header */}
+      <View style={styles.headerSmall}>
+        <ThemedText type="title" style={styles.headerTitleSmall}>
           Your Account
         </ThemedText>
         <Pressable
@@ -246,55 +278,76 @@ export default function AccountsScreen() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <ThemedText style={styles.infoLabel}>Name</ThemedText>
-        <ThemedText style={styles.infoText}>{profile.full_name || 'N/A'}</ThemedText>
+      <ThemedText type="subtitle" style={styles.sectionTitle}>
+        Golf Stats
+      </ThemedText>
+      {/* Golf Stats Grid */}
+      <View style={styles.statsGrid}>
+        <StatTile label="Handicap" value={profile.handicap?.toFixed(1) ?? 'N/A'} />
+        <StatTile label="Rounds" value={profile.rounds_played?.toString() ?? 'N/A'} />
+        <StatTile label="Avg Score" value={profile.average_score?.toFixed(1) ?? 'N/A'} />
+        <StatTile label="Best Score" value={profile.best_score?.toString() ?? 'N/A'} />
+        <StatTile label="Fairways Hit" value={profile.fairways_hit?.toString() ?? 'N/A'} />
+        <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
+      </View>
 
-        <ThemedText style={styles.infoLabel}>Email</ThemedText>
-        <ThemedText style={styles.infoText}>{profile.email || 'N/A'}</ThemedText>
-
-        <View style={styles.separator} />
-
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Golf Stats
-        </ThemedText>
-
-        <ThemedText style={styles.infoLabel}>Handicap Index</ThemedText>
-        <ThemedText style={styles.infoText}>
-          {profile.handicap !== null ? profile.handicap.toFixed(1) : 'N/A'}
-        </ThemedText>
-
-        <ThemedText style={styles.infoLabel}>Rounds Played</ThemedText>
-        <ThemedText style={styles.infoText}>
-          {profile.rounds_played !== null ? profile.rounds_played.toString() : 'N/A'}
-        </ThemedText>
-
-        <ThemedText style={styles.infoLabel}>Average Score</ThemedText>
-        <ThemedText style={styles.infoText}>
-          {profile.average_score !== null ? profile.average_score.toFixed(1) : 'N/A'}
-        </ThemedText>
-
-        <View style={styles.separator} />
-
-        <ThemedText type="subtitle" style={styles.sectionTitle}>
-          Last Round
-        </ThemedText>
-
-        <ThemedText style={styles.infoLabel}>Course</ThemedText>
-        <ThemedText style={styles.infoText}>{profile.last_round_course_name || 'N/A'}</ThemedText>
-
-        <ThemedText style={styles.infoLabel}>Date</ThemedText>
-        <ThemedText style={styles.infoText}>{profile.last_round_date || 'N/A'}</ThemedText>
-
-        <ThemedText style={styles.infoLabel}>Score</ThemedText>
-        <ThemedText style={styles.infoText}>
-          {profile.last_round_score !== null ? profile.last_round_score.toString() : 'N/A'}
-        </ThemedText>
+      {/* Swipeable Round History */}
+      <ThemedText type="subtitle" style={styles.sectionTitle}>
+        Round History
+      </ThemedText>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={320} // width of each tile
+        decelerationRate="fast"
+        style={styles.roundsScroll}
+        contentContainerStyle={styles.roundsContainer}
+      >
+        {rounds.length === 0 ? (
+          <ThemedText style={styles.infoText}>No rounds played yet.</ThemedText>
+        ) : (
+          rounds.map((round) => (
+            <View key={round.id} style={styles.roundTile}>
+              <ThemedText style={styles.roundCourse}>{round.course_name}</ThemedText>
+              <ThemedText style={styles.roundDate}>{round.date}</ThemedText>
+              <ThemedText style={styles.roundScore}>Score: {round.score}</ThemedText>
+              <ThemedText style={styles.roundStat}>Fairways: {round.fairways_hit ?? 'N/A'}</ThemedText>
+              <ThemedText style={styles.roundStat}>GIR: {round.greens_in_reg ?? 'N/A'}</ThemedText>
+              <ThemedText style={styles.roundStat}>Putts: {round.putts ?? 'N/A'}</ThemedText>
+              {/* Show scorecard if available */}
+              {round.scorecard && (
+                <ScrollView style={{ maxHeight: 120 }}>
+                  <ThemedText style={styles.roundStat}>
+                    {(() => {
+                      try {
+                        const scorecard = JSON.parse(round.scorecard);
+                        return scorecard.map((player: any, idx: number) =>
+                          `Player: ${player.name}\nScores: ${player.scores.join(', ')}`
+                        ).join('\n\n');
+                      } catch {
+                        return '';
+                      }
+                    })()}
+                  </ThemedText>
+                </ScrollView>
+              )}
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
 }
 
+// StatTile component for grid
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statTile}>
+      <ThemedText style={styles.statLabel}>{label}</ThemedText>
+      <ThemedText style={styles.statValue}>{value}</ThemedText>
+    </View>
+  );
+}
 
 // ------------------- STYLING -------------------------
 const styles = StyleSheet.create({
@@ -324,8 +377,24 @@ const styles = StyleSheet.create({
     zIndex: 10,
     marginTop: 40,
   },
+  headerSmall: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#fff',
+    marginTop: 10,
+  },
   headerTitle: {
     fontSize: 28,
+    fontWeight: '700',
+    color: '#1E3A8A',
+  },
+  headerTitleSmall: {
+    fontSize: 22,
     fontWeight: '700',
     color: '#1E3A8A',
   },
@@ -348,6 +417,7 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
   },
   sectionTitle: {
+    marginHorizontal: 20,
     fontSize: 22,
     fontWeight: '700',
     marginBottom: 12,
@@ -402,5 +472,73 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '700',
     fontSize: 16,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  statTile: {
+    width: '30%',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 18,
+    color: '#1E40AF',
+    fontWeight: '700',
+  },
+  roundsScroll: {
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  roundsContainer: {
+    paddingHorizontal: 10,
+  },
+  roundTile: {
+    width: 300,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 18,
+    marginRight: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  roundCourse: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E3A8A',
+    marginBottom: 4,
+  },
+  roundDate: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  roundScore: {
+    fontSize: 16,
+    color: '#EF4444',
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  roundStat: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 2,
   },
 });

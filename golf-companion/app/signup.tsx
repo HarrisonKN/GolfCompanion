@@ -5,6 +5,7 @@ import Toast from 'react-native-toast-message';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
+import * as SecureStore from 'expo-secure-store';
 
 // ------------------- SIGNUP LOGIC -------------------------
 export default function SignupScreen() {
@@ -272,3 +273,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+// ------------------- SIGNIN LOGIC -------------------------
+const signIn = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  if (data.session) {
+    await SecureStore.setItemAsync('supabase_session', JSON.stringify(data.session));
+  }
+  return data;
+};

@@ -4,8 +4,18 @@ import React, { useState } from 'react';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
+import * as SecureStore from 'expo-secure-store';
 
 // ------------------- LOGIN LOGIC -------------------------
+const signIn = async (email: string, password: string) => {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  if (data.session) {
+    await SecureStore.setItemAsync('supabase_session', JSON.stringify(data.session));
+  }
+  return data;
+};
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,18 +36,12 @@ export default function LoginScreen() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      
-      if (error) {
-        console.error('Login error:', error);
-        Alert.alert('Login Failed', error.message);
-      } else {
-        console.log('Login successful');
-        router.replace('/(tabs)/account');
-      }
+      const data = await signIn(email, password);
+      console.log('Login successful', data);
+      router.replace('/(tabs)/account');
     } catch (error: any) {
       console.error('Login error:', error);
-      Alert.alert('Login Error', 'An unexpected error occurred. Please try again.');
+      Alert.alert('Login Error', error.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }

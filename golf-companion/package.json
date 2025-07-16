@@ -48,7 +48,11 @@
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "~0.20.0",
     "react-native-webview": "13.13.5",
-    "expo": "~53.0.17"
+    "expo": "~53.0.17",
+    "expo-secure-store": "~14.2.3",
+    "react-native-view-shot": "4.0.3",
+    "expo-media-library": "~17.1.7",
+    "expo-sharing": "~13.1.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

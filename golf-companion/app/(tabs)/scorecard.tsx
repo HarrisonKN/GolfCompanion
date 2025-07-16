@@ -18,6 +18,9 @@ import { supabase } from "@/components/supabase";
 import DropDownPicker from "react-native-dropdown-picker";
 import { useAuth } from '@/components/AuthContext';
 import { router } from 'expo-router';
+import { captureRef } from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
 
 // ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
@@ -61,6 +64,8 @@ export default function ScorecardScreen() {
   const [modalPutts, setModalPutts] = useState(0);
 
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+
+  const scorecardRef = React.useRef<View>(null);
 
   // Fetch courses from Supabase
   useEffect(() => {
@@ -152,6 +157,40 @@ export default function ScorecardScreen() {
     }
   };
 
+  const saveScorecardAsImage = async () => {
+    try {
+      // Request permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow media library access to save images.');
+        return;
+      }
+
+      // Capture the view as an image
+      const uri = await captureRef(scorecardRef, {
+        format: 'png',
+        quality: 1,
+      });
+
+      // Save to gallery
+      const asset = await MediaLibrary.createAssetAsync(uri);
+      await MediaLibrary.createAlbumAsync('Golf Scorecards', asset, false);
+
+      // Optionally, share the image
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri);
+      }
+
+      Alert.alert('Success', 'Scorecard saved to your gallery!');
+    } catch (err) {
+      let message = 'Unknown error';
+      if (err instanceof Error) {
+        message = err.message;
+      }
+      Alert.alert('Error', 'Failed to save scorecard: ' + message);
+    }
+  };
+
   // ------------------- SCORECARD UI -------------------------
   return (
     <View style={styles.gradientBg}>
@@ -188,7 +227,7 @@ export default function ScorecardScreen() {
           contentContainerStyle={{ minWidth: Dimensions.get('window').width + 400 }}
           showsHorizontalScrollIndicator={false}
         >
-          <View style={styles.tableContainer}>
+          <View style={styles.tableContainer} ref={scorecardRef}>
             {/* --- Combined Header Section --- */}
             <View style={styles.headerUnified}>
               {/* Header Row: Hole Numbers */}
@@ -427,10 +466,7 @@ export default function ScorecardScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.confirmButton, styles.smallButton]}
-              onPress={() => {
-                // TODO: Implement save as image logic here
-                setSaveModalVisible(false);
-              }}
+              onPress={saveScorecardAsImage}
             >
               <Text style={styles.confirmButtonText}>Save as Image</Text>
             </TouchableOpacity>

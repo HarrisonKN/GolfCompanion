@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
+import React from 'react';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider } from '@/components/AuthContext';

@@ -1,6 +1,6 @@
 // ------------------- IMPORTS -------------------------
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator, Alert, Modal, TouchableOpacity } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
@@ -42,6 +42,9 @@ export default function AccountsScreen() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const mountedRef = useRef(true);
+  const [scorecardModalVisible, setScorecardModalVisible] = useState(false);
+  const [selectedScorecard, setSelectedScorecard] = useState<any[]>([]);
+  const [selectedMaxHoles, setSelectedMaxHoles] = useState(0);
 
   // Handle mounting state
   useEffect(() => {
@@ -164,15 +167,29 @@ export default function AccountsScreen() {
     }
   };
 
+  const openScorecardModal = (scorecardStr: string) => {
+    try {
+      const scorecard = JSON.parse(scorecardStr);
+      setSelectedScorecard(scorecard);
+      setSelectedMaxHoles(Math.max(...scorecard.map((p: any) => p.scores.length)));
+      setScorecardModalVisible(true);
+    } catch {
+      setSelectedScorecard([]);
+      setSelectedMaxHoles(0);
+      setScorecardModalVisible(false);
+    }
+  };
+
   // Use useFocusEffect to handle screen focus properly
   useFocusEffect(
     React.useCallback(() => {
       if (!authLoading && !user && !isRedirecting) {
         console.log('No user found, redirecting to login');
-        safeNavigate('/login'); //should prevent crash and just make a redirect
+        safeNavigate('/login');
         return;
       }
 
+      // Always fetch latest profile and rounds when focused and user is present
       if (!authLoading && user && isMounted) {
         fetchProfile();
         fetchRounds();
@@ -316,25 +333,206 @@ export default function AccountsScreen() {
               <ThemedText style={styles.roundStat}>Putts: {round.putts ?? 'N/A'}</ThemedText>
               {/* Show scorecard if available */}
               {round.scorecard && (
-                <ScrollView style={{ maxHeight: 120 }}>
-                  <ThemedText style={styles.roundStat}>
-                    {(() => {
-                      try {
-                        const scorecard = JSON.parse(round.scorecard);
-                        return scorecard.map((player: any, idx: number) =>
-                          `Player: ${player.name}\nScores: ${player.scores.join(', ')}`
-                        ).join('\n\n');
-                      } catch {
-                        return '';
-                      }
-                    })()}
-                  </ThemedText>
-                </ScrollView>
+                <TouchableOpacity onPress={() => openScorecardModal(round.scorecard!)} activeOpacity={0.7}>
+                  <ScrollView horizontal style={{ marginTop: 12, maxHeight: 200 }}>
+                    <View style={styles.scorecardTable}>
+                      {(() => {
+                        try {
+                          const scorecard = JSON.parse(round.scorecard ?? JSON.stringify(selectedScorecard));
+                          const maxHoles = Math.max(...scorecard.map((player: any) => player.scores.length), 18);
+                          const parseScore = (text: string) => parseInt((text || '').split('/')[0]?.trim()) || 0;
+
+                          return (
+                            <>
+                              {/* Header Row */}
+                              <View style={styles.scorecardRow}>
+                                <View style={styles.scorecardCellPlayerHeader}>
+                                  <ThemedText style={styles.scorecardHeaderText}>Player</ThemedText>
+                                </View>
+                                {/* Holes 1-9 */}
+                                {[...Array(9)].map((_, idx) => (
+                                  <View key={idx} style={styles.scorecardCellHeader}>
+                                    <ThemedText style={styles.scorecardHeaderText}>{idx + 1}</ThemedText>
+                                  </View>
+                                ))}
+                                {/* IN */}
+                                <View style={styles.scorecardCellHeader}>
+                                  <ThemedText style={styles.scorecardHeaderText}>IN</ThemedText>
+                                </View>
+                                {/* Holes 10-18 */}
+                                {[...Array(9)].map((_, idx) => (
+                                  <View key={idx + 9} style={styles.scorecardCellHeader}>
+                                    <ThemedText style={styles.scorecardHeaderText}>{idx + 10}</ThemedText>
+                                  </View>
+                                ))}
+                                {/* OUT */}
+                                <View style={styles.scorecardCellHeader}>
+                                  <ThemedText style={styles.scorecardHeaderText}>OUT</ThemedText>
+                                </View>
+                                {/* TOTAL */}
+                                <View style={styles.scorecardCellHeader}>
+                                  <ThemedText style={styles.scorecardHeaderText}>Total</ThemedText>
+                                </View>
+                              </View>
+                              {/* Player Rows */}
+                              {scorecard.map((player: any, idx: number) => {
+                                const inScore = player.scores.slice(0, 9).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+                                const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+                                const totalScore = inScore + outScore;
+                                return (
+                                  <View key={idx} style={styles.scorecardRow}>
+                                    <View style={styles.scorecardCellPlayer}>
+                                      <ThemedText style={styles.scorecardPlayerText}>{player.name}</ThemedText>
+                                    </View>
+                                    {/* Holes 1-9 */}
+                                    {[...Array(9)].map((_, hIdx) => (
+                                      <View key={hIdx} style={styles.scorecardCell}>
+                                        <ThemedText style={styles.scorecardScoreText}>
+                                          {player.scores[hIdx] || '-'}
+                                        </ThemedText>
+                                      </View>
+                                    ))}
+                                    {/* IN */}
+                                    <View style={styles.scorecardCell}>
+                                      <ThemedText style={styles.scorecardScoreText}>{inScore}</ThemedText>
+                                    </View>
+                                    {/* Holes 10-18 */}
+                                    {[...Array(9)].map((_, hIdx) => (
+                                      <View key={hIdx + 9} style={styles.scorecardCell}>
+                                        <ThemedText style={styles.scorecardScoreText}>
+                                          {player.scores[hIdx + 9] || '-'}
+                                        </ThemedText>
+                                      </View>
+                                    ))}
+                                    {/* OUT */}
+                                    <View style={styles.scorecardCell}>
+                                      <ThemedText style={styles.scorecardScoreText}>{outScore}</ThemedText>
+                                    </View>
+                                    {/* TOTAL */}
+                                    <View style={styles.scorecardCell}>
+                                      <ThemedText style={styles.scorecardScoreText}>{totalScore}</ThemedText>
+                                    </View>
+                                  </View>
+                                );
+                              })}
+                            </>
+                          );
+                        } catch {
+                          return null;
+                        }
+                      })()}
+                    </View>
+                  </ScrollView>
+                </TouchableOpacity>
               )}
             </View>
           ))
         )}
       </ScrollView>
+      <Modal
+        visible={scorecardModalVisible}
+        animationType="slide"
+        onRequestClose={() => setScorecardModalVisible(false)}
+        transparent={false}
+      >
+        <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: 40 }}>
+          <Pressable
+            onPress={() => setScorecardModalVisible(false)}
+            style={{ alignSelf: 'flex-end', padding: 20 }}
+          >
+            <ThemedText style={{ fontSize: 18, color: '#1E3A8A', fontWeight: '700' }}>Close</ThemedText>
+          </Pressable>
+          <ScrollView horizontal style={{ flex: 1 }}>
+            <View style={[styles.scorecardTable, { alignSelf: 'center', marginTop: 20 }]}>
+              {(() => {
+                try {
+                  const scorecard = JSON.parse(JSON.stringify(selectedScorecard));
+                  const maxHoles = Math.max(...scorecard.map((player: any) => player.scores.length), 18);
+                  const parseScore = (text: string) => parseInt((text || '').split('/')[0]?.trim()) || 0;
+
+                  return (
+                    <>
+                      {/* Header Row */}
+                      <View style={styles.scorecardRow}>
+                        <View style={styles.scorecardCellPlayerHeader}>
+                          <ThemedText style={styles.scorecardHeaderText}>Player</ThemedText>
+                        </View>
+                        {/* Holes 1-9 */}
+                        {[...Array(9)].map((_, idx) => (
+                          <View key={idx} style={styles.scorecardCellHeader}>
+                            <ThemedText style={styles.scorecardHeaderText}>{idx + 1}</ThemedText>
+                          </View>
+                        ))}
+                        {/* IN */}
+                        <View style={styles.scorecardCellHeader}>
+                          <ThemedText style={styles.scorecardHeaderText}>IN</ThemedText>
+                        </View>
+                        {/* Holes 10-18 */}
+                        {[...Array(9)].map((_, idx) => (
+                          <View key={idx + 9} style={styles.scorecardCellHeader}>
+                            <ThemedText style={styles.scorecardHeaderText}>{idx + 10}</ThemedText>
+                          </View>
+                        ))}
+                        {/* OUT */}
+                        <View style={styles.scorecardCellHeader}>
+                          <ThemedText style={styles.scorecardHeaderText}>OUT</ThemedText>
+                        </View>
+                        {/* TOTAL */}
+                        <View style={styles.scorecardCellHeader}>
+                          <ThemedText style={styles.scorecardHeaderText}>Total</ThemedText>
+                        </View>
+                      </View>
+                      {/* Player Rows */}
+                      {scorecard.map((player: any, idx: number) => {
+                        const inScore = player.scores.slice(0, 9).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+                        const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+                        const totalScore = inScore + outScore;
+                        return (
+                          <View key={idx} style={styles.scorecardRow}>
+                            <View style={styles.scorecardCellPlayer}>
+                              <ThemedText style={styles.scorecardPlayerText}>{player.name}</ThemedText>
+                            </View>
+                            {/* Holes 1-9 */}
+                            {[...Array(9)].map((_, hIdx) => (
+                              <View key={hIdx} style={styles.scorecardCell}>
+                                <ThemedText style={styles.scorecardScoreText}>
+                                  {player.scores[hIdx] || '-'}
+                                </ThemedText>
+                              </View>
+                            ))}
+                            {/* IN */}
+                            <View style={styles.scorecardCell}>
+                              <ThemedText style={styles.scorecardScoreText}>{inScore}</ThemedText>
+                            </View>
+                            {/* Holes 10-18 */}
+                            {[...Array(9)].map((_, hIdx) => (
+                              <View key={hIdx + 9} style={styles.scorecardCell}>
+                                <ThemedText style={styles.scorecardScoreText}>
+                                  {player.scores[hIdx + 9] || '-'}
+                                </ThemedText>
+                              </View>
+                            ))}
+                            {/* OUT */}
+                            <View style={styles.scorecardCell}>
+                              <ThemedText style={styles.scorecardScoreText}>{outScore}</ThemedText>
+                            </View>
+                            {/* TOTAL */}
+                            <View style={styles.scorecardCell}>
+                              <ThemedText style={styles.scorecardScoreText}>{totalScore}</ThemedText>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </>
+                  );
+                } catch {
+                  return null;
+                }
+              })()}
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -540,5 +738,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
     marginBottom: 2,
+  },
+  scorecardTable: {
+    flexDirection: 'column',
+  },
+  scorecardRow: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  scorecardCellPlayerHeader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E5E7EB',
+    padding: 6,
+    borderRadius: 4,
+  },
+  scorecardCellHeader: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E5E7EB',
+    padding: 6,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  scorecardHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E3A8A',
+  },
+  scorecardCellPlayer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 6,
+    borderRadius: 4,
+  },
+  scorecardCell: {
+    width: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 6,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  scorecardPlayerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  scorecardScoreText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
   },
 });

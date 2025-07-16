@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { supabase } from './supabase';
-import type { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: User | null;
+  user: any;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -27,59 +27,47 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
 
+  // Restore session from SecureStore on mount
   useEffect(() => {
-    let mounted = true;
-
-    // Get initial session
-    const getInitialSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+    const restoreSession = async () => {
+      const sessionStr = await SecureStore.getItemAsync('supabase_session');
+      if (sessionStr) {
+        const session = JSON.parse(sessionStr);
+        const { data, error } = await supabase.auth.setSession(session);
         if (error) {
-          console.error('Error getting session:', error);
-        } else if (mounted) {
-          setUser(session?.user ?? null);
-        }
-      } catch (error) {
-        console.error('Error in getInitialSession:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-          setInitialized(true);
+          console.log('Failed to restore session:', error);
+          await SecureStore.deleteItemAsync('supabase_session');
         }
       }
+      // Always get the latest session from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      setLoading(false);
     };
+    restoreSession();
+  }, []);
 
-    getInitialSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
-        if (mounted) {
-          setUser(session?.user ?? null);
-          if (initialized) {
-            setLoading(false);
-          }
-        }
+  // Listen for auth state changes and sync with SecureStore
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        SecureStore.setItemAsync('supabase_session', JSON.stringify(session));
+        setUser(session.user);
+      } else {
+        SecureStore.deleteItemAsync('supabase_session');
+        setUser(null);
       }
-    );
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [initialized]);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+    await supabase.auth.signOut();
+    await SecureStore.deleteItemAsync('supabase_session');
+    setUser(null);
   };
 
   return (

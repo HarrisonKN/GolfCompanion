@@ -5,6 +5,7 @@ import { useFocusEffect } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -52,6 +53,7 @@ export default function CourseViewScreen() {
   const [holeItems, setHoleItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [droppedPins, setDroppedPins] = useState<{ latitude: number; longitude: number }[]>([]);
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView>(null);
 
@@ -185,6 +187,23 @@ const centerLon =
     }
   }, [selectedHole]);
 
+  useEffect(() => {
+  // Clear dropped pins when a new hole is selected
+  setDroppedPins([]);
+}, [selectedHoleNumber]);
+
+  //dropping pins around course funciton to show shots according to players position
+  const handleDropPin = async () => {
+  if (!location) return;
+
+  const newPin = {
+    latitude: location.coords.latitude,
+    longitude: location.coords.longitude,
+  };
+
+  setDroppedPins((prevPins) => [...prevPins, newPin]);
+};
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -272,17 +291,29 @@ const centerLon =
                 latitude: selectedHole.tee_latitude!,
                 longitude: selectedHole.tee_longitude!,
               }}
-              pinColor="blue"
+              anchor={{ x: 0.5, y: 0.5 }} // Fix floating issue
               title={`Hole ${selectedHole.hole_number} Tee`}
-            />
+              >
+              <Image
+                source={require("@/assets/images/golf-logo.png")}
+                style={{ width: 30, height: 30 }}
+                resizeMode="contain"
+              />
+            </Marker>
             <Marker
               coordinate={{
                 latitude: selectedHole.green_latitude!,
                 longitude: selectedHole.green_longitude!,
               }}
-              pinColor="green"
+              anchor={{ x: 0.5, y: 0.5 }} // Fix floating issue
               title={`Hole ${selectedHole.hole_number} Green`}
-            />
+              >
+              <Image
+                source={require("@/assets/images/flag.png")}
+                style={{ width: 30, height: 30 }}
+                resizeMode="contain"
+              />
+            </Marker>
             <Polyline
               coordinates={[
                 {
@@ -307,7 +338,46 @@ const centerLon =
             />
           </>
         )}
+        {droppedPins.map((pin, index) => (
+          <Marker
+            key={`pin-${index}`}
+            coordinate={pin}
+            pinColor="orange"
+            title={`Pin ${index + 1}`}
+          />
+        ))}
+
+        {droppedPins.length >= 1 && (
+          <Polyline
+            coordinates={[
+              {
+                latitude: selectedHole?.tee_latitude!,
+                longitude: selectedHole?.tee_longitude!,
+              },
+              droppedPins[0],
+            ]}
+            strokeColor="rgba(30, 144, 255, 0.5)" // 50% opacity blue
+            strokeWidth={2}
+            lineDashPattern={[10, 5]} // Dotted line
+          />
+        )}
+
+        {droppedPins.length > 1 &&
+          droppedPins.slice(1).map((pin, index) => (
+            <Polyline
+              key={`line-${index}`}
+              coordinates={[droppedPins[index], pin]}
+              strokeColor="rgba(30, 144, 255, 0.5)"
+              strokeWidth={2}
+              lineDashPattern={[10, 5]}
+            />
+          ))}
       </MapView>
+
+      <Pressable style={styles.pinButton} onPress={handleDropPin}>
+        <Text style={styles.pinButtonText}>Drop Pin</Text>
+      </Pressable>
+
     </View>
   );
 }
@@ -360,4 +430,21 @@ const styles = StyleSheet.create({
   placeholder: { color: "#ccc" },
   text: { color: "#fff" },
   listItemLabel: { color: "#fff" },
+  //-------Pin Button Styling ----- 
+  pinButton: {
+  position: "absolute",
+  bottom: 30,
+  left: 20,
+  backgroundColor: "#1D4ED8",
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  borderRadius: 8,
+  zIndex: 1000,
+  elevation: 3,
+},
+pinButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 14,
+},
 });

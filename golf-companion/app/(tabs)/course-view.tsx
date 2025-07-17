@@ -1,16 +1,15 @@
 // ------------------- IMPORTS -------------------------
 import { supabase, testSupabaseConnection } from "@/components/supabase";
 import * as Location from "expo-location";
+import { useFocusEffect } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  StyleSheet,
-  View,
-  Text,
   Pressable,
+  StyleSheet,
+  Text,
+  View
 } from "react-native";
-import { useFocusEffect } from "expo-router";
 import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
   Marker,
@@ -249,7 +248,7 @@ const centerLon =
             }}
             setItems={setHoleItems}
             style={styles.dropdown}
-            dropDownContainerStyle={styles.dropdownContainer}
+            dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 400 }]} // keep maxheight here to display all holes rather then 1-5
             placeholderStyle={styles.placeholder}
             textStyle={styles.text}
             listItemLabelStyle={styles.listItemLabel}

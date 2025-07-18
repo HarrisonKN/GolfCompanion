@@ -12,16 +12,23 @@ import { ThemedView } from '@/components/ThemedView';
 import { useBottomTabOverflow } from '@/components/ui/TabBarBackground';
 import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import { useColorScheme } from '@/hooks/useColorScheme';
+import React from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
+
 
 type Props = PropsWithChildren<{
   headerImage: ReactElement;
   headerBackgroundColor: { dark: string; light: string };
+   contentContainerStyle?: StyleProp<ViewStyle>;
+   style?: ViewStyle;
 }>;
 
 export default function ParallaxScrollView({
   children,
   headerImage,
   headerBackgroundColor,
+  contentContainerStyle,
+  style,
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
@@ -58,12 +65,15 @@ export default function ParallaxScrollView({
   });
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={[styles.container, style]}>
       <Animated.ScrollView
         ref={scrollRef}
         scrollEventThrottle={16}
         scrollIndicatorInsets={{ bottom }}
-        contentContainerStyle={{ paddingBottom: bottom }}>
+        contentContainerStyle={[
+          {flexGrow: 1, paddingBottom: bottom },
+          contentContainerStyle,
+          ]}>
         <Animated.View
           onLayout={onHeaderLayout}
           style={[

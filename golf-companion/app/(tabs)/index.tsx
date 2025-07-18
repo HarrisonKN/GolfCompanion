@@ -12,18 +12,50 @@ import { ThemedView } from '@/components/ThemedView';
 import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import Toast from 'react-native-toast-message';
+
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
   const { user, loading } = useAuth();
+//----------------------------------------------------------------
+// Adding to make it so there is only 1 feature card at a time on the home screen
+  const featureCards = [
+    {
+      title: '📋 Digital Scorecard',
+      description: `Track every stroke with our intuitive Scorecard screen. Add players, input scores, and get instant feedback on your game.`,
+    },
+    {
+      title: '🗺️ Course View',
+      description: `Visualize each hole with satellite course maps, layouts, and AI-powered club suggestions based on distance and your play style.`,
+    },
+    {
+      title: '🎙️ Group Voice Chat',
+      description: `Form a party with your friends and stay connected through real-time voice chat even when you're on different holes.`,
+    },
+    {
+      title: '🎵 Sync Music with Spotify',
+      description: `Start a shared Spotify session so your group can listen to the same music together.`,
+    },
+  ];
+  const [currentCardIndex, setCurrentCardIndex] = useState(0);
+   useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentCardIndex((prev) => (prev + 1) % featureCards.length);
+    }, 5000); // rotate every 5 seconds
+
+    return () => clearInterval(interval); // cleanup on unmount
+  }, []);
+
+//------------------------------------------------------------------------------
 
   // Show loading state while checking auth
   if (loading) {
     return (
       <ParallaxScrollView
+        style={{ flex: 1 }}
         headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
         headerImage={
           <ThemedView style={styles.headerRow}>
@@ -41,6 +73,7 @@ export default function HomeScreen() {
             </ThemedView>
           </ThemedView>
         }
+        contentContainerStyle={styles.contentContainer} 
       >
         <ThemedView style={styles.authContainer}>
           <ThemedText type="subtitle" style={styles.authTitle}>Loading...</ThemedText>
@@ -118,32 +151,12 @@ export default function HomeScreen() {
 
         {/* Rest of your feature cards remain the same */}
         <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle" style={styles.featureTitle}>📋 Digital Scorecard</ThemedText>
+          <ThemedText type="subtitle" style={styles.featureTitle}>{featureCards[currentCardIndex].title}</ThemedText>
           <ThemedText style={styles.featureText}>
-            {`Track every stroke with our intuitive Scorecard screen. Add players, input scores, and get instant feedback on your game.`}
+            {featureCards[currentCardIndex].description}
           </ThemedText>
         </ThemedView>
 
-        <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle" style={styles.featureTitle}>🗺️ Course View</ThemedText>
-          <ThemedText style={styles.featureText}>
-            {`Visualize each hole with satellite course maps, layouts, and AI-powered club suggestions based on distance and your play style.`}
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle" style={styles.featureTitle}>🎙️ Group Voice Chat</ThemedText>
-          <ThemedText style={styles.featureText}>
-            {`Form a party with your friends and stay connected through real-time voice chat even when you're on different holes.`}
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle" style={styles.featureTitle}>🎵 Sync Music with Spotify</ThemedText>
-          <ThemedText style={styles.featureText}>
-            {`Start a shared Spotify session so your group can listen to the same music together.`}
-          </ThemedText>
-        </ThemedView>
 
       </ParallaxScrollView>  
       <Toast/>
@@ -239,6 +252,7 @@ const styles = StyleSheet.create({
   },
   
   buttonRow: {
+    backgroundColor: COLORS.background,
     flexDirection: 'row',
     gap: 16,
   },
@@ -283,4 +297,11 @@ authButtonText: {
     fontSize: 14,
     color: COLORS.textDark,
   },
+  //--------------Main Page Container---------------
+  contentContainer: {
+  flexGrow: 1,
+  justifyContent: 'space-between', // optionally push content upward
+  backgroundColor: COLORS.background,
+  paddingBottom: 20, // prevents content touching bottom nav bar
+},
 });

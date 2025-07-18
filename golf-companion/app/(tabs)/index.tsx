@@ -13,7 +13,7 @@ import { COLORS } from "@/constants/theme"; //Importing Color themes for consist
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 
 
@@ -59,18 +59,20 @@ export default function HomeScreen() {
         headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
         headerImage={
           <ThemedView style={styles.headerRow}>
-            <Image
-              source={require('@/assets/images/golf-logo.png')}
-              style={styles.logo}
-              contentFit="contain"
-            />
-            <ThemedView style={styles.rotatingTextContainer}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('@/assets/images/golf-logo.png')}
+                style={styles.logo}
+                contentFit="contain"
+              />
+            </View>
+            <View style={styles.rotatingTextContainer}>
               <ThemedText style={[styles.text]} type="title">Golf</ThemedText>
               <RotatingText
                 texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
                 rotationInterval={2000}
               />
-            </ThemedView>
+            </View>
           </ThemedView>
         }
         contentContainerStyle={styles.contentContainer} 
@@ -89,18 +91,20 @@ export default function HomeScreen() {
         headerBackgroundColor={{ light: COLORS.background, dark: COLORS.primary }}
         headerImage={
           <ThemedView style={styles.headerRow}>
-            <Image
-              source={require('@/assets/images/golf-logo.png')}
-              style={styles.logo}
-              contentFit="contain"
-            />
-            <ThemedView style={styles.rotatingTextContainer}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('@/assets/images/golf-logo.png')}
+                style={styles.logo}
+                contentFit="contain"
+              />
+            </View>
+            <View style={styles.rotatingTextContainer}>
               <ThemedText style={[styles.text]} type="title">Golf</ThemedText>
               <RotatingText
                 texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
                 rotationInterval={2000}
               />
-            </ThemedView>
+            </View>
           </ThemedView>
         }
       >
@@ -186,25 +190,36 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   headerRow: {
+    backgroundColor: COLORS.third,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    paddingLeft: 80,
     paddingTop: 10,
     paddingHorizontal: 16,
-    paddingVertical: 10, //This changed the height of the header, smaller value = smaller header height
-    //leaves a gap between header and login buttons
-    backgroundColor: COLORS.third,// use this value for same colour as app #1c3d46
+  },
+  logoContainer: {
+    width: 120,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   logo: {
     width: 120,
     height: 120,
-    marginRight: 16,
+  },
+  golfTextContainer: {
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    width: 60, // fixed width for "Golf" text
+    marginRight: 8,
   },
   rotatingTextContainer: {
-    flexShrink: 1,
+    flex: 1, // flex only this container
     justifyContent: 'center',
-    backgroundColor: "transparent",
+    alignItems: 'flex-start',
+    minWidth: 60,
   },
   sectionContainer: {
     paddingHorizontal: 16,
@@ -223,6 +238,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
+    height: 140,
   },
   featureText:{
     fontSize: 14,
@@ -293,7 +309,6 @@ authButtonText: {
   },
   welcomeText: {
     textAlign: 'center',
-    marginTop: 8,
     fontSize: 14,
     color: COLORS.textDark,
   },

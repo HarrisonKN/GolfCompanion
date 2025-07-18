@@ -391,6 +391,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: COLORS.primary,
+    paddingBottom: 20,
   },
   loadingText: {
     marginTop: 10,
@@ -434,7 +435,7 @@ const styles = StyleSheet.create({
   //-------Pin Button Styling ----- 
   pinButton: {
   position: "absolute",
-  bottom: 30,
+  bottom: 80,
   left: 20,
   backgroundColor: "#1D4ED8",
   paddingVertical: 10,

@@ -5,7 +5,7 @@ import { supabase, testSupabaseConnection } from '@/components/supabase';
 import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions } from 'react-native';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -279,7 +279,7 @@ export default function AccountsScreen() {
 
 // ------------------- ACCOUNTS UI -------------------------
   return (
-    <View style={styles.screen}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: SCREEN_HEIGHT * 0.10 }}>
       {/* Smaller Header */}
       <View style={styles.headerSmall}>
         <ThemedText type="title" style={styles.headerTitleSmall}>
@@ -299,7 +299,6 @@ export default function AccountsScreen() {
       <ThemedText type="subtitle" style={styles.sectionTitle}>
         Golf Stats
       </ThemedText>
-      {/* Golf Stats Grid */}
       <View style={styles.statsGrid}>
         <StatTile label="Handicap" value={profile.handicap?.toFixed(1) ?? 'N/A'} />
         <StatTile label="Rounds" value={profile.rounds_played?.toString() ?? 'N/A'} />
@@ -309,14 +308,13 @@ export default function AccountsScreen() {
         <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
       </View>
 
-      {/* Swipeable Round History */}
       <ThemedText type="subtitle" style={styles.sectionTitle}>
         Round History
       </ThemedText>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        snapToInterval={320} // width of each tile
+        snapToInterval={320}
         decelerationRate="fast"
         style={styles.roundsScroll}
         contentContainerStyle={styles.roundsContainer}
@@ -335,94 +333,100 @@ export default function AccountsScreen() {
               {/* Show scorecard if available */}
               {round.scorecard && (
                 <TouchableOpacity onPress={() => openScorecardModal(round.scorecard!)} activeOpacity={0.7}>
-                  <ScrollView horizontal style={{ marginTop: 12, maxHeight: 200 }}>
-                    <View style={styles.scorecardTable}>
-                      {(() => {
-                        try {
-                          const scorecard = JSON.parse(round.scorecard ?? JSON.stringify(selectedScorecard));
-                          const maxHoles = Math.max(...scorecard.map((player: any) => player.scores.length), 18);
-                          const parseScore = (text: string) => parseInt((text || '').split('/')[0]?.trim()) || 0;
+                  <ScrollView
+                    horizontal
+                    style={{ marginTop: 12, maxHeight: 130 }}
+                    contentContainerStyle={{ flexGrow: 1 }}
+                  >
+                    <ScrollView>
+                      <View style={[styles.scorecardTable, { alignSelf: 'center' }]}>
+                        {(() => {
+                          try {
+                            const scorecard = JSON.parse(round.scorecard ?? JSON.stringify(selectedScorecard));
+                            const maxHoles = Math.max(...scorecard.map((player: any) => player.scores.length), 18);
+                            const parseScore = (text: string) => parseInt((text || '').split('/')[0]?.trim()) || 0;
 
-                          return (
-                            <>
-                              {/* Header Row */}
-                              <View style={styles.scorecardRow}>
-                                <View style={styles.scorecardCellPlayerHeader}>
-                                  <ThemedText style={styles.scorecardHeaderText}>Player</ThemedText>
-                                </View>
-                                {/* Holes 1-9 */}
-                                {[...Array(9)].map((_, idx) => (
-                                  <View key={idx} style={styles.scorecardCellHeader}>
-                                    <ThemedText style={styles.scorecardHeaderText}>{idx + 1}</ThemedText>
+                            return (
+                              <>
+                                {/* Header Row */}
+                                <View style={styles.scorecardRow}>
+                                  <View style={styles.scorecardCellPlayerHeader}>
+                                    <ThemedText style={styles.scorecardHeaderText}>Hole</ThemedText>
                                   </View>
-                                ))}
-                                {/* IN */}
-                                <View style={styles.scorecardCellHeader}>
-                                  <ThemedText style={styles.scorecardHeaderText}>IN</ThemedText>
-                                </View>
-                                {/* Holes 10-18 */}
-                                {[...Array(9)].map((_, idx) => (
-                                  <View key={idx + 9} style={styles.scorecardCellHeader}>
-                                    <ThemedText style={styles.scorecardHeaderText}>{idx + 10}</ThemedText>
-                                  </View>
-                                ))}
-                                {/* OUT */}
-                                <View style={styles.scorecardCellHeader}>
-                                  <ThemedText style={styles.scorecardHeaderText}>OUT</ThemedText>
-                                </View>
-                                {/* TOTAL */}
-                                <View style={styles.scorecardCellHeader}>
-                                  <ThemedText style={styles.scorecardHeaderText}>Total</ThemedText>
-                                </View>
-                              </View>
-                              {/* Player Rows */}
-                              {scorecard.map((player: any, idx: number) => {
-                                const inScore = player.scores.slice(0, 9).reduce((sum: number, val: string) => sum + parseScore(val), 0);
-                                const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
-                                const totalScore = inScore + outScore;
-                                return (
-                                  <View key={idx} style={styles.scorecardRow}>
-                                    <View style={styles.scorecardCellPlayer}>
-                                      <ThemedText style={styles.scorecardPlayerText}>{player.name}</ThemedText>
+                                  {/* Holes 1-9 */}
+                                  {[...Array(9)].map((_, idx) => (
+                                    <View key={idx} style={styles.scorecardCellHeader}>
+                                      <ThemedText style={styles.scorecardHeaderText}>{idx + 1}</ThemedText>
                                     </View>
-                                    {/* Holes 1-9 */}
-                                    {[...Array(9)].map((_, hIdx) => (
-                                      <View key={hIdx} style={styles.scorecardCell}>
-                                        <ThemedText style={styles.scorecardScoreText}>
-                                          {player.scores[hIdx] || '-'}
-                                        </ThemedText>
+                                  ))}
+                                  {/* IN */}
+                                  <View style={styles.scorecardCellHeader}>
+                                    <ThemedText style={styles.scorecardHeaderText}>IN</ThemedText>
+                                  </View>
+                                  {/* Holes 10-18 */}
+                                  {[...Array(9)].map((_, idx) => (
+                                    <View key={idx + 9} style={styles.scorecardCellHeader}>
+                                      <ThemedText style={styles.scorecardHeaderText}>{idx + 10}</ThemedText>
+                                    </View>
+                                  ))}
+                                  {/* OUT */}
+                                  <View style={styles.scorecardCellHeader}>
+                                    <ThemedText style={styles.scorecardHeaderText}>OUT</ThemedText>
+                                  </View>
+                                  {/* TOTAL */}
+                                  <View style={styles.scorecardCellHeader}>
+                                    <ThemedText style={styles.scorecardHeaderText}>Total</ThemedText>
+                                  </View>
+                                </View>
+                                {/* Player Rows */}
+                                {scorecard.map((player: any, idx: number) => {
+                                  const inScore = player.scores.slice(0, 9).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+                                  const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
+                                  const totalScore = inScore + outScore;
+                                  return (
+                                    <View key={idx} style={styles.scorecardRow}>
+                                      <View style={styles.scorecardCellPlayer}>
+                                        <ThemedText style={styles.scorecardPlayerText}>{player.name}</ThemedText>
                                       </View>
-                                    ))}
-                                    {/* IN */}
-                                    <View style={styles.scorecardCell}>
-                                      <ThemedText style={styles.scorecardScoreText}>{inScore}</ThemedText>
-                                    </View>
-                                    {/* Holes 10-18 */}
-                                    {[...Array(9)].map((_, hIdx) => (
-                                      <View key={hIdx + 9} style={styles.scorecardCell}>
-                                        <ThemedText style={styles.scorecardScoreText}>
-                                          {player.scores[hIdx + 9] || '-'}
-                                        </ThemedText>
+                                      {/* Holes 1-9 */}
+                                      {[...Array(9)].map((_, hIdx) => (
+                                        <View key={hIdx} style={styles.scorecardCell}>
+                                          <ThemedText style={styles.scorecardScoreText}>
+                                            {player.scores[hIdx] || '-'}
+                                          </ThemedText>
+                                        </View>
+                                      ))}
+                                      {/* IN */}
+                                      <View style={styles.scorecardCell}>
+                                        <ThemedText style={styles.scorecardScoreText}>{inScore}</ThemedText>
                                       </View>
-                                    ))}
-                                    {/* OUT */}
-                                    <View style={styles.scorecardCell}>
-                                      <ThemedText style={styles.scorecardScoreText}>{outScore}</ThemedText>
+                                      {/* Holes 10-18 */}
+                                      {[...Array(9)].map((_, hIdx) => (
+                                        <View key={hIdx + 9} style={styles.scorecardCell}>
+                                          <ThemedText style={styles.scorecardScoreText}>
+                                            {player.scores[hIdx + 9] || '-'}
+                                          </ThemedText>
+                                        </View>
+                                      ))}
+                                      {/* OUT */}
+                                      <View style={styles.scorecardCell}>
+                                        <ThemedText style={styles.scorecardScoreText}>{outScore}</ThemedText>
+                                      </View>
+                                      {/* TOTAL */}
+                                      <View style={styles.scorecardCell}>
+                                        <ThemedText style={styles.scorecardScoreText}>{totalScore}</ThemedText>
+                                      </View>
                                     </View>
-                                    {/* TOTAL */}
-                                    <View style={styles.scorecardCell}>
-                                      <ThemedText style={styles.scorecardScoreText}>{totalScore}</ThemedText>
-                                    </View>
-                                  </View>
-                                );
-                              })}
-                            </>
-                          );
-                        } catch {
-                          return null;
-                        }
-                      })()}
-                    </View>
+                                  );
+                                })}
+                              </>
+                            );
+                          } catch {
+                            return null;
+                          }
+                        })()}
+                      </View>
+                    </ScrollView>
                   </ScrollView>
                 </TouchableOpacity>
               )}
@@ -534,7 +538,7 @@ export default function AccountsScreen() {
           </ScrollView>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -549,251 +553,256 @@ function StatTile({ label, value }: { label: string; value: string }) {
 }
 
 // ------------------- STYLING -------------------------
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,
+    marginTop: SCREEN_HEIGHT * 0.04, // 4% of screen height
   },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: SCREEN_WIDTH * 0.05, // 5% of screen width
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 30,
-    paddingVertical: 30,
+    paddingHorizontal: SCREEN_WIDTH * 0.08, // 8% of screen width
+    paddingVertical: SCREEN_HEIGHT * 0.04, // 4% of screen height
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#fff',
-    shadowColor: '#000',
+    borderBottomColor: COLORS.grey,
+    backgroundColor: COLORS.white,
+    shadowColor: COLORS.black,
     shadowOpacity: 0.05,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
     zIndex: 10,
-    marginTop: 40,
+    marginTop: SCREEN_HEIGHT * 0.05,
   },
   headerSmall: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: SCREEN_WIDTH * 0.05,
+    paddingVertical: SCREEN_HEIGHT * 0.015,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#fff',
-    marginTop: 10,
+    borderBottomColor: COLORS.grey,
+    backgroundColor: COLORS.white,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: SCREEN_WIDTH * 0.07,
     fontWeight: '700',
-    color: '#1E3A8A',
+    color: COLORS.primary,
   },
   headerTitleSmall: {
-    fontSize: 22,
+    fontSize: SCREEN_WIDTH * 0.055,
     fontWeight: '700',
-    color: '#1E3A8A',
+    color: COLORS.primary,
   },
   logoutButton: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    backgroundColor: COLORS.error,
+    paddingHorizontal: SCREEN_WIDTH * 0.04,
+    paddingVertical: SCREEN_HEIGHT * 0.01,
     borderRadius: 20,
   },
   logoutButtonPressed: {
-    backgroundColor: '#B91C1C',
+    backgroundColor: "#B91C1C",
   },
   logoutButtonText: {
-    color: '#fff',
+    color: COLORS.white,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: SCREEN_WIDTH * 0.04,
   },
   container: {
-    paddingHorizontal: 30,
-    paddingVertical: 30,
+    paddingHorizontal: SCREEN_WIDTH * 0.08,
+    paddingVertical: SCREEN_HEIGHT * 0.04,
   },
   sectionTitle: {
-    marginHorizontal: 20,
-    fontSize: 22,
+    paddingTop: SCREEN_HEIGHT * 0.015,
+    marginHorizontal: SCREEN_WIDTH * 0.05,
+    fontSize: SCREEN_WIDTH * 0.055,
     fontWeight: '700',
-    marginBottom: 12,
-    color: '#1E40AF',
+    marginBottom: SCREEN_HEIGHT * 0.015,
+    color: COLORS.primary,
   },
   infoLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 18,
+    fontSize: SCREEN_WIDTH * 0.035,
+    color: COLORS.textLight,
+    marginTop: SCREEN_HEIGHT * 0.025,
     fontWeight: '600',
   },
   infoText: {
-    fontSize: 18,
-    color: '#111827',
-    marginTop: 6,
+    fontSize: SCREEN_WIDTH * 0.045,
+    color: COLORS.textDark,
+    marginTop: SCREEN_HEIGHT * 0.01,
   },
   separator: {
     height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 30,
+    backgroundColor: COLORS.grey,
+    marginVertical: SCREEN_HEIGHT * 0.04,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: SCREEN_HEIGHT * 0.015,
     textAlign: 'center',
-    color: '#6B7280',
+    color: COLORS.textLight,
   },
   errorText: {
-    fontSize: 16,
-    color: '#EF4444',
+    fontSize: SCREEN_WIDTH * 0.045,
+    color: COLORS.error,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: SCREEN_HEIGHT * 0.025,
   },
   retryButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 10,
-    paddingHorizontal: 30,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SCREEN_HEIGHT * 0.015,
+    paddingHorizontal: SCREEN_WIDTH * 0.08,
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: SCREEN_HEIGHT * 0.015,
   },
   retryButtonText: {
-    color: 'white',
+    color: COLORS.white,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: SCREEN_WIDTH * 0.045,
   },
   loginButton: {
     backgroundColor: COLORS.third,
-    paddingVertical: 10,
-    paddingHorizontal: 30,
+    paddingVertical: SCREEN_HEIGHT * 0.015,
+    paddingHorizontal: SCREEN_WIDTH * 0.08,
     borderRadius: 12,
   },
   loginButtonText: {
-    color: 'white',
+    color: COLORS.white,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: SCREEN_WIDTH * 0.045,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 10,
+    marginHorizontal: SCREEN_WIDTH * 0.05,
+    marginTop: SCREEN_HEIGHT * 0.025,
+    marginBottom: SCREEN_HEIGHT * 0.015,
   },
   statTile: {
-    width: '30%',
-    backgroundColor: '#F3F4F6',
+    width: SCREEN_WIDTH * 0.28,
+    backgroundColor: COLORS.secondary,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
+    padding: SCREEN_WIDTH * 0.04,
+    marginBottom: SCREEN_HEIGHT * 0.015,
     alignItems: 'center',
   },
   statLabel: {
-    fontSize: 13,
-    color: '#6B7280',
+    fontSize: SCREEN_WIDTH * 0.035,
+    color: COLORS.textLight,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: SCREEN_HEIGHT * 0.005,
   },
   statValue: {
-    fontSize: 18,
-    color: '#1E40AF',
+    fontSize: SCREEN_WIDTH * 0.045,
+    color: COLORS.primary,
     fontWeight: '700',
   },
   roundsScroll: {
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: SCREEN_HEIGHT * 0.015,
+    marginBottom: SCREEN_HEIGHT * 0.025,
   },
   roundsContainer: {
-    paddingHorizontal: 10,
+    paddingHorizontal: SCREEN_WIDTH * 0.025,
+    paddingVertical: SCREEN_HEIGHT * 0.01,
   },
   roundTile: {
-    width: 300,
-    backgroundColor: '#fff',
+    width: SCREEN_WIDTH * 0.8,
+    height: SCREEN_HEIGHT * 0.40,
+    backgroundColor: COLORS.white,
     borderRadius: 16,
-    padding: 18,
-    marginRight: 20,
-    shadowColor: '#000',
+    padding: SCREEN_WIDTH * 0.045,
+    marginRight: SCREEN_WIDTH * 0.05,
+    shadowColor: COLORS.black,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   roundCourse: {
-    fontSize: 18,
+    fontSize: SCREEN_WIDTH * 0.045,
     fontWeight: '700',
-    color: '#1E3A8A',
-    marginBottom: 4,
+    color: COLORS.primary,
+    marginBottom: SCREEN_HEIGHT * 0.005,
   },
   roundDate: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
+    fontSize: SCREEN_WIDTH * 0.035,
+    color: COLORS.textLight,
+    marginBottom: SCREEN_HEIGHT * 0.008,
   },
   roundScore: {
-    fontSize: 16,
-    color: '#EF4444',
+    fontSize: SCREEN_WIDTH * 0.04,
+    color: COLORS.error,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: SCREEN_HEIGHT * 0.008,
   },
   roundStat: {
-    fontSize: 14,
-    color: '#374151',
-    marginBottom: 2,
+    fontSize: SCREEN_WIDTH * 0.035,
+    color: COLORS.textDark,
+    marginBottom: SCREEN_HEIGHT * 0.002,
   },
   scorecardTable: {
     flexDirection: 'column',
   },
   scorecardRow: {
     flexDirection: 'row',
-    marginBottom: 4,
+    marginBottom: SCREEN_HEIGHT * 0.005,
   },
   scorecardCellPlayerHeader: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E5E7EB',
-    padding: 6,
+    backgroundColor: COLORS.grey,
+    padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
   scorecardCellHeader: {
-    width: 40,
+    width: SCREEN_WIDTH * 0.11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E5E7EB',
-    padding: 6,
+    backgroundColor: COLORS.grey,
+    padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
-    marginLeft: 4,
+    marginLeft: SCREEN_WIDTH * 0.01,
   },
   scorecardHeaderText: {
-    fontSize: 12,
+    fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '700',
-    color: '#1E3A8A',
+    color: COLORS.primary,
   },
   scorecardCellPlayer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    padding: 6,
+    backgroundColor: COLORS.secondary,
+    padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
   scorecardCell: {
-    width: 40,
+    width: SCREEN_WIDTH * 0.11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    padding: 6,
+    backgroundColor: COLORS.secondary,
+    padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
-    marginLeft: 4,
+    marginLeft: SCREEN_WIDTH * 0.01,
   },
   scorecardPlayerText: {
-    fontSize: 12,
+    fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '600',
-    color: '#374151',
+    color: COLORS.textDark,
   },
   scorecardScoreText: {
-    fontSize: 12,
+    fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '600',
-    color: '#374151',
+    color: COLORS.textDark,
   },
 });

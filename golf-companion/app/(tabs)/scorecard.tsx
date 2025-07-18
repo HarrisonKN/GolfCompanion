@@ -21,6 +21,7 @@ import { router } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
+import { COLORS } from "@/constants/theme";
 
 // ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
@@ -193,7 +194,7 @@ export default function ScorecardScreen() {
 
   // ------------------- SCORECARD UI -------------------------
   return (
-    <View style={styles.gradientBg}>
+    <View style={[styles.gradientBg, { paddingBottom: 80 }]}>
       {/* Scorecard Title */}
       <View style={styles.topHeader}>
         <Text style={styles.scorecardTitle}>Scorecard</Text>
@@ -393,7 +394,7 @@ export default function ScorecardScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setSaveModalVisible(true)}
-            style={[styles.addPlayerButton, styles.smallButton, { backgroundColor: '#2e5c7a' }]}
+            style={[styles.addPlayerButton, styles.smallButton,]}
             activeOpacity={0.85}
           >
             <Text style={styles.addPlayerButtonText}>Save</Text>
@@ -413,7 +414,7 @@ export default function ScorecardScreen() {
               onChangeText={setNewPlayerName}
               style={styles.modalInput}
             />
-            <Button title="Add" onPress={addPlayer} color={ACCENT} />
+            <Button title="Add" onPress={addPlayer} color={COLORS.secondary} />
             <Button title="Cancel" onPress={() => setAddPlayerModalVisible(false)} color="#555" />
           </View>
         </View>
@@ -509,7 +510,8 @@ export default function ScorecardScreen() {
 const styles = StyleSheet.create({
   gradientBg: {
     flex: 1,
-    backgroundColor: '#16213e',
+    backgroundColor: COLORS.third,
+    padding: 16,
   },
   topHeader: {
     paddingTop: 38,
@@ -518,18 +520,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scorecardTitle: {
-    color: '#fff',
+    color: COLORS.white,
     fontSize: 32,
     fontWeight: '800',
     letterSpacing: 1,
-    textShadowColor: 'rgba(41,121,255,0.18)',
+    textShadowColor: COLORS.primary,
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
   },
   titleUnderline: {
     width: 120,
     height: 4,
-    backgroundColor: ACCENT,
+    backgroundColor: COLORS.primary,
     borderRadius: 2,
     marginTop: 6,
     marginBottom: 2,
@@ -547,36 +549,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   tableContainer: {
-    backgroundColor: 'rgba(28,61,70,0.92)',
+    backgroundColor: COLORS.secondary,
     borderRadius: 24,
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginVertical: 12,
-    shadowColor: ACCENT,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.10,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: '#23485c',
+    borderColor: COLORS.primary,
     minWidth: 900,
   },
   headerUnified: {
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.primary,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: ACCENT,
+    borderColor: COLORS.primary,
     marginBottom: 12,
     overflow: 'hidden',
   },
   headerDivider: {
     height: 1,
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.primary,
     marginVertical: 8,
   },
   headerSubDivider: {
     height: 2,
-    backgroundColor: ACCENT,
+    backgroundColor: COLORS.primary,
     opacity: 0.7,
     marginVertical: 0,
     borderRadius: 1,
@@ -586,42 +588,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerCell: {
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.primary,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: '#2e5c7a',
+    borderColor: COLORS.third,
     flex: 1,
   },
   headerHoleCell: {
-    backgroundColor: '#29507A',
+    backgroundColor: COLORS.third,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: '#2e5c7a',
+    borderColor: COLORS.primary,
     flex: 1,
   },
   headerNameCell: {
-    backgroundColor: ACCENT,
+    backgroundColor: COLORS.primary,
     width: 120,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: '#23485c',
+    borderColor: COLORS.primary,
   },
   headerInOutCell: {
-    backgroundColor: '#2e5c7a',
+    backgroundColor: COLORS.third,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: '#23485c',
+    borderColor: COLORS.primary,
     flex: 1,
   },
   headerEmptyCell: {
@@ -634,30 +636,31 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cellText: {
-    color: '#fff',
+    color: COLORS.white,
     fontSize: 15,
     textAlign: 'center',
     fontWeight: '500',
     letterSpacing: 0.2,
   },
   playerCard: {
-    backgroundColor: 'rgba(41,121,255,0.08)',
+    backgroundColor: COLORS.background,
     borderRadius: 18,
     marginVertical: 8,
-    shadowColor: ACCENT,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 1,
     borderWidth: 1,
-    borderColor: '#23485c',
+    borderColor: COLORS.primary,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: COLORS.secondary
   },
   nameCell: {
-    backgroundColor: ACCENT,
+    backgroundColor: COLORS.primary,
     width: 120,
     height: 40,
     justifyContent: 'center',
@@ -665,22 +668,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginHorizontal: 1,
     borderWidth: 1,
-    borderColor: ACCENT,
+    borderColor: COLORS.primary,
   },
   playerNameText: {
-    color: '#fff',
+    color: COLORS.white,
     fontWeight: '800',
     fontSize: 18,
     letterSpacing: 0.5,
   },
   headerText: {
-    color: '#fff',
+    color: COLORS.white,
     fontWeight: '700',
     fontSize: 18,
     letterSpacing: 1,
   },
   inOutCell: {
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.third,
     width: 54,
     height: 40,
     justifyContent: 'center',
@@ -688,7 +691,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginHorizontal: 1,
     borderWidth: 1,
-    borderColor: '#2e5c7a',
+    borderColor: COLORS.third,
   },
   emptyCell: {
     width: 40,
@@ -700,14 +703,14 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.primary,
     borderRadius: 10,
     marginLeft: 4,
     borderWidth: 1,
-    borderColor: '#2e5c7a',
+    borderColor: COLORS.third,
   },
   removeText: {
-    color: '#e53935',
+    color: COLORS.error,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -718,20 +721,21 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     zIndex: 10,
+    paddingBottom: 40,
   },
   addPlayerButton: {
-    backgroundColor: ACCENT,
+    backgroundColor: COLORS.primary,
     paddingVertical: 18,
     paddingHorizontal: 56,
     borderRadius: 28,
-    shadowColor: ACCENT,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 12,
   },
   addPlayerButtonText: {
-    color: '#fff',
+    color: COLORS.white,
     textAlign: 'center',
     fontWeight: '800',
     fontSize: 20,
@@ -744,30 +748,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalView: {
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.primary,
     padding: 32,
     borderRadius: 20,
     elevation: 12,
-    shadowColor: ACCENT,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
     shadowRadius: 12,
     minWidth: 280,
     borderWidth: 1,
-    borderColor: ACCENT,
+    borderColor: COLORS.primary,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: ACCENT,
-    backgroundColor: '#18303d',
-    color: '#fff',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.third,
+    color: COLORS.white,
     padding: 16,
     marginVertical: 14,
     borderRadius: 10,
     fontSize: 17,
   },
   modalText: {
-    color: '#fff',
+    color: COLORS.white,
     fontSize: 22,
     marginBottom: 14,
     fontWeight: '700',
@@ -778,43 +782,43 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     marginHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: ACCENT,
+    backgroundColor: COLORS.secondary,
   },
   confirmButtonText: {
-    color: '#fff',
+    color: COLORS.white,
     textAlign: 'center',
     fontWeight: '700',
     fontSize: 17,
   },
   cell: {
-    backgroundColor: '#23485c',
+    backgroundColor: COLORS.primary,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: '#2e5c7a',
+    borderColor: COLORS.third,
     flex: 1,
   },
   dropdown: {
-    backgroundColor: '#23485c',
-    borderColor: ACCENT,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
     minHeight: 44,
     marginTop: 8,
   },
   dropdownContainer: {
-    backgroundColor: '#23485c',
-    borderColor: ACCENT,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   placeholder: {
-    color: '#fff',
+    color: COLORS.white,
     fontWeight: '600',
   },
   text: {
-    color: '#fff',
+    color: COLORS.white,
   },
   listItemLabel: {
-    color: '#fff',
+    color: COLORS.white,
   },
   smallButton: {
     flex: 0,

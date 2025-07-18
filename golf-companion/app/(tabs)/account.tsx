@@ -1,10 +1,11 @@
 // ------------------- IMPORTS -------------------------
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator, Alert, Modal, TouchableOpacity } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { useAuth } from '@/components/AuthContext';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
-import { useAuth } from '@/components/AuthContext';
+import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
+import { router, useFocusEffect } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -551,7 +552,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: COLORS.background,
   },
   centerContent: {
     justifyContent: 'center',
@@ -661,7 +662,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   loginButton: {
-    backgroundColor: '#6B7280',
+    backgroundColor: COLORS.third,
     paddingVertical: 10,
     paddingHorizontal: 30,
     borderRadius: 12,

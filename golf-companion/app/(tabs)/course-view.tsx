@@ -1,5 +1,6 @@
 // ------------------- IMPORTS -------------------------
 import { supabase, testSupabaseConnection } from "@/components/supabase";
+import { COLORS } from "@/constants/theme"; // new color theme 
 import * as Location from "expo-location";
 import { useFocusEffect } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -389,7 +390,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#FAFAFA",
+    backgroundColor: COLORS.primary,
   },
   loadingText: {
     marginTop: 10,

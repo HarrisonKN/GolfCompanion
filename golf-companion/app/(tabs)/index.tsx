@@ -4,16 +4,17 @@
 // app/(tabs)/index.tsx
 
 // ------------------- IMPORTS -------------------------
-import { Image } from 'expo-image';
-import { StyleSheet, Pressable } from 'react-native';
-import React from 'react';
-import Toast from 'react-native-toast-message'
-import { router } from 'expo-router';
+import { useAuth } from '@/components/AuthContext';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import RotatingText from '@/components/RotatingText';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { useAuth } from '@/components/AuthContext';
+import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
+import React from 'react';
+import { Pressable, StyleSheet } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
@@ -52,7 +53,7 @@ export default function HomeScreen() {
   return (
     <>
       <ParallaxScrollView
-        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+        headerBackgroundColor={{ light: COLORS.background, dark: COLORS.primary }}
         headerImage={
           <ThemedView style={styles.headerRow}>
             <Image
@@ -109,7 +110,7 @@ export default function HomeScreen() {
 
         {/* App Overview */}
         <ThemedView style={styles.sectionContainer}>
-          <ThemedText type="subtitle">🏌️‍♂️ Your Ultimate Golf Companion</ThemedText>
+          <ThemedText type="subtitle" style={styles.featureTitle}>🏌️‍♂️ Your Ultimate Golf Companion</ThemedText>
           <ThemedText style={styles.featureText}>
             {`Connect with friends, track scores, and make your golf rounds more fun, social, and smart.`}
           </ThemedText>
@@ -117,28 +118,28 @@ export default function HomeScreen() {
 
         {/* Rest of your feature cards remain the same */}
         <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle">📋 Digital Scorecard</ThemedText>
+          <ThemedText type="subtitle" style={styles.featureTitle}>📋 Digital Scorecard</ThemedText>
           <ThemedText style={styles.featureText}>
             {`Track every stroke with our intuitive Scorecard screen. Add players, input scores, and get instant feedback on your game.`}
           </ThemedText>
         </ThemedView>
 
         <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle">🗺️ Course View</ThemedText>
+          <ThemedText type="subtitle" style={styles.featureTitle}>🗺️ Course View</ThemedText>
           <ThemedText style={styles.featureText}>
             {`Visualize each hole with satellite course maps, layouts, and AI-powered club suggestions based on distance and your play style.`}
           </ThemedText>
         </ThemedView>
 
         <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle">🎙️ Group Voice Chat</ThemedText>
+          <ThemedText type="subtitle" style={styles.featureTitle}>🎙️ Group Voice Chat</ThemedText>
           <ThemedText style={styles.featureText}>
             {`Form a party with your friends and stay connected through real-time voice chat even when you're on different holes.`}
           </ThemedText>
         </ThemedView>
 
         <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle">🎵 Sync Music with Spotify</ThemedText>
+          <ThemedText type="subtitle" style={styles.featureTitle}>🎵 Sync Music with Spotify</ThemedText>
           <ThemedText style={styles.featureText}>
             {`Start a shared Spotify session so your group can listen to the same music together.`}
           </ThemedText>
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10, //This changed the height of the header, smaller value = smaller header height
     //leaves a gap between header and login buttons
-    backgroundColor: '#1c3d46'// use this value for same colour as app #1c3d46
+    backgroundColor: COLORS.third,// use this value for same colour as app #1c3d46
   },
   logo: {
     width: 120,
@@ -190,16 +191,17 @@ const styles = StyleSheet.create({
   rotatingTextContainer: {
     flexShrink: 1,
     justifyContent: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   sectionContainer: {
     paddingHorizontal: 16,
     marginVertical: 10,
     alignItems: 'center',
+    backgroundColor:COLORS.background,
   },
   
   featureCard: {
-    backgroundColor: '#1c3d46',
+    backgroundColor: COLORS.secondary,
     padding: 10,
     borderRadius: 12,
     marginHorizontal: 16,
@@ -212,17 +214,28 @@ const styles = StyleSheet.create({
   featureText:{
     fontSize: 14,
     textAlign: 'center',
+    color: COLORS.textDark,
   },
+  //added to change the headings of the feature cards
+  featureTitle: {
+  color: COLORS.textDark, 
+  fontWeight: 'bold',
+  fontSize: 16,
+  textAlign: 'center',
+  marginBottom: 4,
+},
   authContainer: {
     marginTop: 10,
     marginBottom: 10,
     paddingHorizontal: 16,
     alignItems: 'center',
+    backgroundColor: COLORS.background,
   },
   
   authTitle: {
     marginBottom: 12,
     fontWeight: 'bold',
+    color: COLORS.textDark,
   },
   
   buttonRow: {
@@ -230,8 +243,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   
-  authButton: {
-    backgroundColor: '#1c3d46',
+  /*authButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -239,19 +251,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    backgroundColor: COLORS.primary,
   },
   
   authButtonText: {
-    color: '#fff',
+    color: COLORS.textDark,
     fontWeight: '600',
     fontSize: 16,
-  },
+    backgroundColor: COLORS.primary,
+  },*/
+  authButton: {
+  backgroundColor: COLORS.third,
+  paddingVertical: 12,
+  paddingHorizontal: 24,
+  borderRadius: 8,
+  elevation: 3,
+},
+authButtonText: {
+  color: COLORS.white,
+  fontWeight: '700',
+  fontSize: 16,
+  letterSpacing: 0.5,
+},
   text: {
-    backgroundColor: '#1c3d46',
+    color: COLORS.secondary,
+  
   },
   welcomeText: {
     textAlign: 'center',
     marginTop: 8,
     fontSize: 14,
+    color: COLORS.textDark,
   },
 });

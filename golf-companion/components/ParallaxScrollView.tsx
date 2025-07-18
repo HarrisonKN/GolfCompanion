@@ -1,5 +1,5 @@
-import { useState, useRef, type PropsWithChildren, type ReactElement } from 'react';
-import { StyleSheet, View, LayoutChangeEvent } from 'react-native';
+import { useState, type PropsWithChildren, type ReactElement } from 'react';
+import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -10,6 +10,7 @@ import Animated, {
 
 import { ThemedView } from '@/components/ThemedView';
 import { useBottomTabOverflow } from '@/components/ui/TabBarBackground';
+import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 type Props = PropsWithChildren<{
@@ -93,5 +94,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
+    backgroundColor: COLORS.background,
   },
 });

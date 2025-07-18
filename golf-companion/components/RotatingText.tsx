@@ -1,4 +1,5 @@
 // components/RotatingText.tsx
+import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 
@@ -56,12 +57,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 8,
-    backgroundColor: "#67e8f9",
+    backgroundColor: COLORS.secondary,
     borderRadius: 8,
   },
   text: {
     fontSize: 24,
-    color: "black",
+    color: "white",
     backgroundColor: "transparent",
   },
 });

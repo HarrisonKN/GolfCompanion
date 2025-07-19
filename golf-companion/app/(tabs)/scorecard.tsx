@@ -50,7 +50,7 @@ export default function ScorecardScreen() {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courseOpen, setCourseOpen] = useState(false);
 
-  const [parValues, setParValues] = useState<number[]>(Array(holeCount).fill(4));
+  const [parValues, setParValues] = useState<number[]>(Array(holeCount).fill(0));
 
   const [players, setPlayers] = useState<any[]>([]);
 
@@ -73,7 +73,9 @@ export default function ScorecardScreen() {
     const fetchCourses = async () => {
       const { data, error } = await supabase
         .from("GolfCourses")
-        .select("id, name, par_values");
+        .select("id, name, total_par, par_values")
+        .order("name", { ascending: true });
+      console.log("Courses data:", data, "Error:", error);
       if (!error && data) {
         setCourses(data);
         setCourseItems(

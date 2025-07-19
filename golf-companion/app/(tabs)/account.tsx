@@ -5,7 +5,8 @@ import { supabase, testSupabaseConnection } from '@/components/supabase';
 import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput } from 'react-native';
+import { Colors } from 'react-native/Libraries/NewAppScreen';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -46,6 +47,10 @@ export default function AccountsScreen() {
   const [scorecardModalVisible, setScorecardModalVisible] = useState(false);
   const [selectedScorecard, setSelectedScorecard] = useState<any[]>([]);
   const [selectedMaxHoles, setSelectedMaxHoles] = useState(0);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [search, setSearch] = useState('');
+  const [findFriendsModalVisible, setFindFriendsModalVisible] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
 
   // Handle mounting state
   useEffect(() => {
@@ -213,6 +218,64 @@ export default function AccountsScreen() {
     if (isRedirecting) return;
     safeSetState(setError, null);
     fetchProfile();
+  };
+
+  useEffect(() => {
+    const fetchFriends = async () => {
+      const { data } = await supabase
+        .from('friends')
+        .select('friend_id, profiles(full_name)')
+        .eq('user_id', user.id);
+      setFriends(data || []);
+    };
+    fetchFriends();
+  }, [user]);
+
+  const handleSearch = async () => {
+    if (!search.trim()) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .ilike('full_name', `%${search.trim()}%`); // or use .ilike('email', `%${search.trim()}%`)
+    setSearchResults(data || []);
+  };
+
+  // Add friend handler
+  const handleAddFriend = async (friendId: string) => {
+    if (!user || !friendId) return;
+    try {
+      // Prevent adding yourself
+      if (user.id === friendId) {
+        Alert.alert('Cannot add yourself as a friend.');
+        return;
+      }
+      // Check if already friends
+      const { data: existing } = await supabase
+        .from('friends')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('friend_id', friendId)
+        .single();
+      if (existing) {
+        Alert.alert('Already friends with this user.');
+        return;
+      }
+      // Add friend
+      const { error } = await supabase
+        .from('friends')
+        .insert({ user_id: user.id, friend_id: friendId });
+      if (error) throw error;
+      Alert.alert('Friend added!');
+      setFindFriendsModalVisible(false);
+      // Optionally refresh friends list
+      const { data } = await supabase
+        .from('friends')
+        .select('friend_id, profiles(full_name)')
+        .eq('user_id', user.id);
+      setFriends(data || []);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to add friend.');
+    }
   };
 
   // Early returns for loading and error states
@@ -552,6 +615,80 @@ export default function AccountsScreen() {
           </ScrollView>
         </View>
       </Modal>
+      <View>
+      <ThemedText type="subtitle" style={styles.sectionTitle}>
+        My Friends
+      </ThemedText>
+        {friends.length === 0 ? (
+          <ThemedText style={styles.infoText}>No friends found.</ThemedText>
+        ) : (
+          friends.map(f => (
+            <View key={f.friend_id} style={{ marginBottom: 8 }}>
+              <ThemedText style={styles.accountName}>{f.profiles?.full_name}</ThemedText>
+            </View>
+          ))
+        )}
+        {/* Add friend UI */}
+        <View style={{ marginTop: 16, alignItems: 'center' }}>
+          <Pressable
+            style={styles.createButton}
+            onPress={() => setFindFriendsModalVisible(true)}
+          >
+            <ThemedText style={styles.createButtonText}>Find Friends</ThemedText>
+          </Pressable>
+        </View>
+        <Modal visible={findFriendsModalVisible} transparent animationType="slide" onRequestClose={() => setFindFriendsModalVisible(false)}>
+          <View style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: 'rgba(0,0,0,0.3)'
+          }}>
+            <View style={{
+              backgroundColor: COLORS.white,
+              padding: 24,
+              borderRadius: 16,
+              width: '80%',
+              alignItems: 'center'
+            }}>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, color: COLORS.black }}>Find Friends</ThemedText>
+              <TextInput
+                style={{
+                  width: '100%',
+                  borderWidth: 1,
+                  borderColor: COLORS.primary,
+                  borderRadius: 8,
+                  padding: 8,
+                  marginBottom: 16,
+                  color: COLORS.textDark,
+                  backgroundColor: COLORS.background,
+                }}
+                placeholder="Search by name or email"
+                placeholderTextColor={COLORS.textLight}
+                value={search}
+                onChangeText={setSearch}
+              />
+              <Pressable
+                style={styles.createButton}
+                onPress={handleSearch} // <-- implement this function
+              >
+                <ThemedText style={styles.createButtonText}>Search</ThemedText>
+              </Pressable>
+              {searchResults.map(u => (
+                <Pressable key={u.id} onPress={() => handleAddFriend(u.id)}>
+                  <ThemedText style={{color: COLORS.black}}>{u.full_name} ({u.email})</ThemedText>
+                </Pressable>
+              ))}
+              <Pressable
+                style={[styles.leaveButton, { marginTop: 12 }]}
+                onPress={() => setFindFriendsModalVisible(false)}
+              >
+                <ThemedText style={styles.leaveButtonText}>Close</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+      </View>
     </ScrollView>
   );
 }
@@ -849,5 +986,31 @@ const styles = StyleSheet.create({
   accountEmail: {
     fontSize: SCREEN_WIDTH * 0.04,
     color: COLORS.textLight,
+  },
+  createButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 20,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  createButtonText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  leaveButton: {
+    backgroundColor: COLORS.error,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 20,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  leaveButtonText: {
+    color: COLORS.white,
+    fontWeight: '700',
+    fontSize: 18,
   },
 });

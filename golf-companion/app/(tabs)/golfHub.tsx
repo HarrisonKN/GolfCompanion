@@ -13,7 +13,7 @@
   
   */}
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Pressable, FlatList, StyleSheet, Platform, Switch, PermissionsAndroid, TextInput, Modal } from 'react-native';
+import { View, Pressable, FlatList, StyleSheet, Platform, Switch, PermissionsAndroid, TextInput, Modal, Text } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -34,9 +34,8 @@ const mockTrack = {
 type VoiceGroup = {
   id: string;
   name: string;
-  description?: string; // <-- Add this
+  description?: string;
   created_at?: string;
-  // Add other fields if needed
 };
 
 export default function GolfHubScreen() {
@@ -60,6 +59,8 @@ export default function GolfHubScreen() {
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
+  const [friends, setFriends] = useState<any[]>([]);
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
 
   const engineRef = useRef<any>(null); // Use 'any' or the correct instance type if available
   const flatListRef = useRef<FlatList>(null); // Add this
@@ -384,6 +385,26 @@ export default function GolfHubScreen() {
     </Swipeable>
   );
 
+  useEffect(() => {
+    const fetchFriends = async () => {
+      const { data } = await supabase
+        .from('friends')
+        .select('friend_id, profiles(full_name)')
+        .eq('user_id', user.id);
+      setFriends(data || []);
+    };
+    fetchFriends();
+  }, [user]);
+
+  const inviteFriend = async (friendId: string, groupId: string) => {
+    await supabase.from('hubroom_invites').insert({
+      group_id: groupId,
+      invited_user_id: friendId,
+      inviter_user_id: user.id,
+    });
+    // Optionally show a toast
+  };
+
   // ------------------- UI -------------------------
   return (
     <ThemedView style={styles.screen}>
@@ -573,6 +594,47 @@ export default function GolfHubScreen() {
                 <ThemedText style={styles.leaveButtonText}>Cancel</ThemedText>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Pressable onPress={() => setInviteModalVisible(true)} style={[styles.createButton, { marginTop: 12 }]}>
+        <ThemedText style={styles.createButtonText}>Invite Friends</ThemedText>
+      </Pressable>
+      <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
+        <View style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
+          <View style={{
+            backgroundColor: COLORS.white,
+            padding: 24,
+            borderRadius: 16,
+            width: '80%',
+            alignItems: 'center'
+          }}>
+            <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12 }}>Select friends to invite:</ThemedText>
+            {friends.length === 0 ? (
+              <ThemedText style={{ color: COLORS.error }}>No friends found.</ThemedText>
+            ) : (
+              friends.map(f => (
+                <Pressable
+                  key={f.friend_id}
+                  style={[styles.createButton, { marginBottom: 8, width: '100%' }]}
+                  onPress={() => joinedGroupId && inviteFriend(f.friend_id, joinedGroupId)}
+                >
+                  <ThemedText style={styles.createButtonText}>{f.profiles?.full_name}</ThemedText>
+                </Pressable>
+              ))
+            )}
+            <Pressable
+              style={[styles.leaveButton, { marginTop: 12 }]}
+              onPress={() => setInviteModalVisible(false)}
+            >
+              <ThemedText style={styles.leaveButtonText}>Close</ThemedText>
+            </Pressable>
           </View>
         </View>
       </Modal>

@@ -409,6 +409,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: COLORS.primary,
     paddingBottom: 20,
+    paddingTop:20
   },
   loadingText: {
     marginTop: 10,
@@ -431,6 +432,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   overlayContainer: {
+    paddingTop: 20,
     position: "absolute",
     top: 20,
     alignSelf: "center",

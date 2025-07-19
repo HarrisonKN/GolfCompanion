@@ -3,9 +3,9 @@ import { supabase, testSupabaseConnection } from "@/components/supabase";
 import { COLORS } from "@/constants/theme"; // new color theme 
 import * as Location from "expo-location";
 import { useFocusEffect } from "expo-router";
+import haversine from "haversine-distance";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   StyleSheet,
@@ -16,9 +16,9 @@ import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
   Marker,
   Polyline,
-  Region,
+  PROVIDER_GOOGLE,
+  Region
 } from "react-native-maps";
-import haversine from "haversine-distance";
 
 // ------------------- TYPES -------------------------
 type Course = {
@@ -288,12 +288,15 @@ export default function CourseViewScreen() {
       </View>
 
       <MapView
+        provider={PROVIDER_GOOGLE}
         ref={mapRef}
         style={{ flex: 1 }}
         region={region || { latitude: -37.8136, longitude: 144.9631, latitudeDelta: 0.05, longitudeDelta: 0.05 }} // use `region` here
         showsUserLocation={!!location}
         showsMyLocationButton={!!location}
         mapType="hybrid"
+        onMapReady={() => console.log('🗺️ Map is ready')}
+        onMapLoaded={() => console.log('🗺️ Tiles loaded')}
       >
         {selectedHole && (
           <>

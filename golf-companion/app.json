@@ -5,7 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/golf-logo.png",
-    "assetBundlePatterns": ["**/*"], 
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "scheme": "golfcompanion",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -15,7 +17,8 @@
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice chat.",
         "NSCameraUsageDescription": "This app may need access to your camera for video features.",
         "NSPhotoLibraryUsageDescription": "This app may need access to your photo library."
-      }
+      },
+      "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
       "adaptiveIcon": {

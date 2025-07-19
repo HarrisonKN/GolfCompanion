@@ -33,13 +33,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Restore session from SecureStore on mount
   useEffect(() => {
     const restoreSession = async () => {
-      const sessionStr = await SecureStore.getItemAsync('supabase_session');
-      if (sessionStr) {
-        const session = JSON.parse(sessionStr);
-        const { data, error } = await supabase.auth.setSession(session);
+      const accessToken = await SecureStore.getItemAsync('supabase_access_token');
+      const refreshToken = await SecureStore.getItemAsync('supabase_refresh_token');
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
         if (error) {
           console.log('Failed to restore session:', error);
-          await SecureStore.deleteItemAsync('supabase_session');
+          await SecureStore.deleteItemAsync('supabase_access_token');
+          await SecureStore.deleteItemAsync('supabase_refresh_token');
         }
       }
       // Always get the latest session from Supabase
@@ -54,10 +58,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
-        SecureStore.setItemAsync('supabase_session', JSON.stringify(session));
+        // Store only tokens, not the whole session object
+        SecureStore.setItemAsync('supabase_access_token', session.access_token);
+        SecureStore.setItemAsync('supabase_refresh_token', session.refresh_token);
         setUser(session.user);
       } else {
-        SecureStore.deleteItemAsync('supabase_session');
+        SecureStore.deleteItemAsync('supabase_access_token');
+        SecureStore.deleteItemAsync('supabase_refresh_token');
         setUser(null);
       }
     });
@@ -66,7 +73,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    await SecureStore.deleteItemAsync('supabase_session');
+    await SecureStore.deleteItemAsync('supabase_access_token');
+    await SecureStore.deleteItemAsync('supabase_refresh_token');
     setUser(null);
   };
 

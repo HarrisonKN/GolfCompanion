@@ -296,6 +296,20 @@ export default function AccountsScreen() {
         </Pressable>
       </View>
 
+      {/* Account Description */}
+      <View style={styles.accountDescContainer}>
+        {/* Avatar placeholder */}
+        <View style={styles.avatarCircle}>
+          <ThemedText style={styles.avatarText}>
+            {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
+          </ThemedText>
+        </View>
+        <View style={{ marginLeft: 16 }}>
+          <ThemedText style={styles.accountName}>{profile.full_name ?? 'Unknown User'}</ThemedText>
+          <ThemedText style={styles.accountEmail}>{profile.email ?? ''}</ThemedText>
+        </View>
+      </View>
+
       <ThemedText type="subtitle" style={styles.sectionTitle}>
         Golf Stats
       </ThemedText>
@@ -804,5 +818,36 @@ const styles = StyleSheet.create({
     fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '600',
     color: COLORS.textDark,
+  },
+  accountDescContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SCREEN_WIDTH * 0.05,
+    paddingVertical: SCREEN_HEIGHT * 0.02,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grey,
+    backgroundColor: COLORS.white,
+  },
+  avatarCircle: {
+    width: SCREEN_WIDTH * 0.15,
+    height: SCREEN_WIDTH * 0.15,
+    borderRadius: (SCREEN_WIDTH * 0.15) / 2,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: COLORS.white,
+    fontSize: SCREEN_WIDTH * 0.07,
+    fontWeight: '700',
+  },
+  accountName: {
+    fontSize: SCREEN_WIDTH * 0.05,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  accountEmail: {
+    fontSize: SCREEN_WIDTH * 0.04,
+    color: COLORS.textLight,
   },
 });

@@ -1,3 +1,17 @@
+{/*
+  Notes
+  Changing room name on 1 device doesnt change room name for others, 
+  also someone who joins can change room name, should be creator can only change room name
+
+  Also Delete group should only be available to creator, and leave group should be available to joiners
+  Deleting also doesnt delete it off supabase, 
+  
+  
+  
+  
+  
+  
+  */}
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Pressable, FlatList, StyleSheet, Platform, Switch, PermissionsAndroid, TextInput, Modal } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -11,20 +25,25 @@ import { useAuth } from '@/components/AuthContext';
 import { useRouter } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 
-const mockGroups = [
-  { id: '1', name: 'Morning Golfers' },
-  { id: '2', name: 'Weekend Warriors' },
-  { id: '3', name: 'Pro Tips Chat' },
-];
-
 const mockTrack = {
   title: 'Green on the Fairway',
   artist: 'Birdie Band',
   albumArt: 'https://picsum.photos/100',
 };
 
+type VoiceGroup = {
+  id: string;
+  name: string;
+  description?: string; // <-- Add this
+  created_at?: string;
+  // Add other fields if needed
+};
+
 export default function GolfHubScreen() {
-  const [groups, setGroups] = useState(mockGroups);
+  const [groups, setGroups] = useState<VoiceGroup[]>([]);
+  const [headerGroupName, setHeaderGroupName] = useState('');
+  const [modalGroupName, setModalGroupName] = useState('');
+  const [modalGroupDesc, setModalGroupDesc] = useState('');
   const [joinedGroupId, setJoinedGroupId] = useState<string | null>(null);
   const [joinedGroupName, setJoinedGroupName] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -37,10 +56,13 @@ export default function GolfHubScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState('');
+  const [editGroupDesc, setEditGroupDesc] = useState(''); // <-- Add this
+  const [createModalVisible, setCreateModalVisible] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
 
   const engineRef = useRef<any>(null); // Use 'any' or the correct instance type if available
+  const flatListRef = useRef<FlatList>(null); // Add this
 
   // ------------------- AGORA INIT -------------------------
     useEffect(() => {
@@ -142,9 +164,8 @@ export default function GolfHubScreen() {
   };
 
   const handleDeleteGroup = async (groupId: string) => {
-    setGroups(groups.filter(g => g.id !== groupId));
-    // Optionally, delete from Supabase:
     await supabase.from('voice_groups').delete().eq('id', groupId);
+    setGroups(groups.filter(g => g.id !== groupId));
   };
 
   const handleEditGroup = (groupId: string) => {
@@ -152,6 +173,7 @@ export default function GolfHubScreen() {
     if (!group) return;
     setEditGroupId(groupId);
     setEditGroupName(group.name);
+    setEditGroupDesc(group.description ?? ''); // <-- Add this
     setEditModalVisible(true);
   };
 
@@ -169,10 +191,139 @@ export default function GolfHubScreen() {
 
   const saveEditedGroupName = async () => {
     if (!editGroupId || !editGroupName.trim()) return;
-    setGroups(groups.map(g => g.id === editGroupId ? { ...g, name: editGroupName } : g));
+    await supabase
+      .from('voice_groups')
+      .update({ name: editGroupName, description: editGroupDesc }) // <-- Update description
+      .eq('id', editGroupId);
+    setGroups(groups.map(g => g.id === editGroupId ? { ...g, name: editGroupName, description: editGroupDesc } : g));
     setEditModalVisible(false);
-    // Optionally, update in Supabase
-    await supabase.from('voice_groups').update({ name: editGroupName }).eq('id', editGroupId);
+  };
+
+  const fetchMessages = async (groupId: string) => {
+    const { data, error } = await supabase
+      .from('voice_messages')
+      .select('text, user_id')
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: true });
+  
+    if (!error && data) {
+      // Get all unique user_ids
+      const userIds = [...new Set(data.map((msg: any) => msg.user_id))];
+      let userNames: Record<string, string> = {};
+  
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds);
+  
+        profiles?.forEach((profile: any) => {
+          userNames[profile.id] = profile.full_name;
+        });
+      }
+  
+      setMessages(
+        data.map((msg: any) => ({
+          user: msg.user_id === user?.id ? 'You' : userNames[msg.user_id] ?? 'Unknown',
+          text: msg.text,
+          user_id: msg.user_id,
+        }))
+      );
+    }
+  };
+
+  // Fetch groups from Supabase
+  useEffect(() => {
+    const fetchGroups = async () => {
+      const { data, error } = await supabase
+        .from('voice_groups')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error && data) setGroups(data);
+    };
+    fetchGroups();
+  }, []);
+
+  useEffect(() => {
+    if (joinedGroupId) {
+      fetchMessages(joinedGroupId);
+    }
+  }, [joinedGroupId]);
+
+  useEffect(() => {
+    if (!joinedGroupId) return;
+    const subscription = supabase
+      .channel('public:voice_messages')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'voice_messages', filter: `group_id=eq.${joinedGroupId}` },
+        async (payload) => {
+          const newMsg = payload.new;
+          let senderName = 'Unknown';
+  
+          if (newMsg.user_id === user?.id) {
+            senderName = 'You';
+          } else {
+            try {
+              const { data } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', newMsg.user_id)
+                .single();
+              if (data && data.full_name) senderName = data.full_name;
+            } catch {}
+          }
+  
+          setMessages((prev) => [
+            ...prev,
+            {
+              user: senderName,
+              text: newMsg.text,
+              user_id: newMsg.user_id,
+            },
+          ]);
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      )
+      .subscribe();
+  
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [joinedGroupId, user?.id]);
+
+  // Create a new group in Supabase
+  const createGroup = async () => {
+    console.log('Create group pressed');
+  
+    if (!modalGroupName.trim()) return;
+  
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData?.user?.id) {
+      // User not authenticated
+      return;
+    }
+    const creatorId = authData.user.id;
+  
+    const { data, error } = await supabase
+      .from('voice_groups')
+      .insert({
+        name: modalGroupName,
+        description: modalGroupDesc,
+        creator_id: creatorId, // Must match auth.uid()
+      })
+      .select();
+  
+    console.log('Supabase insert result:', { data, error });
+  
+    if (!error && data && data.length > 0) {
+      setGroups((prev) => [data[0], ...prev]);
+      setModalGroupName('');
+      setModalGroupDesc('');
+      setCreateModalVisible(false);
+    }
   };
 
   const renderRightActions = (groupId: string) => (
@@ -214,16 +365,21 @@ export default function GolfHubScreen() {
     </View>
   );
 
-  const renderItem = ({ item }: { item: typeof groups[0] }) => (
+  const renderItem = ({ item }: { item: VoiceGroup }) => (
     <Swipeable
       renderRightActions={() => renderRightActions(item.id)}
       overshootRight={false}
     >
       <Pressable
         style={styles.groupItem}
-        onPress={() => router.push({ pathname: '/hubRoom', params: { roomId: item.id, roomName: item.name } })}
+        onPress={() => router.push({ pathname: '/hubRoom', params: { roomId: item.id, roomName: item.name, roomDesc: item.description } })} // <-- Pass description
       >
-        <ThemedText style={styles.groupName}>{item.name}</ThemedText>
+        <View style={{ flex: 1 }}>
+          <ThemedText style={styles.groupName}>{item.name}</ThemedText>
+          {item.description ? (
+            <ThemedText style={styles.groupMembers}>{item.description}</ThemedText>
+          ) : null}
+        </View>
       </Pressable>
     </Swipeable>
   );
@@ -234,18 +390,11 @@ export default function GolfHubScreen() {
       {/* Header */}
       <View style={styles.header}>
         <ThemedText type="title" style={styles.title}>GolfHub</ThemedText>
-        <Pressable
-          style={styles.createButton}
-          onPress={() => {
-            const newGroup = {
-              id: Date.now().toString(),
-              name: `New Group ${groups.length + 1}`,
-            };
-            setGroups([newGroup, ...groups]);
-          }}
-        >
-          <ThemedText style={styles.createButtonText}>+ Create Group</ThemedText>
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Pressable style={styles.createButton} onPress={() => setCreateModalVisible(true)}>
+            <ThemedText style={styles.createButtonText}>+ Create Group</ThemedText>
+          </Pressable>
+        </View>
       </View>
 
       {/* Scrollable Chat Rooms */}
@@ -257,6 +406,7 @@ export default function GolfHubScreen() {
           contentContainerStyle={{ paddingBottom: 16 }}
           renderItem={renderItem}
           ListEmptyComponent={<ThemedText>No groups available</ThemedText>}
+          ref={flatListRef} // Add this
         />
       </View>
 
@@ -323,6 +473,22 @@ export default function GolfHubScreen() {
               placeholder="New group name"
               placeholderTextColor={COLORS.textLight}
             />
+            <TextInput
+              value={editGroupDesc}
+              onChangeText={setEditGroupDesc}
+              style={{
+                borderWidth: 1,
+                borderColor: COLORS.primary,
+                borderRadius: 8,
+                padding: 8,
+                width: '100%',
+                marginBottom: 16,
+                color: COLORS.textDark,
+                backgroundColor: COLORS.background,
+              }}
+              placeholder="Description (optional)"
+              placeholderTextColor={COLORS.textLight}
+            />
             <View style={{ flexDirection: 'row' }}>
               <Pressable
                 style={[styles.createButton, { marginRight: 8 }]}
@@ -333,6 +499,76 @@ export default function GolfHubScreen() {
               <Pressable
                 style={styles.leaveButton}
                 onPress={() => setEditModalVisible(false)}
+              >
+                <ThemedText style={styles.leaveButtonText}>Cancel</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={createModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCreateModalVisible(false)}
+      >
+        <View style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
+          <View style={{
+            backgroundColor: COLORS.white,
+            padding: 24,
+            borderRadius: 16,
+            width: '80%',
+            alignItems: 'center'
+          }}>
+            <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12 }}>Create New Group</ThemedText>
+            <TextInput
+              value={modalGroupName}
+              onChangeText={setModalGroupName}
+              style={{
+                borderWidth: 1,
+                borderColor: COLORS.primary,
+                borderRadius: 8,
+                padding: 8,
+                width: '100%',
+                marginBottom: 16,
+                color: COLORS.textDark,
+                backgroundColor: COLORS.background,
+              }}
+              placeholder="Group name"
+              placeholderTextColor={COLORS.textLight}
+            />
+            <TextInput
+              value={modalGroupDesc}
+              onChangeText={setModalGroupDesc}
+              style={{
+                borderWidth: 1,
+                borderColor: COLORS.primary,
+                borderRadius: 8,
+                padding: 8,
+                width: '100%',
+                marginBottom: 16,
+                color: COLORS.textDark,
+                backgroundColor: COLORS.background,
+              }}
+              placeholder="Description (optional)"
+              placeholderTextColor={COLORS.textLight}
+            />
+            <View style={{ flexDirection: 'row' }}>
+              <Pressable
+                style={[styles.createButton, { marginRight: 8 }]}
+                onPress={createGroup}
+              >
+                <ThemedText style={styles.createButtonText}>Create</ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles.leaveButton}
+                onPress={() => setCreateModalVisible(false)}
               >
                 <ThemedText style={styles.leaveButtonText}>Cancel</ThemedText>
               </Pressable>

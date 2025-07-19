@@ -278,8 +278,8 @@ const styles = StyleSheet.create({
 const signIn = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-  if (data.session) {
-    await SecureStore.setItemAsync('supabase_session', JSON.stringify(data.session));
+  if (data.session?.access_token) {
+    await SecureStore.setItemAsync('supabase_access_token', data.session.access_token);
   }
   return data;
 };

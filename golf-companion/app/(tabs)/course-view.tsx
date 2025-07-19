@@ -18,7 +18,7 @@ import MapView, {
   Polyline,
   Region,
 } from "react-native-maps";
-
+import haversine from "haversine-distance";
 
 // ------------------- TYPES -------------------------
 type Course = {
@@ -42,6 +42,7 @@ type Hole = {
 
 // ------------------- COURSEVIEW LOGIC -------------------------
 export default function CourseViewScreen() {
+  // Declare states first (always in the same order)
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -55,15 +56,19 @@ export default function CourseViewScreen() {
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [droppedPins, setDroppedPins] = useState<{ latitude: number; longitude: number }[]>([]);
+  const [distanceToPin, setDistanceToPin] = useState<number | null>(null);
+
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView>(null);
 
+  // Safe state update to avoid changing state after the component is unmounted
   const safeSetState = (setter: any, value: any) => {
     if (mountedRef.current) {
       setter(value);
     }
   };
 
+  // Initialize App and set user location
   const initializeApp = async () => {
     try {
       setLoading(true);
@@ -139,6 +144,7 @@ export default function CourseViewScreen() {
     }
   };
 
+  // Ensure initialization on mount
   useFocusEffect(
     React.useCallback(() => {
       mountedRef.current = true;
@@ -149,16 +155,19 @@ export default function CourseViewScreen() {
     }, [])
   );
 
+  // Fetch courses when the component is mounted and connection is good
   useEffect(() => {
     if (!connectionError) fetchCourses();
   }, [connectionError]);
 
+  // Fetch holes when a course is selected
   useEffect(() => {
     if (selectedCourseId) fetchHoles();
   }, [selectedCourseId]);
 
   const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
 
+  // Center map when hole data changes
   useEffect(() => {
     if (selectedHole && mapRef.current) {
       const latitudes = [selectedHole.tee_latitude, selectedHole.green_latitude];
@@ -168,13 +177,13 @@ export default function CourseViewScreen() {
         longitudes.push(selectedHole.fairway_longitude);
       }
       const safeLatitudes = latitudes.filter((n): n is number => n != null);
-const safeLongitudes = longitudes.filter((n): n is number => n != null);
+      const safeLongitudes = longitudes.filter((n): n is number => n != null);
 
-const centerLat =
-  safeLatitudes.reduce((a, b) => a + b, 0) / safeLatitudes.length;
+      const centerLat =
+        safeLatitudes.reduce((a, b) => a + b, 0) / safeLatitudes.length;
 
-const centerLon =
-  safeLongitudes.reduce((a, b) => a + b, 0) / safeLongitudes.length;
+      const centerLon =
+        safeLongitudes.reduce((a, b) => a + b, 0) / safeLongitudes.length;
 
       mapRef.current?.animateToRegion(
         {
@@ -188,48 +197,49 @@ const centerLon =
     }
   }, [selectedHole]);
 
-  useEffect(() => {
   // Clear dropped pins when a new hole is selected
-  setDroppedPins([]);
-}, [selectedHoleNumber]);
+  useEffect(() => {
+    setDroppedPins([]);
+  }, [selectedHoleNumber]);
 
-  //dropping pins around course funciton to show shots according to players position
+  // Dropping pins around course function to show shots according to players position
   const handleDropPin = async () => {
-  if (!location) return;
+    if (!location) return;
 
-  const newPin = {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
+    const newPin = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
+
+    setDroppedPins((prevPins) => [...prevPins, newPin]);
   };
 
-  setDroppedPins((prevPins) => [...prevPins, newPin]);
-};
+  // Calculate distance to pin using haversine
+  useEffect(() => {
+    let calculatedDistance: number | null = null;
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    );
-  }
+    const userCoords = location
+      ? { lat: location.coords.latitude, lon: location.coords.longitude }
+      : null;
 
-  if (connectionError) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>{connectionError}</Text>
-        <Pressable onPress={initializeApp} style={styles.retryButton}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  const currentRegion = region || {
-    latitude: -37.8136,
-    longitude: 144.9631,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  };
+    let targetCoords = null;
+
+    if (droppedPins.length > 0) {
+      const lastPin = droppedPins[droppedPins.length - 1];
+      targetCoords = { lat: lastPin.latitude, lon: lastPin.longitude };
+    } else if (selectedHole?.green_latitude && selectedHole?.green_longitude) {
+      targetCoords = {
+        lat: selectedHole.green_latitude,
+        lon: selectedHole.green_longitude,
+      };
+    }
+
+    if (userCoords && targetCoords) {
+      calculatedDistance = haversine(userCoords, targetCoords);
+    }
+
+    setDistanceToPin(calculatedDistance);
+  }, [location, selectedHole, droppedPins]);
 
   // ------------------- COURSE VIEW UI -------------------------
   return (
@@ -268,7 +278,7 @@ const centerLon =
             }}
             setItems={setHoleItems}
             style={styles.dropdown}
-            dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 400 }]} // keep maxheight here to display all holes rather then 1-5
+            dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 400 }]} // keep maxheight here to display all holes rather than 1-5
             placeholderStyle={styles.placeholder}
             textStyle={styles.text}
             listItemLabelStyle={styles.listItemLabel}
@@ -280,7 +290,7 @@ const centerLon =
       <MapView
         ref={mapRef}
         style={{ flex: 1 }}
-        region={currentRegion}
+        region={region || { latitude: -37.8136, longitude: 144.9631, latitudeDelta: 0.05, longitudeDelta: 0.05 }} // use `region` here
         showsUserLocation={!!location}
         showsMyLocationButton={!!location}
         mapType="hybrid"
@@ -292,9 +302,9 @@ const centerLon =
                 latitude: selectedHole.tee_latitude!,
                 longitude: selectedHole.tee_longitude!,
               }}
-              anchor={{ x: 0.5, y: 0.5 }} // Fix floating issue
+              anchor={{ x: 0.5, y: 0.5 }}
               title={`Hole ${selectedHole.hole_number} Tee`}
-              >
+            >
               <Image
                 source={require("@/assets/images/golf-logo.png")}
                 style={{ width: 30, height: 30 }}
@@ -306,9 +316,9 @@ const centerLon =
                 latitude: selectedHole.green_latitude!,
                 longitude: selectedHole.green_longitude!,
               }}
-              anchor={{ x: 0.5, y: 0.5 }} // Fix floating issue
+              anchor={{ x: 0.5, y: 0.5 }}
               title={`Hole ${selectedHole.hole_number} Green`}
-              >
+            >
               <Image
                 source={require("@/assets/images/flag.png")}
                 style={{ width: 30, height: 30 }}
@@ -357,7 +367,7 @@ const centerLon =
               },
               droppedPins[0],
             ]}
-            strokeColor="rgba(30, 144, 255, 0.5)" // 50% opacity blue
+            strokeColor="rgba(30, 144, 255, 0.5)"
             strokeWidth={2}
             lineDashPattern={[10, 5]} // Dotted line
           />
@@ -374,14 +384,21 @@ const centerLon =
             />
           ))}
       </MapView>
-
+      {distanceToPin !== null && (
+        <View style={styles.distanceOverlay}>
+          <Text style={styles.distanceText}>
+            Distance to Pin: {(distanceToPin / 1).toFixed(0)} m
+          </Text>
+        </View>
+      )}
       <Pressable style={styles.pinButton} onPress={handleDropPin}>
         <Text style={styles.pinButtonText}>Drop Pin</Text>
       </Pressable>
-
     </View>
   );
 }
+
+
 
 // ------------------- UI Styling -------------------------
 const styles = StyleSheet.create({
@@ -445,6 +462,22 @@ const styles = StyleSheet.create({
   elevation: 3,
 },
 pinButtonText: {
+  color: "#fff",
+  fontWeight: "bold",
+  fontSize: 14,
+},
+//---------Distance Overlay Styling ------
+distanceOverlay: {
+  position: "absolute",
+  top: 80,
+  right: 20,
+  backgroundColor: "rgba(0,0,0,0.6)",
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 8,
+  zIndex: 999,
+},
+distanceText: {
   color: "#fff",
   fontWeight: "bold",
   fontSize: 14,

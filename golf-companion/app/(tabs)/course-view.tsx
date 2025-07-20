@@ -2,7 +2,7 @@
 import { supabase, testSupabaseConnection } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as Location from "expo-location";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import haversine from "haversine-distance";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -19,6 +19,8 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region
 } from "react-native-maps";
+// …
+
 
 // ------------------- TYPES -------------------------
 type Course = {
@@ -62,6 +64,9 @@ export default function CourseViewScreen() {
   const mapRef = useRef<MapView>(null);
 
   const { palette } = useTheme();
+  const [score, setScore] = useState<number>(0);
+  const [putts, setPutts] = useState<number>(0);
+  const router = useRouter();
 
   // Safe state update to avoid changing state after the component is unmounted
   const safeSetState = (setter: any, value: any) => {
@@ -69,6 +74,21 @@ export default function CourseViewScreen() {
       setter(value);
     }
   };
+
+  const handleEnter = async () => {
+  if (!selectedHole) return;
+
+  const idx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
+  const next = holes[idx + 1];
+  if (next) {
+    setSelectedHoleNumber(next.hole_number);
+  } else {
+    // e.g. navigate back to a Summary screen
+    // expo-router navigation:
+    router.push("/scorecard");
+  }
+};
+
 
   // Initialize App and set user location
   const initializeApp = async () => {
@@ -196,6 +216,13 @@ export default function CourseViewScreen() {
         },
         500
       );
+    }
+  }, [selectedHole]);
+
+  useEffect(() => {
+    if (selectedHole) {
+      setScore(selectedHole.par ?? 0);
+      setPutts(2);
     }
   }, [selectedHole]);
 
@@ -363,7 +390,7 @@ export default function CourseViewScreen() {
           />
         ))}
 
-        {droppedPins.length >= 1 && (
+        {selectedHole && droppedPins.length >= 1 && (
           <Polyline
             coordinates={[
               {
@@ -378,7 +405,7 @@ export default function CourseViewScreen() {
           />
         )}
 
-        {droppedPins.length > 1 &&
+        {selectedHole && droppedPins.length > 1 &&
           droppedPins.slice(1).map((pin, index) => (
             <Polyline
               key={`line-${index}`}
@@ -389,6 +416,34 @@ export default function CourseViewScreen() {
             />
           ))}
       </MapView>
+      {!!selectedHole && (
+      <View style={[styles(palette).scoreOverlay, { zIndex: 2000 }]}>
+        <View style={styles(palette).statControl}>
+          <Text style={styles(palette).statLabel}>Score</Text>
+          <Pressable onPress={() => setScore(s => s + 1)} style={styles(palette).button}>
+            <Text style={styles(palette).buttonText}>＋</Text>
+          </Pressable>
+          <Text style={styles(palette).statValue}>{score}</Text>
+          <Pressable onPress={() => setScore(s => Math.max(0, s - 1))} style={styles(palette).button}>
+            <Text style={styles(palette).buttonText}>－</Text>
+          </Pressable>
+        </View>
+        <View style={styles(palette).statControl}>
+          <Text style={styles(palette).statLabel}>Putts</Text>
+          <Pressable onPress={() => setPutts(p => p + 1)} style={styles(palette).button}>
+            <Text style={styles(palette).buttonText}>＋</Text>
+          </Pressable>
+          <Text style={styles(palette).statValue}>{putts}</Text>
+          <Pressable onPress={() => setPutts(p => Math.max(0, p - 1))} style={styles(palette).button}>
+            <Text style={styles(palette).buttonText}>－</Text>
+          </Pressable>
+        </View>
+        <Pressable style={styles(palette).enterButton} onPress={handleEnter}>
+          <Text style={styles(palette).enterText}>Enter</Text>
+        </Pressable>
+      </View>
+    )}
+
       {distanceToPin !== null && (
         <View style={styles(palette).distanceOverlay}>
           <Text style={styles(palette).distanceText}>
@@ -396,9 +451,11 @@ export default function CourseViewScreen() {
           </Text>
         </View>
       )}
+      {selectedHole && (
       <Pressable style={styles(palette).pinButton} onPress={handleDropPin}>
         <Text style={styles(palette).pinButtonText}>Drop Pin</Text>
       </Pressable>
+      )}
     </View>
   );
 }
@@ -487,4 +544,55 @@ distanceText: {
   fontWeight: "bold",
   fontSize: 14,
 },
+
+//-------Score UI ------
+scoreOverlay: {
+    position: "absolute",
+    bottom: 75,
+    right: 16,
+    backgroundColor: palette.secondary,
+    padding: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  statControl: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  statLabel: {
+    width: 50,
+    fontWeight: "600",
+    color: palette.textDark,
+  },
+  button: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: palette.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginHorizontal: 4,
+  },
+  buttonText: {
+    color: palette.white,
+    fontSize: 18,
+    lineHeight: 18,
+  },
+  statValue: {
+    width: 24,
+    textAlign: "center",
+    color: palette.textDark,
+  },
+  enterButton: {
+    marginTop: 4,
+    backgroundColor: palette.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  enterText: {
+    color: palette.white,
+    fontWeight: "700",
+  },
 });

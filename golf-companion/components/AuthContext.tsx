@@ -35,6 +35,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const restoreSession = async () => {
       const accessToken = await SecureStore.getItemAsync('supabase_access_token');
       const refreshToken = await SecureStore.getItemAsync('supabase_refresh_token');
+      console.log('RestoreSession: accessToken', accessToken, 'refreshToken', refreshToken);
       if (accessToken && refreshToken) {
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,

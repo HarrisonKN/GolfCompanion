@@ -111,6 +111,16 @@ export default function SignupScreen() {
         }
       }
 
+      // Log the user in to get tokens
+      try {
+        const loginData = await signIn(email, password);
+        console.log('Login after signup successful', loginData);
+      } catch (loginError) {
+        console.error('Login after signup failed:', loginError);
+        Alert.alert('Signup Error', 'Account created, but automatic login failed. Please log in manually.');
+        return;
+      }
+
       Toast.show({
         type: 'success',
         text1: 'Signup Successful!',
@@ -278,8 +288,9 @@ const styles = StyleSheet.create({
 const signIn = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-  if (data.session?.access_token) {
+  if (data.session?.access_token && data.session?.refresh_token) {
     await SecureStore.setItemAsync('supabase_access_token', data.session.access_token);
+    await SecureStore.setItemAsync('supabase_refresh_token', data.session.refresh_token);
   }
   return data;
 };

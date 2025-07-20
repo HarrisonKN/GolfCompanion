@@ -21,7 +21,7 @@ import { router } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
-import { COLORS } from "@/constants/theme";
+import { useTheme } from "@/components/ThemeContext";
 
 // ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
@@ -43,6 +43,7 @@ export default function ScorecardScreen() {
   const holeCount = 18;
 
   const { user } = useAuth();
+  const { palette } = useTheme();
 
   // Dropdown state
   const [courses, setCourses] = useState<Course[]>([]);
@@ -196,11 +197,11 @@ export default function ScorecardScreen() {
 
   // ------------------- SCORECARD UI -------------------------
   return (
-    <View style={[styles.gradientBg, { paddingBottom: 80 }]}>
+    <View style={[styles(palette).gradientBg, { paddingBottom: 80 }]}>
       {/* Scorecard Title */}
-      <View style={styles.topHeader}>
-        <Text style={styles.scorecardTitle}>Scorecard</Text>
-        <View style={styles.titleUnderline} />
+      <View style={styles(palette).topHeader}>
+        <Text style={styles(palette).scorecardTitle}>Scorecard</Text>
+        <View style={styles(palette).titleUnderline} />
       </View>
 
       {/* Course Dropdown */}
@@ -213,90 +214,90 @@ export default function ScorecardScreen() {
           setOpen={setCourseOpen}
           setValue={setSelectedCourseId}
           setItems={setCourseItems}
-          style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownContainer}
-          placeholderStyle={styles.placeholder}
-          textStyle={styles.text}
-          listItemLabelStyle={styles.listItemLabel}
+          style={styles(palette).dropdown}
+          dropDownContainerStyle={styles(palette).dropdownContainer}
+          placeholderStyle={styles(palette).placeholder}
+          textStyle={styles(palette).text}
+          listItemLabelStyle={styles(palette).listItemLabel}
           zIndex={2000}
         />
       </View>
 
       {/* Scorecard Table - Glassy Card */}
-      <View style={styles.cardWrapper}>
+      <View style={styles(palette).cardWrapper}>
         <ScrollView
           horizontal
-          style={styles.horizontalScroll}
+          style={styles(palette).horizontalScroll}
           contentContainerStyle={{ minWidth: Dimensions.get('window').width + 400 }}
           showsHorizontalScrollIndicator={false}
         >
-          <View style={styles.tableContainer} ref={scorecardRef}>
+          <View style={styles(palette).tableContainer} ref={scorecardRef}>
             {/* --- Combined Header Section --- */}
-            <View style={styles.headerUnified}>
+            <View style={styles(palette).headerUnified}>
               {/* Header Row: Hole Numbers */}
-              <View style={styles.headerRow}>
-                <View style={styles.headerNameCell}>
-                  <Text style={styles.headerText}>Hole</Text>
+              <View style={styles(palette).headerRow}>
+                <View style={styles(palette).headerNameCell}>
+                  <Text style={styles(palette).headerText}>Hole</Text>
                 </View>
                 {Array.from({ length: 9 }).map((_, i) => (
-                  <View key={i} style={styles.headerHoleCell}>
-                    <Text style={styles.cellText}>{i + 1}</Text>
+                  <View key={i} style={styles(palette).headerHoleCell}>
+                    <Text style={styles(palette).cellText}>{i + 1}</Text>
                   </View>
                 ))}
-                <View style={styles.headerInOutCell}><Text style={styles.cellText}>IN</Text></View>
+                <View style={styles(palette).headerInOutCell}><Text style={styles(palette).cellText}>IN</Text></View>
                 {Array.from({ length: 9 }).map((_, i) => (
-                  <View key={i + 9} style={styles.headerHoleCell}>
-                    <Text style={styles.cellText}>{i + 10}</Text>
+                  <View key={i + 9} style={styles(palette).headerHoleCell}>
+                    <Text style={styles(palette).cellText}>{i + 10}</Text>
                   </View>
                 ))}
-                <View style={styles.headerInOutCell}><Text style={styles.cellText}>OUT</Text></View>
-                <View style={styles.headerInOutCell}><Text style={styles.cellText}>Total</Text></View>
-                <View style={styles.headerEmptyCell} />
+                <View style={styles(palette).headerInOutCell}><Text style={styles(palette).cellText}>OUT</Text></View>
+                <View style={styles(palette).headerInOutCell}><Text style={styles(palette).cellText}>Total</Text></View>
+                <View style={styles(palette).headerEmptyCell} />
               </View>
               {/* Divider between Hole and Par */}
-              <View style={styles.headerSubDivider} />
+              <View style={styles(palette).headerSubDivider} />
               {/* Par Row */}
-              <View style={styles.headerRow}>
-                <View style={styles.headerNameCell}>
-                  <Text style={styles.headerText}>Par</Text>
+              <View style={styles(palette).headerRow}>
+                <View style={styles(palette).headerNameCell}>
+                  <Text style={styles(palette).headerText}>Par</Text>
                 </View>
                 {/* Holes 1-9 */}
                 {parValues.slice(0, 9).map((par, i) => (
-                  <View key={i} style={styles.headerCell}>
-                    <Text style={styles.cellText}>{par}</Text>
+                  <View key={i} style={styles(palette).headerCell}>
+                    <Text style={styles(palette).cellText}>{par}</Text>
                   </View>
                 ))}
                 {/* IN */}
-                <View style={styles.headerInOutCell}>
-                  <Text style={styles.cellText}>
+                <View style={styles(palette).headerInOutCell}>
+                  <Text style={styles(palette).cellText}>
                     {parValues.slice(0, 9).reduce((sum, val) => sum + val, 0)}
                   </Text>
                 </View>
                 {/* Holes 10-18 */}
                 {parValues.slice(9, 18).map((par, i) => (
-                  <View key={i + 9} style={styles.headerCell}>
-                    <Text style={styles.cellText}>{par}</Text>
+                  <View key={i + 9} style={styles(palette).headerCell}>
+                    <Text style={styles(palette).cellText}>{par}</Text>
                   </View>
                 ))}
                 {/* OUT */}
-                <View style={styles.headerInOutCell}>
-                  <Text style={styles.cellText}>
+                <View style={styles(palette).headerInOutCell}>
+                  <Text style={styles(palette).cellText}>
                     {parValues.slice(9, 18).reduce((sum, val) => sum + val, 0)}
                   </Text>
                 </View>
                 {/* TOTAL */}
-                <View style={styles.headerInOutCell}>
-                  <Text style={styles.cellText}>
+                <View style={styles(palette).headerInOutCell}>
+                  <Text style={styles(palette).cellText}>
                     {parValues.reduce((sum, val) => sum + val, 0)}
                   </Text>
                 </View>
-                <View style={styles.headerEmptyCell} />
+                <View style={styles(palette).headerEmptyCell} />
               </View>
             </View>
             {/* --- End Combined Header Section --- */}
 
             {/* Divider between header and player rows */}
-            <View style={styles.headerDivider} />
+            <View style={styles(palette).headerDivider} />
 
             {/* Player Rows */}
             {players.map((player, playerIndex) => {
@@ -308,25 +309,25 @@ export default function ScorecardScreen() {
               const totalScore = inScore + outScore;
 
               return (
-                <View key={playerIndex} style={styles.playerCard}>
-                  <View style={styles.row}>
-                    <View style={styles.nameCell}>
-                      <Text style={styles.playerNameText}>{player.name}</Text>
+                <View key={playerIndex} style={styles(palette).playerCard}>
+                  <View style={styles(palette).row}>
+                    <View style={styles(palette).nameCell}>
+                      <Text style={styles(palette).playerNameText}>{player.name}</Text>
                     </View>
                     {/* Holes 1-9 */}
                     {player.scores.slice(0, 9).map((score: string, holeIndex: number) => (
                       <TouchableOpacity
                         key={holeIndex}
-                        style={styles.cellTouchable}
+                        style={styles(palette).cellTouchable}
                         activeOpacity={0.7}
                         onPress={() => {
                           setSelectedCell({ playerIndex, holeIndex });
                           setScoreModalVisible(true);
                         }}
                       >
-                        <View style={styles.cell}>
+                        <View style={styles(palette).cell}>
                           <Text
-                            style={styles.cellText}
+                            style={styles(palette).cellText}
                             numberOfLines={1}
                             adjustsFontSizeToFit
                           >
@@ -336,23 +337,23 @@ export default function ScorecardScreen() {
                       </TouchableOpacity>
                     ))}
                     {/* IN column */}
-                    <View style={styles.inOutCell}>
-                      <Text style={styles.cellText}>{inScore}</Text>
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{inScore}</Text>
                     </View>
                     {/* Holes 10-18 */}
                     {player.scores.slice(9, 18).map((score: string, holeIndex: number) => (
                       <TouchableOpacity
                         key={holeIndex + 9}
-                        style={styles.cellTouchable}
+                        style={styles(palette).cellTouchable}
                         activeOpacity={0.7}
                         onPress={() => {
                           setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
                           setScoreModalVisible(true);
                         }}
                       >
-                        <View style={styles.cell}>
+                        <View style={styles(palette).cell}>
                           <Text
-                            style={styles.cellText}
+                            style={styles(palette).cellText}
                             numberOfLines={1}
                             adjustsFontSizeToFit
                           >
@@ -362,19 +363,19 @@ export default function ScorecardScreen() {
                       </TouchableOpacity>
                     ))}
                     {/* OUT column */}
-                    <View style={styles.inOutCell}>
-                      <Text style={styles.cellText}>{outScore}</Text>
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{outScore}</Text>
                     </View>
                     {/* TOTAL column */}
-                    <View style={styles.inOutCell}>
-                      <Text style={styles.cellText}>{totalScore}</Text>
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{totalScore}</Text>
                     </View>
                     {/* Remove player button */}
                     <TouchableOpacity
-                      style={styles.removeCell}
+                      style={styles(palette).removeCell}
                       onPress={() => setConfirmRemoveIndex(playerIndex)}
                     >
-                      <Text style={styles.removeText}>✕</Text>
+                      <Text style={styles(palette).removeText}>✕</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -385,39 +386,39 @@ export default function ScorecardScreen() {
       </View>
 
       {/* Add Player Button - floating */}
-      <View style={styles.addPlayerButtonContainer}>
+      <View style={styles(palette).addPlayerButtonContainer}>
         <View style={{ flexDirection: 'row', gap: 16 }}>
           <TouchableOpacity
             onPress={() => setAddPlayerModalVisible(true)}
-            style={[styles.addPlayerButton, styles.smallButton]}
+            style={[styles(palette).addPlayerButton, styles(palette).smallButton]}
             activeOpacity={0.85}
           >
-            <Text style={styles.addPlayerButtonText}>+ Add Player</Text>
+            <Text style={styles(palette).addPlayerButtonText}>+ Add Player</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setSaveModalVisible(true)}
-            style={[styles.addPlayerButton, styles.smallButton,]}
+            style={[styles(palette).addPlayerButton, styles(palette).smallButton,]}
             activeOpacity={0.85}
           >
-            <Text style={styles.addPlayerButtonText}>Save</Text>
+            <Text style={styles(palette).addPlayerButtonText}>Save</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Add Player Modal */}
       <Modal visible={addPlayerModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalView}>
-            <Text style={styles.modalText}>Enter Player Name:</Text>
+        <View style={styles(palette).modalBackdrop}>
+          <View style={styles(palette).modalView}>
+            <Text style={styles(palette).modalText}>Enter Player Name:</Text>
             <TextInput
               placeholder="Name"
-              placeholderTextColor="#fff"
+              placeholderTextColor={palette.white}
               value={newPlayerName}
               onChangeText={setNewPlayerName}
-              style={styles.modalInput}
+              style={styles(palette).modalInput}
             />
-            <Button title="Add" onPress={addPlayer} color={COLORS.secondary} />
-            <Button title="Cancel" onPress={() => setAddPlayerModalVisible(false)} color="#555" />
+            <Button title="Add" onPress={addPlayer} color={palette.secondary} />
+            <Button title="Cancel" onPress={() => setAddPlayerModalVisible(false)} color={palette.third} />
           </View>
         </View>
       </Modal>
@@ -428,14 +429,14 @@ export default function ScorecardScreen() {
         transparent
         animationType="slide"
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalView}>
-            <Text style={styles.modalText}>
+        <View style={styles(palette).modalBackdrop}>
+          <View style={styles(palette).modalView}>
+            <Text style={styles(palette).modalText}>
               Are you sure you want to remove this player?
             </Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <TouchableOpacity
-                style={[styles.confirmButton, { backgroundColor: '#e53935' }]}
+                style={[styles(palette).confirmButton, { backgroundColor: '#e53935' }]}
                 onPress={() => {
                   if (confirmRemoveIndex !== null) {
                     removePlayer(confirmRemoveIndex);
@@ -443,13 +444,13 @@ export default function ScorecardScreen() {
                   setConfirmRemoveIndex(null);
                 }}
               >
-                <Text style={styles.confirmButtonText}>Yes</Text>
+                <Text style={styles(palette).confirmButtonText}>Yes</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.confirmButton, { backgroundColor: '#555' }]}
+                style={[styles(palette).confirmButton, { backgroundColor: '#555' }]}
                 onPress={() => setConfirmRemoveIndex(null)}
               >
-                <Text style={styles.confirmButtonText}>No</Text>
+                <Text style={styles(palette).confirmButtonText}>No</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -458,26 +459,26 @@ export default function ScorecardScreen() {
       
       {/* Save Scorecard Modal */}
       <Modal visible={saveModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalView}>
-            <Text style={styles.modalText}>Save Scorecard</Text>
+        <View style={styles(palette).modalBackdrop}>
+          <View style={styles(palette).modalView}>
+            <Text style={styles(palette).modalText}>Save Scorecard</Text>
             <TouchableOpacity
-              style={[styles.confirmButton, styles.smallButton, { marginBottom: 12 }]}
+              style={[styles(palette).confirmButton, styles(palette).smallButton, { marginBottom: 12 }]}
               onPress={uploadScorecard}
             >
-              <Text style={styles.confirmButtonText}>Upload to Account</Text>
+              <Text style={styles(palette).confirmButtonText}>Upload to Account</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.confirmButton, styles.smallButton]}
+              style={[styles(palette).confirmButton, styles(palette).smallButton]}
               onPress={saveScorecardAsImage}
             >
-              <Text style={styles.confirmButtonText}>Save as Image</Text>
+              <Text style={styles(palette).confirmButtonText}>Save as Image</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.confirmButton, styles.smallButton, { backgroundColor: '#555', marginTop: 12 }]}
+              style={[styles(palette).confirmButton, styles(palette).smallButton, { backgroundColor: '#555', marginTop: 12 }]}
               onPress={() => setSaveModalVisible(false)}
             >
-              <Text style={styles.confirmButtonText}>Cancel</Text>
+              <Text style={styles(palette).confirmButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -509,10 +510,10 @@ export default function ScorecardScreen() {
 }
 
 // ------------------- SCORECARD STYLING -------------------------
-const styles = StyleSheet.create({
+const styles = (palette: any) => StyleSheet.create({
   gradientBg: {
     flex: 1,
-    backgroundColor: COLORS.third,
+    backgroundColor: palette.third,
     padding: 16,
   },
   topHeader: {
@@ -522,18 +523,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scorecardTitle: {
-    color: COLORS.white,
+    color: palette.white,
     fontSize: 32,
     fontWeight: '800',
     letterSpacing: 1,
-    textShadowColor: COLORS.primary,
+    textShadowColor: palette.primary,
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
   },
   titleUnderline: {
     width: 120,
     height: 4,
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     borderRadius: 2,
     marginTop: 6,
     marginBottom: 2,
@@ -551,36 +552,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   tableContainer: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: palette.secondary,
     borderRadius: 24,
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginVertical: 12,
-    shadowColor: COLORS.primary,
+    shadowColor: palette.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.10,
     shadowRadius: 12,
     elevation: 8,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
     minWidth: 900,
   },
   headerUnified: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
     marginBottom: 12,
     overflow: 'hidden',
   },
   headerDivider: {
     height: 1,
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     marginVertical: 8,
   },
   headerSubDivider: {
     height: 2,
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     opacity: 0.7,
     marginVertical: 0,
     borderRadius: 1,
@@ -590,42 +591,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerCell: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: COLORS.third,
+    borderColor: palette.third,
     flex: 1,
   },
   headerHoleCell: {
-    backgroundColor: COLORS.third,
+    backgroundColor: palette.third,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
     flex: 1,
   },
   headerNameCell: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     width: 120,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
   },
   headerInOutCell: {
-    backgroundColor: COLORS.third,
+    backgroundColor: palette.third,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
     flex: 1,
   },
   headerEmptyCell: {
@@ -638,31 +639,31 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cellText: {
-    color: COLORS.white,
+    color: palette.white,
     fontSize: 15,
     textAlign: 'center',
     fontWeight: '500',
     letterSpacing: 0.2,
   },
   playerCard: {
-    backgroundColor: COLORS.background,
+    backgroundColor: palette.background,
     borderRadius: 18,
     marginVertical: 8,
-    shadowColor: COLORS.primary,
+    shadowColor: palette.primary,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 1,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.secondary
+    backgroundColor: palette.secondary
   },
   nameCell: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     width: 120,
     height: 40,
     justifyContent: 'center',
@@ -670,22 +671,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginHorizontal: 1,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
   },
   playerNameText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '800',
     fontSize: 18,
     letterSpacing: 0.5,
   },
   headerText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
     fontSize: 18,
     letterSpacing: 1,
   },
   inOutCell: {
-    backgroundColor: COLORS.third,
+    backgroundColor: palette.third,
     width: 54,
     height: 40,
     justifyContent: 'center',
@@ -693,7 +694,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginHorizontal: 1,
     borderWidth: 1,
-    borderColor: COLORS.third,
+    borderColor: palette.third,
   },
   emptyCell: {
     width: 40,
@@ -705,14 +706,14 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     borderRadius: 10,
     marginLeft: 4,
     borderWidth: 1,
-    borderColor: COLORS.third,
+    borderColor: palette.third,
   },
   removeText: {
-    color: COLORS.error,
+    color: palette.error,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -726,18 +727,18 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   addPlayerButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     paddingVertical: 18,
     paddingHorizontal: 56,
     borderRadius: 28,
-    shadowColor: COLORS.primary,
+    shadowColor: palette.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 12,
   },
   addPlayerButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     textAlign: 'center',
     fontWeight: '800',
     fontSize: 20,
@@ -750,30 +751,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalView: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     padding: 32,
     borderRadius: 20,
     elevation: 12,
-    shadowColor: COLORS.primary,
+    shadowColor: palette.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.18,
     shadowRadius: 12,
     minWidth: 280,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.third,
-    color: COLORS.white,
+    borderColor: palette.primary,
+    backgroundColor: palette.third,
+    color: palette.white,
     padding: 16,
     marginVertical: 14,
     borderRadius: 10,
     fontSize: 17,
   },
   modalText: {
-    color: COLORS.white,
+    color: palette.white,
     fontSize: 22,
     marginBottom: 14,
     fontWeight: '700',
@@ -784,43 +785,43 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     marginHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: COLORS.secondary,
+    backgroundColor: palette.secondary,
   },
   confirmButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     textAlign: 'center',
     fontWeight: '700',
     fontSize: 17,
   },
   cell: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     minWidth: CELL_WIDTH,
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     borderRightWidth: 1,
-    borderColor: COLORS.third,
+    borderColor: palette.third,
     flex: 1,
   },
   dropdown: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
     minHeight: 44,
     marginTop: 8,
   },
   dropdownContainer: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
   },
   placeholder: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '600',
   },
   text: {
-    color: COLORS.white,
+    color: palette.white,
   },
   listItemLabel: {
-    color: COLORS.white,
+    color: palette.white,
   },
   smallButton: {
     flex: 0,

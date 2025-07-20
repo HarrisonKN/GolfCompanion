@@ -2,11 +2,13 @@
 import { useAuth } from '@/components/AuthContext';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
-import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useTheme } from "@/components/ThemeContext";
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput } from 'react-native';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
+import { MaterialIcons } from '@expo/vector-icons';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -51,6 +53,8 @@ export default function AccountsScreen() {
   const [search, setSearch] = useState('');
   const [findFriendsModalVisible, setFindFriendsModalVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+
+  const { palette } = useTheme();
 
   // Handle mounting state
   useEffect(() => {
@@ -281,9 +285,9 @@ export default function AccountsScreen() {
   // Early returns for loading and error states
   if (!isMounted || authLoading || isRedirecting) {
     return (
-      <View style={[styles.screen, styles.centerContent]}>
+      <View style={[styles(palette).screen, styles(palette).centerContent]}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <ThemedText style={styles.loadingText}>
+        <ThemedText style={styles(palette).loadingText}>
           {isRedirecting ? 'Redirecting...' : 'Loading...'}
         </ThemedText>
       </View>
@@ -294,9 +298,9 @@ export default function AccountsScreen() {
   // this prevents rendering the screen if user is not authenticated causing potential crash
   if (!user) {
     return (
-      <View style={[styles.screen, styles.centerContent]}>
+      <View style={[styles(palette).screen, styles(palette).centerContent]}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <ThemedText style={styles.loadingText}>Redirecting to login...</ThemedText>
+        <ThemedText style={styles(palette).loadingText}>Redirecting to login...</ThemedText>
       </View>
     );
   }
@@ -304,9 +308,9 @@ export default function AccountsScreen() {
   // Show loading while fetching profile
   if (loading) {
     return (
-      <View style={[styles.screen, styles.centerContent]}>
+      <View style={[styles(palette).screen, styles(palette).centerContent]}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <ThemedText style={styles.loadingText}>Loading profile...</ThemedText>
+        <ThemedText style={styles(palette).loadingText}>Loading profile...</ThemedText>
       </View>
     );
   }
@@ -314,13 +318,13 @@ export default function AccountsScreen() {
   // Show error state
   if (error) {
     return (
-      <View style={[styles.screen, styles.centerContent]}>
-        <ThemedText style={styles.errorText}>⚠️ {error}</ThemedText>
-        <Pressable onPress={handleRetry} style={styles.retryButton}>
-          <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+      <View style={[styles(palette).screen, styles(palette).centerContent]}>
+        <ThemedText style={styles(palette).errorText}>⚠️ {error}</ThemedText>
+        <Pressable onPress={handleRetry} style={styles(palette).retryButton}>
+          <ThemedText style={styles(palette).retryButtonText}>Retry</ThemedText>
         </Pressable>
-        <Pressable onPress={() => safeNavigate('/login')} style={styles.loginButton}>
-          <ThemedText style={styles.loginButtonText}>Go to Login</ThemedText>
+        <Pressable onPress={() => safeNavigate('/login')} style={styles(palette).loginButton}>
+          <ThemedText style={styles(palette).loginButtonText}>Go to Login</ThemedText>
         </Pressable>
       </View>
     );
@@ -329,10 +333,10 @@ export default function AccountsScreen() {
   // Show message if no profile (shouldn't happen with auto-creation)
   if (!profile) {
     return (
-      <View style={[styles.screen, styles.centerContent]}>
-        <ThemedText style={styles.errorText}>No profile found</ThemedText>
-        <Pressable onPress={handleRetry} style={styles.retryButton}>
-          <ThemedText style={styles.retryButtonText}>Try Again</ThemedText>
+      <View style={[styles(palette).screen, styles(palette).centerContent]}>
+        <ThemedText style={styles(palette).errorText}>No profile found</ThemedText>
+        <Pressable onPress={handleRetry} style={styles(palette).retryButton}>
+          <ThemedText style={styles(palette).retryButtonText}>Try Again</ThemedText>
         </Pressable>
       </View>
     );
@@ -342,41 +346,49 @@ export default function AccountsScreen() {
 
 // ------------------- ACCOUNTS UI -------------------------
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: SCREEN_HEIGHT * 0.10 }}>
+    <ScrollView style={styles(palette).screen} contentContainerStyle={{ paddingBottom: SCREEN_HEIGHT * 0.10 }}>
       {/* Smaller Header */}
-      <View style={styles.headerSmall}>
-        <ThemedText type="title" style={styles.headerTitleSmall}>
+      <View style={styles(palette).headerSmall}>
+        <ThemedText type="title" style={styles(palette).headerTitleSmall}>
           Your Account
         </ThemedText>
-        <Pressable
-          style={({ pressed }) => [
-            styles.logoutButton,
-            pressed && styles.logoutButtonPressed,
-          ]}
-          onPress={handleLogout}
-        >
-          <ThemedText style={styles.logoutButtonText}>Logout</ThemedText>
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Pressable
+            style={({ pressed }) => [
+              styles(palette).logoutButton,
+              pressed && styles(palette).logoutButtonPressed,
+            ]}
+            onPress={handleLogout}
+          >
+            <ThemedText style={styles(palette).logoutButtonText}>Logout</ThemedText>
+          </Pressable>
+          <Pressable
+            style={styles(palette).settingsButton}
+            onPress={() => router.push('../settings')}
+          >
+            <MaterialIcons size={28} name="settings" color={palette.grey} />
+          </Pressable>
+        </View>
       </View>
 
       {/* Account Description */}
-      <View style={styles.accountDescContainer}>
+      <View style={styles(palette).accountDescContainer}>
         {/* Avatar placeholder */}
-        <View style={styles.avatarCircle}>
-          <ThemedText style={styles.avatarText}>
+        <View style={styles(palette).avatarCircle}>
+          <ThemedText style={styles(palette).avatarText}>
             {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
           </ThemedText>
         </View>
         <View style={{ marginLeft: 16 }}>
-          <ThemedText style={styles.accountName}>{profile.full_name ?? 'Unknown User'}</ThemedText>
-          <ThemedText style={styles.accountEmail}>{profile.email ?? ''}</ThemedText>
+          <ThemedText style={styles(palette).accountName}>{profile.full_name ?? 'Unknown User'}</ThemedText>
+          <ThemedText style={styles(palette).accountEmail}>{profile.email ?? ''}</ThemedText>
         </View>
       </View>
 
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
+      <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
         Golf Stats
       </ThemedText>
-      <View style={styles.statsGrid}>
+      <View style={styles(palette).statsGrid}>
         <StatTile label="Handicap" value={profile.handicap?.toFixed(1) ?? 'N/A'} />
         <StatTile label="Rounds" value={profile.rounds_played?.toString() ?? 'N/A'} />
         <StatTile label="Avg Score" value={profile.average_score?.toFixed(1) ?? 'N/A'} />
@@ -385,7 +397,7 @@ export default function AccountsScreen() {
         <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
       </View>
 
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
+      <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
         Round History
       </ThemedText>
       <ScrollView
@@ -393,20 +405,20 @@ export default function AccountsScreen() {
         showsHorizontalScrollIndicator={false}
         snapToInterval={320}
         decelerationRate="fast"
-        style={styles.roundsScroll}
-        contentContainerStyle={styles.roundsContainer}
+        style={styles(palette).roundsScroll}
+        contentContainerStyle={styles(palette).roundsContainer}
       >
         {rounds.length === 0 ? (
-          <ThemedText style={styles.infoText}>No rounds played yet.</ThemedText>
+          <ThemedText style={styles(palette).infoText}>No rounds played yet.</ThemedText>
         ) : (
           rounds.map((round) => (
-            <View key={round.id} style={styles.roundTile}>
-              <ThemedText style={styles.roundCourse}>{round.course_name}</ThemedText>
-              <ThemedText style={styles.roundDate}>{round.date}</ThemedText>
-              <ThemedText style={styles.roundScore}>Score: {round.score}</ThemedText>
-              <ThemedText style={styles.roundStat}>Fairways: {round.fairways_hit ?? 'N/A'}</ThemedText>
-              <ThemedText style={styles.roundStat}>GIR: {round.greens_in_reg ?? 'N/A'}</ThemedText>
-              <ThemedText style={styles.roundStat}>Putts: {round.putts ?? 'N/A'}</ThemedText>
+            <View key={round.id} style={styles(palette).roundTile}>
+              <ThemedText style={styles(palette).roundCourse}>{round.course_name}</ThemedText>
+              <ThemedText style={styles(palette).roundDate}>{round.date}</ThemedText>
+              <ThemedText style={styles(palette).roundScore}>Score: {round.score}</ThemedText>
+              <ThemedText style={styles(palette).roundStat}>Fairways: {round.fairways_hit ?? 'N/A'}</ThemedText>
+              <ThemedText style={styles(palette).roundStat}>GIR: {round.greens_in_reg ?? 'N/A'}</ThemedText>
+              <ThemedText style={styles(palette).roundStat}>Putts: {round.putts ?? 'N/A'}</ThemedText>
               {/* Show scorecard if available */}
               {round.scorecard && (
                 <TouchableOpacity onPress={() => openScorecardModal(round.scorecard!)} activeOpacity={0.7}>
@@ -416,7 +428,7 @@ export default function AccountsScreen() {
                     contentContainerStyle={{ flexGrow: 1 }}
                   >
                     <ScrollView>
-                      <View style={[styles.scorecardTable, { alignSelf: 'center' }]}>
+                      <View style={[styles(palette).scorecardTable, { alignSelf: 'center' }]}>
                         {(() => {
                           try {
                             const scorecard = JSON.parse(round.scorecard ?? JSON.stringify(selectedScorecard));
@@ -426,33 +438,33 @@ export default function AccountsScreen() {
                             return (
                               <>
                                 {/* Header Row */}
-                                <View style={styles.scorecardRow}>
-                                  <View style={styles.scorecardCellPlayerHeader}>
-                                    <ThemedText style={styles.scorecardHeaderText}>Hole</ThemedText>
+                                <View style={styles(palette).scorecardRow}>
+                                  <View style={styles(palette).scorecardCellPlayerHeader}>
+                                    <ThemedText style={styles(palette).scorecardHeaderText}>Hole</ThemedText>
                                   </View>
                                   {/* Holes 1-9 */}
                                   {[...Array(9)].map((_, idx) => (
-                                    <View key={idx} style={styles.scorecardCellHeader}>
-                                      <ThemedText style={styles.scorecardHeaderText}>{idx + 1}</ThemedText>
+                                    <View key={idx} style={styles(palette).scorecardCellHeader}>
+                                      <ThemedText style={styles(palette).scorecardHeaderText}>{idx + 1}</ThemedText>
                                     </View>
                                   ))}
                                   {/* IN */}
-                                  <View style={styles.scorecardCellHeader}>
-                                    <ThemedText style={styles.scorecardHeaderText}>IN</ThemedText>
+                                  <View style={styles(palette).scorecardCellHeader}>
+                                    <ThemedText style={styles(palette).scorecardHeaderText}>IN</ThemedText>
                                   </View>
                                   {/* Holes 10-18 */}
                                   {[...Array(9)].map((_, idx) => (
-                                    <View key={idx + 9} style={styles.scorecardCellHeader}>
-                                      <ThemedText style={styles.scorecardHeaderText}>{idx + 10}</ThemedText>
+                                    <View key={idx + 9} style={styles(palette).scorecardCellHeader}>
+                                      <ThemedText style={styles(palette).scorecardHeaderText}>{idx + 10}</ThemedText>
                                     </View>
                                   ))}
                                   {/* OUT */}
-                                  <View style={styles.scorecardCellHeader}>
-                                    <ThemedText style={styles.scorecardHeaderText}>OUT</ThemedText>
+                                  <View style={styles(palette).scorecardCellHeader}>
+                                    <ThemedText style={styles(palette).scorecardHeaderText}>OUT</ThemedText>
                                   </View>
                                   {/* TOTAL */}
-                                  <View style={styles.scorecardCellHeader}>
-                                    <ThemedText style={styles.scorecardHeaderText}>Total</ThemedText>
+                                  <View style={styles(palette).scorecardCellHeader}>
+                                    <ThemedText style={styles(palette).scorecardHeaderText}>Total</ThemedText>
                                   </View>
                                 </View>
                                 {/* Player Rows */}
@@ -461,37 +473,37 @@ export default function AccountsScreen() {
                                   const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
                                   const totalScore = inScore + outScore;
                                   return (
-                                    <View key={idx} style={styles.scorecardRow}>
-                                      <View style={styles.scorecardCellPlayer}>
-                                        <ThemedText style={styles.scorecardPlayerText}>{player.name}</ThemedText>
+                                    <View key={idx} style={styles(palette).scorecardRow}>
+                                      <View style={styles(palette).scorecardCellPlayer}>
+                                        <ThemedText style={styles(palette).scorecardPlayerText}>{player.name}</ThemedText>
                                       </View>
                                       {/* Holes 1-9 */}
                                       {[...Array(9)].map((_, hIdx) => (
-                                        <View key={hIdx} style={styles.scorecardCell}>
-                                          <ThemedText style={styles.scorecardScoreText}>
+                                        <View key={hIdx} style={styles(palette).scorecardCell}>
+                                          <ThemedText style={styles(palette).scorecardScoreText}>
                                             {player.scores[hIdx] || '-'}
                                           </ThemedText>
                                         </View>
                                       ))}
                                       {/* IN */}
-                                      <View style={styles.scorecardCell}>
-                                        <ThemedText style={styles.scorecardScoreText}>{inScore}</ThemedText>
+                                      <View style={styles(palette).scorecardCell}>
+                                        <ThemedText style={styles(palette).scorecardScoreText}>{inScore}</ThemedText>
                                       </View>
                                       {/* Holes 10-18 */}
                                       {[...Array(9)].map((_, hIdx) => (
-                                        <View key={hIdx + 9} style={styles.scorecardCell}>
-                                          <ThemedText style={styles.scorecardScoreText}>
+                                        <View key={hIdx + 9} style={styles(palette).scorecardCell}>
+                                          <ThemedText style={styles(palette).scorecardScoreText}>
                                             {player.scores[hIdx + 9] || '-'}
                                           </ThemedText>
                                         </View>
                                       ))}
                                       {/* OUT */}
-                                      <View style={styles.scorecardCell}>
-                                        <ThemedText style={styles.scorecardScoreText}>{outScore}</ThemedText>
+                                      <View style={styles(palette).scorecardCell}>
+                                        <ThemedText style={styles(palette).scorecardScoreText}>{outScore}</ThemedText>
                                       </View>
                                       {/* TOTAL */}
-                                      <View style={styles.scorecardCell}>
-                                        <ThemedText style={styles.scorecardScoreText}>{totalScore}</ThemedText>
+                                      <View style={styles(palette).scorecardCell}>
+                                        <ThemedText style={styles(palette).scorecardScoreText}>{totalScore}</ThemedText>
                                       </View>
                                     </View>
                                   );
@@ -525,7 +537,7 @@ export default function AccountsScreen() {
             <ThemedText style={{ fontSize: 18, color: '#1E3A8A', fontWeight: '700' }}>Close</ThemedText>
           </Pressable>
           <ScrollView horizontal style={{ flex: 1 }}>
-            <View style={[styles.scorecardTable, { alignSelf: 'center', marginTop: 20 }]}>
+            <View style={[styles(palette).scorecardTable, { alignSelf: 'center', marginTop: 20 }]}>
               {(() => {
                 try {
                   const scorecard = JSON.parse(JSON.stringify(selectedScorecard));
@@ -535,33 +547,33 @@ export default function AccountsScreen() {
                   return (
                     <>
                       {/* Header Row */}
-                      <View style={styles.scorecardRow}>
-                        <View style={styles.scorecardCellPlayerHeader}>
-                          <ThemedText style={styles.scorecardHeaderText}>Player</ThemedText>
+                      <View style={styles(palette).scorecardRow}>
+                        <View style={styles(palette).scorecardCellPlayerHeader}>
+                          <ThemedText style={styles(palette).scorecardHeaderText}>Player</ThemedText>
                         </View>
                         {/* Holes 1-9 */}
                         {[...Array(9)].map((_, idx) => (
-                          <View key={idx} style={styles.scorecardCellHeader}>
-                            <ThemedText style={styles.scorecardHeaderText}>{idx + 1}</ThemedText>
+                          <View key={idx} style={styles(palette).scorecardCellHeader}>
+                            <ThemedText style={styles(palette).scorecardHeaderText}>{idx + 1}</ThemedText>
                           </View>
                         ))}
                         {/* IN */}
-                        <View style={styles.scorecardCellHeader}>
-                          <ThemedText style={styles.scorecardHeaderText}>IN</ThemedText>
+                        <View style={styles(palette).scorecardCellHeader}>
+                          <ThemedText style={styles(palette).scorecardHeaderText}>IN</ThemedText>
                         </View>
                         {/* Holes 10-18 */}
                         {[...Array(9)].map((_, idx) => (
-                          <View key={idx + 9} style={styles.scorecardCellHeader}>
-                            <ThemedText style={styles.scorecardHeaderText}>{idx + 10}</ThemedText>
+                          <View key={idx + 9} style={styles(palette).scorecardCellHeader}>
+                            <ThemedText style={styles(palette).scorecardHeaderText}>{idx + 10}</ThemedText>
                           </View>
                         ))}
                         {/* OUT */}
-                        <View style={styles.scorecardCellHeader}>
-                          <ThemedText style={styles.scorecardHeaderText}>OUT</ThemedText>
+                        <View style={styles(palette).scorecardCellHeader}>
+                          <ThemedText style={styles(palette).scorecardHeaderText}>OUT</ThemedText>
                         </View>
                         {/* TOTAL */}
-                        <View style={styles.scorecardCellHeader}>
-                          <ThemedText style={styles.scorecardHeaderText}>Total</ThemedText>
+                        <View style={styles(palette).scorecardCellHeader}>
+                          <ThemedText style={styles(palette).scorecardHeaderText}>Total</ThemedText>
                         </View>
                       </View>
                       {/* Player Rows */}
@@ -570,37 +582,37 @@ export default function AccountsScreen() {
                         const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
                         const totalScore = inScore + outScore;
                         return (
-                          <View key={idx} style={styles.scorecardRow}>
-                            <View style={styles.scorecardCellPlayer}>
-                              <ThemedText style={styles.scorecardPlayerText}>{player.name}</ThemedText>
+                          <View key={idx} style={styles(palette).scorecardRow}>
+                            <View style={styles(palette).scorecardCellPlayer}>
+                              <ThemedText style={styles(palette).scorecardPlayerText}>{player.name}</ThemedText>
                             </View>
                             {/* Holes 1-9 */}
                             {[...Array(9)].map((_, hIdx) => (
-                              <View key={hIdx} style={styles.scorecardCell}>
-                                <ThemedText style={styles.scorecardScoreText}>
+                              <View key={hIdx} style={styles(palette).scorecardCell}>
+                                <ThemedText style={styles(palette).scorecardScoreText}>
                                   {player.scores[hIdx] || '-'}
                                 </ThemedText>
                               </View>
                             ))}
                             {/* IN */}
-                            <View style={styles.scorecardCell}>
-                              <ThemedText style={styles.scorecardScoreText}>{inScore}</ThemedText>
+                            <View style={styles(palette).scorecardCell}>
+                              <ThemedText style={styles(palette).scorecardScoreText}>{inScore}</ThemedText>
                             </View>
                             {/* Holes 10-18 */}
                             {[...Array(9)].map((_, hIdx) => (
-                              <View key={hIdx + 9} style={styles.scorecardCell}>
-                                <ThemedText style={styles.scorecardScoreText}>
+                              <View key={hIdx + 9} style={styles(palette).scorecardCell}>
+                                <ThemedText style={styles(palette).scorecardScoreText}>
                                   {player.scores[hIdx + 9] || '-'}
                                 </ThemedText>
                               </View>
                             ))}
                             {/* OUT */}
-                            <View style={styles.scorecardCell}>
-                              <ThemedText style={styles.scorecardScoreText}>{outScore}</ThemedText>
+                            <View style={styles(palette).scorecardCell}>
+                              <ThemedText style={styles(palette).scorecardScoreText}>{outScore}</ThemedText>
                             </View>
                             {/* TOTAL */}
-                            <View style={styles.scorecardCell}>
-                              <ThemedText style={styles.scorecardScoreText}>{totalScore}</ThemedText>
+                            <View style={styles(palette).scorecardCell}>
+                              <ThemedText style={styles(palette).scorecardScoreText}>{totalScore}</ThemedText>
                             </View>
                           </View>
                         );
@@ -616,25 +628,25 @@ export default function AccountsScreen() {
         </View>
       </Modal>
       <View>
-      <ThemedText type="subtitle" style={styles.sectionTitle}>
+      <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
         My Friends
       </ThemedText>
         {friends.length === 0 ? (
-          <ThemedText style={styles.infoText}>No friends found.</ThemedText>
+          <ThemedText style={styles(palette).infoText}>No friends found.</ThemedText>
         ) : (
           friends.map(f => (
             <View key={f.friend_id} style={{ marginBottom: 8 }}>
-              <ThemedText style={styles.accountName}>{f.profiles?.full_name}</ThemedText>
+              <ThemedText style={styles(palette).accountName}>{f.profiles?.full_name}</ThemedText>
             </View>
           ))
         )}
         {/* Add friend UI */}
         <View style={{ marginTop: 16, alignItems: 'center' }}>
           <Pressable
-            style={styles.createButton}
+            style={styles(palette).createButton}
             onPress={() => setFindFriendsModalVisible(true)}
           >
-            <ThemedText style={styles.createButtonText}>Find Friends</ThemedText>
+            <ThemedText style={styles(palette).createButtonText}>Find Friends</ThemedText>
           </Pressable>
         </View>
         <Modal visible={findFriendsModalVisible} transparent animationType="slide" onRequestClose={() => setFindFriendsModalVisible(false)}>
@@ -645,45 +657,45 @@ export default function AccountsScreen() {
             backgroundColor: 'rgba(0,0,0,0.3)'
           }}>
             <View style={{
-              backgroundColor: COLORS.white,
+              backgroundColor: palette.white,
               padding: 24,
               borderRadius: 16,
               width: '80%',
               alignItems: 'center'
             }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, color: COLORS.black }}>Find Friends</ThemedText>
+              <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, color: palette.black }}>Find Friends</ThemedText>
               <TextInput
                 style={{
                   width: '100%',
                   borderWidth: 1,
-                  borderColor: COLORS.primary,
+                  borderColor: palette.primary,
                   borderRadius: 8,
                   padding: 8,
                   marginBottom: 16,
-                  color: COLORS.textDark,
-                  backgroundColor: COLORS.background,
+                  color: palette.textDark,
+                  backgroundColor: palette.background,
                 }}
                 placeholder="Search by name or email"
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={palette.textLight}
                 value={search}
                 onChangeText={setSearch}
               />
               <Pressable
-                style={styles.createButton}
-                onPress={handleSearch} // <-- implement this function
+                style={styles(palette).createButton}
+                onPress={handleSearch}
               >
-                <ThemedText style={styles.createButtonText}>Search</ThemedText>
+                <ThemedText style={styles(palette).createButtonText}>Search</ThemedText>
               </Pressable>
               {searchResults.map(u => (
                 <Pressable key={u.id} onPress={() => handleAddFriend(u.id)}>
-                  <ThemedText style={{color: COLORS.black}}>{u.full_name} ({u.email})</ThemedText>
+                  <ThemedText style={{color: palette.black}}>{u.full_name} ({u.email})</ThemedText>
                 </Pressable>
               ))}
               <Pressable
-                style={[styles.leaveButton, { marginTop: 12 }]}
+                style={[styles(palette).leaveButton, { marginTop: 12 }]}
                 onPress={() => setFindFriendsModalVisible(false)}
               >
-                <ThemedText style={styles.leaveButtonText}>Close</ThemedText>
+                <ThemedText style={styles(palette).leaveButtonText}>Close</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -695,10 +707,11 @@ export default function AccountsScreen() {
 
 // StatTile component for grid
 function StatTile({ label, value }: { label: string; value: string }) {
+  const { palette } = useTheme();
   return (
-    <View style={styles.statTile}>
-      <ThemedText style={styles.statLabel}>{label}</ThemedText>
-      <ThemedText style={styles.statValue}>{value}</ThemedText>
+    <View style={styles(palette).statTile}>
+      <ThemedText style={styles(palette).statLabel}>{label}</ThemedText>
+      <ThemedText style={styles(palette).statValue}>{value}</ThemedText>
     </View>
   );
 }
@@ -706,27 +719,27 @@ function StatTile({ label, value }: { label: string; value: string }) {
 // ------------------- STYLING -------------------------
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const styles = StyleSheet.create({
+const styles = (palette: any) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.background,
-    marginTop: SCREEN_HEIGHT * 0.04, // 4% of screen height
+    backgroundColor: palette.background,
+    marginTop: SCREEN_HEIGHT * 0.04,
   },
   centerContent: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: SCREEN_WIDTH * 0.05, // 5% of screen width
+    padding: SCREEN_WIDTH * 0.05,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SCREEN_WIDTH * 0.08, // 8% of screen width
-    paddingVertical: SCREEN_HEIGHT * 0.04, // 4% of screen height
+    paddingHorizontal: SCREEN_WIDTH * 0.08,
+    paddingVertical: SCREEN_HEIGHT * 0.04,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.grey,
-    backgroundColor: COLORS.white,
-    shadowColor: COLORS.black,
+    borderBottomColor: palette.grey,
+    backgroundColor: palette.white,
+    shadowColor: palette.black,
     shadowOpacity: 0.05,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
@@ -741,21 +754,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingVertical: SCREEN_HEIGHT * 0.015,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.grey,
-    backgroundColor: COLORS.white,
+    borderBottomColor: palette.grey,
+    backgroundColor: palette.white,
   },
   headerTitle: {
     fontSize: SCREEN_WIDTH * 0.07,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: palette.primary,
   },
   headerTitleSmall: {
     fontSize: SCREEN_WIDTH * 0.055,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: palette.primary,
   },
   logoutButton: {
-    backgroundColor: COLORS.error,
+    backgroundColor: palette.error,
     paddingHorizontal: SCREEN_WIDTH * 0.04,
     paddingVertical: SCREEN_HEIGHT * 0.01,
     borderRadius: 20,
@@ -764,7 +777,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#B91C1C",
   },
   logoutButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
     fontSize: SCREEN_WIDTH * 0.04,
   },
@@ -778,55 +791,56 @@ const styles = StyleSheet.create({
     fontSize: SCREEN_WIDTH * 0.055,
     fontWeight: '700',
     marginBottom: SCREEN_HEIGHT * 0.015,
-    color: COLORS.primary,
+    color: palette.primary,
   },
   infoLabel: {
     fontSize: SCREEN_WIDTH * 0.035,
-    color: COLORS.textLight,
+    color: palette.textLight,
     marginTop: SCREEN_HEIGHT * 0.025,
     fontWeight: '600',
   },
   infoText: {
     fontSize: SCREEN_WIDTH * 0.045,
-    color: COLORS.textDark,
+    color: palette.textDark,
     marginTop: SCREEN_HEIGHT * 0.01,
+    paddingLeft: SCREEN_WIDTH * 0.05,
   },
   separator: {
     height: 1,
-    backgroundColor: COLORS.grey,
+    backgroundColor: palette.grey,
     marginVertical: SCREEN_HEIGHT * 0.04,
   },
   loadingText: {
     marginTop: SCREEN_HEIGHT * 0.015,
     textAlign: 'center',
-    color: COLORS.textLight,
+    color: palette.textLight,
   },
   errorText: {
     fontSize: SCREEN_WIDTH * 0.045,
-    color: COLORS.error,
+    color: palette.error,
     textAlign: 'center',
     marginBottom: SCREEN_HEIGHT * 0.025,
   },
   retryButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     paddingVertical: SCREEN_HEIGHT * 0.015,
     paddingHorizontal: SCREEN_WIDTH * 0.08,
     borderRadius: 12,
     marginBottom: SCREEN_HEIGHT * 0.015,
   },
   retryButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
     fontSize: SCREEN_WIDTH * 0.045,
   },
   loginButton: {
-    backgroundColor: COLORS.third,
+    backgroundColor: palette.third,
     paddingVertical: SCREEN_HEIGHT * 0.015,
     paddingHorizontal: SCREEN_WIDTH * 0.08,
     borderRadius: 12,
   },
   loginButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
     fontSize: SCREEN_WIDTH * 0.045,
   },
@@ -840,7 +854,7 @@ const styles = StyleSheet.create({
   },
   statTile: {
     width: SCREEN_WIDTH * 0.28,
-    backgroundColor: COLORS.secondary,
+    backgroundColor: palette.secondary,
     borderRadius: 12,
     padding: SCREEN_WIDTH * 0.04,
     marginBottom: SCREEN_HEIGHT * 0.015,
@@ -848,13 +862,13 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: SCREEN_WIDTH * 0.035,
-    color: COLORS.textLight,
+    color: palette.textLight,
     fontWeight: '600',
     marginBottom: SCREEN_HEIGHT * 0.005,
   },
   statValue: {
     fontSize: SCREEN_WIDTH * 0.045,
-    color: COLORS.primary,
+    color: palette.primary,
     fontWeight: '700',
   },
   roundsScroll: {
@@ -868,11 +882,11 @@ const styles = StyleSheet.create({
   roundTile: {
     width: SCREEN_WIDTH * 0.8,
     height: SCREEN_HEIGHT * 0.40,
-    backgroundColor: COLORS.white,
+    backgroundColor: palette.white,
     borderRadius: 16,
     padding: SCREEN_WIDTH * 0.045,
     marginRight: SCREEN_WIDTH * 0.05,
-    shadowColor: COLORS.black,
+    shadowColor: palette.black,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
@@ -881,23 +895,23 @@ const styles = StyleSheet.create({
   roundCourse: {
     fontSize: SCREEN_WIDTH * 0.045,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: palette.primary,
     marginBottom: SCREEN_HEIGHT * 0.005,
   },
   roundDate: {
     fontSize: SCREEN_WIDTH * 0.035,
-    color: COLORS.textLight,
+    color: palette.textLight,
     marginBottom: SCREEN_HEIGHT * 0.008,
   },
   roundScore: {
     fontSize: SCREEN_WIDTH * 0.04,
-    color: COLORS.error,
+    color: palette.error,
     fontWeight: '700',
     marginBottom: SCREEN_HEIGHT * 0.008,
   },
   roundStat: {
     fontSize: SCREEN_WIDTH * 0.035,
-    color: COLORS.textDark,
+    color: palette.textDark,
     marginBottom: SCREEN_HEIGHT * 0.002,
   },
   scorecardTable: {
@@ -911,7 +925,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.grey,
+    backgroundColor: palette.grey,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
@@ -919,7 +933,7 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH * 0.11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.grey,
+    backgroundColor: palette.grey,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
     marginLeft: SCREEN_WIDTH * 0.01,
@@ -927,13 +941,13 @@ const styles = StyleSheet.create({
   scorecardHeaderText: {
     fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: palette.primary,
   },
   scorecardCellPlayer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.secondary,
+    backgroundColor: palette.secondary,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
@@ -941,7 +955,7 @@ const styles = StyleSheet.create({
     width: SCREEN_WIDTH * 0.11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.secondary,
+    backgroundColor: palette.secondary,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
     marginLeft: SCREEN_WIDTH * 0.01,
@@ -949,12 +963,12 @@ const styles = StyleSheet.create({
   scorecardPlayerText: {
     fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '600',
-    color: COLORS.textDark,
+    color: palette.textDark,
   },
   scorecardScoreText: {
     fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '600',
-    color: COLORS.textDark,
+    color: palette.textDark,
   },
   accountDescContainer: {
     flexDirection: 'row',
@@ -962,33 +976,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingVertical: SCREEN_HEIGHT * 0.02,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.grey,
-    backgroundColor: COLORS.white,
+    borderBottomColor: palette.grey,
+    backgroundColor: palette.white,
   },
   avatarCircle: {
     width: SCREEN_WIDTH * 0.15,
     height: SCREEN_WIDTH * 0.15,
     borderRadius: (SCREEN_WIDTH * 0.15) / 2,
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
-    color: COLORS.white,
+    color: palette.white,
     fontSize: SCREEN_WIDTH * 0.07,
     fontWeight: '700',
   },
   accountName: {
     fontSize: SCREEN_WIDTH * 0.05,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: palette.primary,
   },
   accountEmail: {
     fontSize: SCREEN_WIDTH * 0.04,
-    color: COLORS.textLight,
+    color: palette.textLight,
   },
   createButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 20,
@@ -996,12 +1010,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   createButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
     fontSize: 18,
   },
   leaveButton: {
-    backgroundColor: COLORS.error,
+    backgroundColor: palette.error,
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 20,
@@ -1009,8 +1023,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   leaveButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
     fontSize: 18,
+  },
+  settingsButton: {
+    backgroundColor: palette.background,
+    padding: 8,
+    borderRadius: 20,
+    marginLeft: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

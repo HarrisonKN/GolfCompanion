@@ -9,7 +9,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { COLORS } from '@/constants/theme';
+import { useTheme } from "@/components/ThemeContext";
 import { useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/components/supabase';
 import { useAuth } from '@/components/AuthContext';
@@ -34,6 +34,7 @@ export default function HubRoomScreen() {
   const [chatInput, setChatInput] = useState('');
   const flatListRef = useRef<KeyboardAwareFlatList>(null);
   const insets = useSafeAreaInsets();
+  const { palette } = useTheme();
 
   const fetchMessages = async () => {
     const { data, error } = await supabase
@@ -145,61 +146,62 @@ export default function HubRoomScreen() {
         Platform.OS === 'ios' ? insets.top + 64 : insets.top + 60
       }
     >
-      <View style={styles.screen}>
-        <ThemedText type="title" style={styles.header}>
+      <View style={styles(palette).screen}>
+        <ThemedText type="title" style={styles(palette).header}>
           {roomName}
         </ThemedText>
-  
-        <View style={styles.flexContainer}>
+
+        <View style={styles(palette).flexContainer}>
           <KeyboardAwareFlatList
             ref={flatListRef}
             data={messages}
             keyExtractor={(_, idx) => idx.toString()}
             renderItem={({ item }) => (
-              <View style={styles.messageRow}>
-                <ThemedText style={styles.messageUser}>{item.user}:</ThemedText>
-                <ThemedText style={styles.messageText}>{item.text}</ThemedText>
+              <View style={styles(palette).messageRow}>
+                <ThemedText style={styles(palette).messageUser}>{item.user}:</ThemedText>
+                <ThemedText style={styles(palette).messageText}>{item.text}</ThemedText>
               </View>
             )}
-            style={styles.messageList}
+            style={styles(palette).messageList}
             contentContainerStyle={{ paddingBottom: 80 }}
             keyboardShouldPersistTaps="handled"
             extraHeight={100}
             enableOnAndroid={true}
           />
-  
-          <View style={styles.inputRowContainer}>
-            <View style={styles.inputRow}>
+
+          <View style={styles(palette).inputRowContainer}>
+            <View style={styles(palette).inputRow}>
               <TextInput
-                style={styles.input}
+                style={styles(palette).input}
                 value={chatInput}
                 onChangeText={setChatInput}
                 placeholder="Type a message..."
-                placeholderTextColor={COLORS.textLight}
+                placeholderTextColor={palette.textLight}
                 onSubmitEditing={sendMessage}
                 returnKeyType="send"
               />
-              <Pressable style={styles.sendButton} onPress={sendMessage}>
-                <ThemedText style={styles.sendButtonText}>Send</ThemedText>
+              <Pressable style={styles(palette).sendButton} onPress={sendMessage}>
+                <ThemedText style={styles(palette).sendButtonText}>Send</ThemedText>
               </Pressable>
             </View>
           </View>
         </View>
       </View>
     </KeyboardAvoidingView>
-  );  
+  );
 }
 
-const styles = StyleSheet.create({
+// ---- Dynamic Styles ----
+const styles = (palette: any) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: palette.background,
     padding: 16,
   },
   header: {
     fontSize: 24,
     fontWeight: '700',
-    color: COLORS.primary,
+    color: palette.primary,
     marginBottom: 12,
   },
   messageList: {
@@ -212,17 +214,17 @@ const styles = StyleSheet.create({
   },
   messageUser: {
     fontWeight: 'bold',
-    color: COLORS.primary,
+    color: palette.primary,
     marginRight: 6,
   },
   messageText: {
-    color: COLORS.black,
+    color: palette.black,
   },
   inputRowContainer: {
-    backgroundColor: COLORS.background,
+    backgroundColor: palette.background,
     padding: 8,
     borderTopWidth: 1,
-    borderTopColor: COLORS.primary,
+    borderTopColor: palette.primary,
   },
   inputRow: {
     flexDirection: 'row',
@@ -231,21 +233,21 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: palette.primary,
     borderRadius: 8,
     padding: 8,
-    color: COLORS.textDark,
-    backgroundColor: COLORS.white,
+    color: palette.textDark,
+    backgroundColor: palette.white,
   },
   sendButton: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
     marginLeft: 8,
   },
   sendButtonText: {
-    color: COLORS.white,
+    color: palette.white,
     fontWeight: '700',
   },
   flexContainer: {

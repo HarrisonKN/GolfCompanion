@@ -1,6 +1,6 @@
 // ------------------- IMPORTS -------------------------
 import { supabase, testSupabaseConnection } from "@/components/supabase";
-import { COLORS } from "@/constants/theme"; // new color theme 
+import { useTheme } from "@/components/ThemeContext";
 import * as Location from "expo-location";
 import { useFocusEffect } from "expo-router";
 import haversine from "haversine-distance";
@@ -60,6 +60,8 @@ export default function CourseViewScreen() {
 
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView>(null);
+
+  const { palette } = useTheme();
 
   // Safe state update to avoid changing state after the component is unmounted
   const safeSetState = (setter: any, value: any) => {
@@ -243,8 +245,8 @@ export default function CourseViewScreen() {
 
   // ------------------- COURSE VIEW UI -------------------------
   return (
-    <View style={styles.container}>
-      <View style={styles.overlayContainer}>
+    <View style={styles(palette).container}>
+      <View style={styles(palette).overlayContainer}>
         <DropDownPicker
           placeholder="Select a course..."
           open={courseOpen}
@@ -257,11 +259,11 @@ export default function CourseViewScreen() {
             setSelectedHoleNumber(null);
           }}
           setItems={setCourseItems}
-          style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownContainer}
-          placeholderStyle={styles.placeholder}
-          textStyle={styles.text}
-          listItemLabelStyle={styles.listItemLabel}
+          style={styles(palette).dropdown}
+          dropDownContainerStyle={styles(palette).dropdownContainer}
+          placeholderStyle={styles(palette).placeholder}
+          textStyle={styles(palette).text}
+          listItemLabelStyle={styles(palette).listItemLabel}
           zIndex={2000}
         />
 
@@ -277,11 +279,11 @@ export default function CourseViewScreen() {
               setSelectedHoleNumber(v);
             }}
             setItems={setHoleItems}
-            style={styles.dropdown}
-            dropDownContainerStyle={[styles.dropdownContainer, { maxHeight: 400 }]} // keep maxheight here to display all holes rather than 1-5
-            placeholderStyle={styles.placeholder}
-            textStyle={styles.text}
-            listItemLabelStyle={styles.listItemLabel}
+            style={styles(palette).dropdown}
+            dropDownContainerStyle={[styles(palette).dropdownContainer, { maxHeight: 400 }]} // keep maxheight here to display all holes rather than 1-5
+            placeholderStyle={styles(palette).placeholder}
+            textStyle={styles(palette).text}
+            listItemLabelStyle={styles(palette).listItemLabel}
             zIndex={1000}
           />
         )}
@@ -388,50 +390,48 @@ export default function CourseViewScreen() {
           ))}
       </MapView>
       {distanceToPin !== null && (
-        <View style={styles.distanceOverlay}>
-          <Text style={styles.distanceText}>
+        <View style={styles(palette).distanceOverlay}>
+          <Text style={styles(palette).distanceText}>
             Distance to Pin: {(distanceToPin / 1).toFixed(0)} m
           </Text>
         </View>
       )}
-      <Pressable style={styles.pinButton} onPress={handleDropPin}>
-        <Text style={styles.pinButtonText}>Drop Pin</Text>
+      <Pressable style={styles(palette).pinButton} onPress={handleDropPin}>
+        <Text style={styles(palette).pinButtonText}>Drop Pin</Text>
       </Pressable>
     </View>
   );
 }
 
-
-
 // ------------------- UI Styling -------------------------
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+const styles = (palette: any) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: palette.background },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: COLORS.primary,
+    backgroundColor: palette.background,
     paddingBottom: 20,
     paddingTop:20
   },
   loadingText: {
     marginTop: 10,
     fontSize: 16,
-    color: "#6B7280",
+    color: palette.textLight,
   },
   errorText: {
-    color: "#EF4444",
+    color: palette.error,
     fontSize: 16,
     textAlign: "center",
   },
   retryButton: {
     marginTop: 10,
     padding: 10,
-    backgroundColor: "#3B82F6",
+    backgroundColor: palette.primary,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: "white",
+    color: palette.white,
     fontWeight: "700",
   },
   overlayContainer: {
@@ -443,23 +443,23 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   dropdown: {
-    backgroundColor: "rgba(0,0,0,0.8)",
-    borderColor: "#555",
+    backgroundColor: palette.third,
+    borderColor: palette.primary,
     marginBottom: 8,
   },
   dropdownContainer: {
-    backgroundColor: "rgba(0,0,0,0.9)",
-    borderColor: "#555",
+    backgroundColor: palette.secondary,
+    borderColor: palette.primary,
   },
-  placeholder: { color: "#ccc" },
-  text: { color: "#fff" },
-  listItemLabel: { color: "#fff" },
+  placeholder: { color: palette.textLight },
+  text: { color: palette.textDark },
+  listItemLabel: { color: palette.textDark },
   //-------Pin Button Styling ----- 
   pinButton: {
   position: "absolute",
   bottom: 80,
   left: 20,
-  backgroundColor: "#1D4ED8",
+  backgroundColor: palette.primary,
   paddingVertical: 10,
   paddingHorizontal: 16,
   borderRadius: 8,
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
   elevation: 3,
 },
 pinButtonText: {
-  color: "#fff",
+  color: palette.white,
   fontWeight: "bold",
   fontSize: 14,
 },
@@ -476,14 +476,14 @@ distanceOverlay: {
   position: "absolute",
   top: 80,
   right: 20,
-  backgroundColor: "rgba(0,0,0,0.6)",
+  backgroundColor: palette.third,
   paddingVertical: 8,
   paddingHorizontal: 12,
   borderRadius: 8,
   zIndex: 999,
 },
 distanceText: {
-  color: "#fff",
+  color: palette.white,
   fontWeight: "bold",
   fontSize: 14,
 },

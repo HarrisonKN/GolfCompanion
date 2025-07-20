@@ -1,17 +1,18 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { COLORS } from '@/constants/theme'; // Import your theme
-
+import { useTheme } from '@/components/ThemeContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function TabLayout() {
+  const { palette } = useTheme();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: COLORS.primary, // Use your theme color
+          backgroundColor: palette.primary,
           borderTopLeftRadius: 18,
           borderTopRightRadius: 18,
           height: 64,
@@ -20,14 +21,14 @@ export default function TabLayout() {
           right: 0,
           bottom: 0,
           borderTopWidth: 0,
-          shadowColor: COLORS.black,
+          shadowColor: palette.black,
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.12,
           shadowRadius: 12,
           elevation: 12,
         },
-        tabBarActiveTintColor: COLORS.white,
-        tabBarInactiveTintColor: COLORS.secondary,
+        tabBarActiveTintColor: palette.white,
+        tabBarInactiveTintColor: palette.secondary,
         tabBarShowLabel: true,
         tabBarLabelStyle: {
           fontWeight: '700',

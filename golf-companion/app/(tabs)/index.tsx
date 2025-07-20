@@ -9,7 +9,7 @@ import ParallaxScrollView from '@/components/ParallaxScrollView';
 import RotatingText from '@/components/RotatingText';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
+import { useTheme } from '@/components/ThemeContext';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -20,6 +20,7 @@ import Toast from 'react-native-toast-message';
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
   const { user, loading } = useAuth();
+  const { palette } = useTheme();
 //----------------------------------------------------------------
 // Adding to make it so there is only 1 feature card at a time on the home screen
   const featureCards = [
@@ -54,52 +55,54 @@ export default function HomeScreen() {
   // Show loading state while checking auth
   if (loading) {
     return (
-      <ParallaxScrollView
-        style={{ flex: 1 }}
-        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-        headerImage={
-          <ThemedView style={styles.headerRow}>
-            <View style={styles.logoContainer}>
-              <Image
-                source={require('@/assets/images/golf-logo.png')}
-                style={styles.logo}
-                contentFit="contain"
-              />
-            </View>
-            <View style={styles.rotatingTextContainer}>
-              <ThemedText style={[styles.text]} type="title">Golf</ThemedText>
-              <RotatingText
-                texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
-                rotationInterval={2000}
-              />
-            </View>
+      <ThemedView style={[styles(palette).container]}>
+        <ParallaxScrollView
+          style={{ flex: 1 }}
+          headerBackgroundColor={{ light: palette.background, dark: palette.primary }}
+          headerImage={
+            <ThemedView style={styles(palette).headerRow}>
+              <View style={styles(palette).logoContainer}>
+                <Image
+                  source={require('@/assets/images/golf-logo.png')}
+                  style={styles(palette).logo}
+                  contentFit="contain"
+                />
+              </View>
+              <View style={styles(palette).rotatingTextContainer}>
+                <ThemedText style={[styles(palette).text]} type="title">Golf</ThemedText>
+                <RotatingText
+                  texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
+                  rotationInterval={2000}
+                />
+              </View>
+            </ThemedView>
+          }
+          contentContainerStyle={styles(palette).contentContainer}
+        >
+          <ThemedView style={styles(palette).authContainer}>
+            <ThemedText type="subtitle" style={styles(palette).authTitle}>Loading...</ThemedText>
           </ThemedView>
-        }
-        contentContainerStyle={styles.contentContainer} 
-      >
-        <ThemedView style={styles.authContainer}>
-          <ThemedText type="subtitle" style={styles.authTitle}>Loading...</ThemedText>
-        </ThemedView>
-      </ParallaxScrollView>
+        </ParallaxScrollView>
+      </ThemedView>
     );
   }
 
   // ------------------- UI Setup -------------------------
   return (
-    <>
+    <ThemedView style={[styles(palette).container]}>
       <ParallaxScrollView
-        headerBackgroundColor={{ light: COLORS.background, dark: COLORS.primary }}
+        headerBackgroundColor={{ light: palette.background, dark: palette.primary }}
         headerImage={
-          <ThemedView style={styles.headerRow}>
-            <View style={styles.logoContainer}>
+          <ThemedView style={styles(palette).headerRow}>
+            <View style={styles(palette).logoContainer}>
               <Image
                 source={require('@/assets/images/golf-logo.png')}
-                style={styles.logo}
+                style={styles(palette).logo}
                 contentFit="contain"
               />
             </View>
-            <View style={styles.rotatingTextContainer}>
-              <ThemedText style={[styles.text]} type="title">Golf</ThemedText>
+            <View style={styles(palette).rotatingTextContainer}>
+              <ThemedText style={[styles(palette).text]} type="title">Golf</ThemedText>
               <RotatingText
                 texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
                 rotationInterval={2000}
@@ -107,38 +110,38 @@ export default function HomeScreen() {
             </View>
           </ThemedView>
         }
+        contentContainerStyle={styles(palette).contentContainer}
       >
         {/* Conditional Auth/Welcome Section */}
-        <ThemedView style={styles.authContainer}>
+        <ThemedView style={styles(palette).authContainer}>
           {user ? (
             <>
-              <ThemedText type="subtitle" style={styles.authTitle}>Welcome Back!</ThemedText>
-              <ThemedText style={styles.welcomeText}>
+              <ThemedText type="subtitle" style={styles(palette).authTitle}>Welcome Back!</ThemedText>
+              <ThemedText style={styles(palette).welcomeText}>
                 Ready for another round? Check out your scores and course views.
               </ThemedText>
-              {/* Example: Add a button for logged-in users */}
               <Pressable
-                style={styles.authButton}
+                style={styles(palette).authButton}
                 onPress={() => router.push('/course-view')}
               >
-                <ThemedText style={styles.authButtonText}>Go to Course View</ThemedText>
+                <ThemedText style={styles(palette).authButtonText}>Go to Course View</ThemedText>
               </Pressable>
             </>
           ) : (
             <>
-              <ThemedText type="subtitle" style={styles.authTitle}>Get Started</ThemedText>
-              <ThemedView style={styles.buttonRow}>
+              <ThemedText type="subtitle" style={styles(palette).authTitle}>Get Started</ThemedText>
+              <ThemedView style={styles(palette).buttonRow}>
                 <Pressable
-                  style={styles.authButton}
+                  style={styles(palette).authButton}
                   onPress={() => router.push('/login')}
                 >
-                  <ThemedText style={styles.authButtonText}>Login</ThemedText>
+                  <ThemedText style={styles(palette).authButtonText}>Login</ThemedText>
                 </Pressable>
                 <Pressable
-                  style={styles.authButton}
+                  style={styles(palette).authButton}
                   onPress={() => router.push('/signup')}
                 >
-                  <ThemedText style={styles.authButtonText}>Sign Up</ThemedText>
+                  <ThemedText style={styles(palette).authButtonText}>Sign Up</ThemedText>
                 </Pressable>
               </ThemedView>
             </>
@@ -146,17 +149,17 @@ export default function HomeScreen() {
         </ThemedView>
 
         {/* App Overview */}
-        <ThemedView style={styles.sectionContainer}>
-          <ThemedText type="subtitle" style={styles.featureTitle}>🏌️‍♂️ Your Ultimate Golf Companion</ThemedText>
-          <ThemedText style={styles.featureText}>
+        <ThemedView style={styles(palette).sectionContainer}>
+          <ThemedText type="subtitle" style={styles(palette).featureTitle}>🏌️‍♂️ Your Ultimate Golf Companion</ThemedText>
+          <ThemedText style={styles(palette).featureText}>
             {`Connect with friends, track scores, and make your golf rounds more fun, social, and smart.`}
           </ThemedText>
         </ThemedView>
 
         {/* Rest of your feature cards remain the same */}
-        <ThemedView style={styles.featureCard}>
-          <ThemedText type="subtitle" style={styles.featureTitle}>{featureCards[currentCardIndex].title}</ThemedText>
-          <ThemedText style={styles.featureText}>
+        <ThemedView style={styles(palette).featureCard}>
+          <ThemedText type="subtitle" style={styles(palette).featureTitle}>{featureCards[currentCardIndex].title}</ThemedText>
+          <ThemedText style={styles(palette).featureText}>
             {featureCards[currentCardIndex].description}
           </ThemedText>
         </ThemedView>
@@ -164,12 +167,26 @@ export default function HomeScreen() {
 
       </ParallaxScrollView>  
       <Toast/>
-    </>
+    </ThemedView>
   );
 }
 
 // ------------------- UI Styling -------------------------
-const styles = StyleSheet.create({
+// Add this type definition above your styles function or import it from your theme context if already defined
+type PaletteType = {
+  background: string;
+  primary: string;
+  secondary: string;
+  third: string;
+  black: string;
+  white: string;
+  textDark: string;
+};
+const styles = (palette: PaletteType) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: palette.background, // full-page background
+  },
   titleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -190,7 +207,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   headerRow: {
-    backgroundColor: COLORS.third,
+    backgroundColor: palette.third,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -212,11 +229,11 @@ const styles = StyleSheet.create({
   golfTextContainer: {
     justifyContent: 'center',
     alignItems: 'flex-start',
-    width: 60, // fixed width for "Golf" text
+    width: 60,
     marginRight: 8,
   },
   rotatingTextContainer: {
-    flex: 1, // flex only this container
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'flex-start',
     minWidth: 60,
@@ -225,16 +242,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginVertical: 10,
     alignItems: 'center',
-    backgroundColor:COLORS.background,
+    backgroundColor: palette.background,
   },
-  
   featureCard: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: palette.secondary,
     padding: 10,
     borderRadius: 12,
     marginHorizontal: 16,
     marginVertical: 5,
-    shadowColor: '#000',
+    shadowColor: palette.black,
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
@@ -243,80 +259,57 @@ const styles = StyleSheet.create({
   featureText:{
     fontSize: 14,
     textAlign: 'center',
-    color: COLORS.textDark,
+    color: palette.textDark,
   },
-  //added to change the headings of the feature cards
   featureTitle: {
-  color: COLORS.textDark, 
-  fontWeight: 'bold',
-  fontSize: 16,
-  textAlign: 'center',
-  marginBottom: 4,
-},
+    color: palette.textDark, 
+    fontWeight: 'bold',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
   authContainer: {
     marginTop: 10,
     marginBottom: 10,
     paddingHorizontal: 16,
     alignItems: 'center',
-    backgroundColor: COLORS.background,
+    backgroundColor: palette.background,
   },
-  
   authTitle: {
     marginBottom: 12,
     fontWeight: 'bold',
-    color: COLORS.textDark,
+    color: palette.textDark,
   },
-  
   buttonRow: {
-    backgroundColor: COLORS.background,
+    backgroundColor: palette.background,
     flexDirection: 'row',
     gap: 16,
   },
-  
-  /*authButton: {
+  authButton: {
+    backgroundColor: palette.third,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     elevation: 3,
-    backgroundColor: COLORS.primary,
   },
-  
   authButtonText: {
-    color: COLORS.textDark,
-    fontWeight: '600',
+    color: palette.white,
+    fontWeight: '700',
     fontSize: 16,
-    backgroundColor: COLORS.primary,
-  },*/
-  authButton: {
-  backgroundColor: COLORS.third,
-  paddingVertical: 12,
-  paddingHorizontal: 24,
-  borderRadius: 8,
-  elevation: 3,
-},
-authButtonText: {
-  color: COLORS.white,
-  fontWeight: '700',
-  fontSize: 16,
-  letterSpacing: 0.5,
-},
+    letterSpacing: 0.5,
+  },
   text: {
-    color: COLORS.secondary,
-  
+    color: palette.secondary,
   },
   welcomeText: {
     textAlign: 'center',
     fontSize: 14,
-    color: COLORS.textDark,
+    color: palette.textDark,
   },
-  //--------------Main Page Container---------------
   contentContainer: {
-  flexGrow: 1,
-  justifyContent: 'space-between', // optionally push content upward
-  backgroundColor: COLORS.background,
-  paddingBottom: 20, // prevents content touching bottom nav bar
-},
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    backgroundColor: palette.background,
+    paddingBottom: 20,
+  },
 });

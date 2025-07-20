@@ -1,18 +1,5 @@
 // constants/theme.ts
 
-export const COLORS = {
-  primary: "#609966",
-  background: "#E9EBF8", //Lavender(Web) think this is a really nice off white color not as harsh 
-  secondary: "#9DC08b",
-  third:"#4B5842",
-  error: "#EF4444",
-  textDark: "#111827",
-  textLight: "#6B7280",
-  white: "#FFFFFF",
-  black: "#000000",
-  grey: "#9CA3AF",
-};
-
 export const SIZES = {
   base: 8,
   font: 14,
@@ -32,5 +19,32 @@ export const SHADOWS = {
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 4,
+  },
+};
+
+export const PALETTES = {
+  light: {
+    primary: "#609966",
+    background: "#E9EBF8",
+    secondary: "#9DC08b",
+    third: "#4B5842",
+    error: "#EF4444",
+    textDark: "#111827",
+    textLight: "#6B7280",
+    white: "#FFFFFF",
+    black: "#000000",
+    grey: "#9CA3AF",
+  },
+  dark: {
+    primary: "#7FC7AF",
+    background: "#1A3636",
+    secondary: "#1B2A41",
+    third: "#0F1924",
+    error: "#EF4444",
+    textDark: "#F3F4F6",
+    textLight: "#9CA3AF",
+    white: "#23272F",
+    black: "#FFFFFF",
+    grey: "#374151",
   },
 };

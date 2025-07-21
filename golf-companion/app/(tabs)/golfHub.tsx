@@ -599,47 +599,6 @@ export default function GolfHubScreen() {
           </View>
         </View>
       </Modal>
-
-      <Pressable onPress={() => setInviteModalVisible(true)} style={[styles(palette).createButton, { marginTop: 12 }]}>
-        <ThemedText style={styles(palette).createButtonText}>Invite Friends</ThemedText>
-      </Pressable>
-      <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
-        <View style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: 'rgba(0,0,0,0.3)'
-        }}>
-          <View style={{
-            backgroundColor: palette.white,
-            padding: 24,
-            borderRadius: 16,
-            width: '80%',
-            alignItems: 'center'
-          }}>
-            <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12 }}>Select friends to invite:</ThemedText>
-            {friends.length === 0 ? (
-              <ThemedText style={{ color: palette.error }}>No friends found.</ThemedText>
-            ) : (
-              friends.map(f => (
-                <Pressable
-                  key={f.friend_id}
-                  style={[styles(palette).createButton, { marginBottom: 8, width: '100%' }]}
-                  onPress={() => joinedGroupId && inviteFriend(f.friend_id, joinedGroupId)}
-                >
-                  <ThemedText style={styles(palette).createButtonText}>{f.profiles?.full_name}</ThemedText>
-                </Pressable>
-              ))
-            )}
-            <Pressable
-              style={[styles(palette).leaveButton, { marginTop: 12 }]}
-              onPress={() => setInviteModalVisible(false)}
-            >
-              <ThemedText style={styles(palette).leaveButtonText}>Close</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </ThemedView>
   );
 }

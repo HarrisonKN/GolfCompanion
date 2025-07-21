@@ -6,7 +6,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme } from "@/components/ThemeContext";
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput, RefreshControl } from 'react-native';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -53,6 +53,10 @@ export default function AccountsScreen() {
   const [search, setSearch] = useState('');
   const [findFriendsModalVisible, setFindFriendsModalVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const [hideInviteBanner, setHideInviteBanner] = useState(false);
+  const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
 
   const { palette } = useTheme();
 
@@ -226,7 +230,7 @@ export default function AccountsScreen() {
 
   useEffect(() => {
     const fetchFriends = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('friends')
         .select('friend_id, profiles(full_name)')
         .eq('user_id', user.id);
@@ -237,50 +241,138 @@ export default function AccountsScreen() {
 
   const handleSearch = async () => {
     if (!search.trim()) return;
-    const { data, error } = await supabase
+    const { data, error, status } = await supabase
       .from('profiles')
       .select('id, full_name, email')
-      .ilike('full_name', `%${search.trim()}%`); // or use .ilike('email', `%${search.trim()}%`)
+      .ilike('full_name', `%${search.trim()}%`);
+    console.log('Find Friends Search Query:', { search: search.trim(), status, error, data });
     setSearchResults(data || []);
   };
 
   // Add friend handler
   const handleAddFriend = async (friendId: string) => {
-    if (!user || !friendId) return;
-    try {
-      // Prevent adding yourself
-      if (user.id === friendId) {
-        Alert.alert('Cannot add yourself as a friend.');
-        return;
-      }
-      // Check if already friends
-      const { data: existing } = await supabase
-        .from('friends')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('friend_id', friendId)
-        .single();
-      if (existing) {
-        Alert.alert('Already friends with this user.');
-        return;
-      }
-      // Add friend
-      const { error } = await supabase
-        .from('friends')
-        .insert({ user_id: user.id, friend_id: friendId });
-      if (error) throw error;
-      Alert.alert('Friend added!');
-      setFindFriendsModalVisible(false);
-      // Optionally refresh friends list
-      const { data } = await supabase
-        .from('friends')
-        .select('friend_id, profiles(full_name)')
-        .eq('user_id', user.id);
-      setFriends(data || []);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to add friend.');
+    // Prevent adding yourself
+    if (user.id === friendId) {
+      Alert.alert('Cannot add yourself as a friend.');
+      return;
     }
+    // Check if already requested
+    const { data: existing, error: existingError } = await supabase
+      .from('friend_requests')
+      .select('id')
+      .eq('requester_user_id', user.id)
+      .eq('requested_user_id', friendId)
+      .eq('status', 'pending')
+      .single();
+    if (existing) {
+      Alert.alert('Friend request already sent.');
+      return;
+    }
+    // Send friend request
+    await supabase.from('friend_requests').insert({
+      requester_user_id: user.id,
+      requested_user_id: friendId,
+      status: 'pending'
+    });
+    Alert.alert('Friend request sent!');
+    setFindFriendsModalVisible(false);
   };
+
+  // Refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchProfile();
+    await fetchRounds();
+  
+    // Friends
+    const { data: friendsData } = await supabase
+      .from('friends')
+      .select('friend_id, profiles:friend_id(full_name)')
+      .eq('user_id', user.id);
+    setFriends(friendsData || []);
+  
+    // Invites
+    const { data: invitesData } = await supabase
+      .from('hubroom_invites')
+      .select('id, group_id, voice_groups(name), inviter_user_id, status')
+      .eq('invited_user_id', user.id)
+      .eq('status', 'pending');
+    setPendingInvites(invitesData || []);
+  
+    // Friend Requests
+    const { data: requestsData } = await supabase
+      .from('friend_requests')
+      .select('*')
+      .eq('requested_user_id', user.id)
+      .eq('status', 'pending');
+    setPendingFriendRequests(requestsData || []);
+  
+    setRefreshing(false);
+  };
+
+  // Example: Show pending invites for current user
+  useEffect(() => {
+    const fetchInvites = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('hubroom_invites')
+        .select('id, group_id, voice_groups(name), inviter_user_id, status')
+        .eq('invited_user_id', user.id)
+        .eq('status', 'pending');
+      setPendingInvites(data || []);
+    };
+    fetchInvites();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const fetchFriendRequests = async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from('friend_requests')
+        .select('*')
+        .eq('requested_user_id', user.id)
+        .eq('status', 'pending');
+      setPendingFriendRequests(data || []);
+    };
+    fetchFriendRequests();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const fetchMyGroups = async () => {
+      if (!user?.id) return;
+      const { data: myGroups } = await supabase
+        .from('voice_groups')
+        .select('*')
+        .or(`creator_id.eq.${user.id},invited_users.cs.{${user.id}}`);
+      console.log('My Groups:', myGroups);
+    };
+    fetchMyGroups();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const fetchInvitedGroups = async () => {
+      if (!user?.id) return;
+      const { data: invitedGroups } = await supabase
+        .from('hubroom_invites')
+        .select('group_id, voice_groups(*)')
+        .eq('invited_user_id', user.id)
+        .eq('status', 'accepted');
+      console.log('Invited Groups:', invitedGroups);
+    };
+    fetchInvitedGroups();
+  }, [user?.id]);
+
+  useEffect(() => {
+    const fetchCreatedGroups = async () => {
+      if (!user?.id) return;
+      const { data: createdGroups, error: creatorError } = await supabase
+        .from('voice_groups')
+        .select('*')
+        .eq('creator_id', user.id);
+      console.log('Created Groups:', createdGroups);
+    };
+    fetchCreatedGroups();
+  }, [user?.id]);
 
   // Early returns for loading and error states
   if (!isMounted || authLoading || isRedirecting) {
@@ -346,7 +438,18 @@ export default function AccountsScreen() {
 
 // ------------------- ACCOUNTS UI -------------------------
   return (
-    <ScrollView style={styles(palette).screen} contentContainerStyle={{ paddingBottom: SCREEN_HEIGHT * 0.10 }}>
+    <ScrollView
+      style={styles(palette).screen}
+      contentContainerStyle={{ paddingBottom: SCREEN_HEIGHT * 0.10 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={[palette.primary]}
+          tintColor={palette.primary}
+        />
+      }
+    >
       {/* Smaller Header */}
       <View style={styles(palette).headerSmall}>
         <ThemedText type="title" style={styles(palette).headerTitleSmall}>
@@ -701,6 +804,83 @@ export default function AccountsScreen() {
           </View>
         </Modal>
       </View>
+      {(pendingInvites.length > 0) && !hideInviteBanner && (
+        <View style={styles(palette).notificationBanner}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <ThemedText style={styles(palette).notificationText}>
+              You have {pendingInvites.length} group invite{pendingInvites.length > 1 ? 's' : ''}!
+            </ThemedText>
+            <Pressable onPress={() => setHideInviteBanner(true)}>
+              <MaterialIcons name="close" size={22} color={palette.white} />
+            </Pressable>
+          </View>
+        </View>
+      )}
+      {/* If you add friend requests: */}
+      {pendingFriendRequests.map(request => (
+        <View key={request.id}>
+          <ThemedText>Friend request from {request.requester_user_id}</ThemedText>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable
+              style={styles(palette).acceptInviteButton}
+              onPress={async () => {
+                try {
+                  await supabase.from('friends').insert([
+                    { user_id: user.id, friend_id: request.requester_user_id },
+                    { user_id: request.requester_user_id, friend_id: user.id }
+                  ]);
+                  await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', request.id);
+                  Alert.alert('Friend Added!', 'You are now friends.');
+                } catch (err) {
+                  if (!String(err).includes('duplicate')) {
+                    Alert.alert('Error', 'Could not add friend.');
+                  }
+                }
+                onRefresh();
+              }}
+            >
+              <ThemedText style={styles(palette).acceptInviteButtonText}>Accept Request</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles(palette).declineInviteButton}
+              onPress={async () => {
+                await supabase.from('friend_requests').update({ status: 'declined' }).eq('id', request.id);
+                Alert.alert('Request Declined', 'Friend request declined.');
+                onRefresh();
+              }}
+            >
+              <ThemedText style={styles(palette).declineInviteButtonText}>Decline Request</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      ))}
+      {pendingInvites.map(invite => (
+        <View key={invite.id}>
+          <ThemedText>Group invite from {invite.inviter_user_id}</ThemedText>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable
+              style={styles(palette).acceptInviteButton}
+              onPress={async () => {
+                await supabase.from('hubroom_invites').update({ status: 'accepted' }).eq('id', invite.id);
+                Alert.alert('Invite Accepted', 'You have joined the group.');
+                onRefresh();
+              }}
+            >
+              <ThemedText style={styles(palette).acceptInviteButtonText}>Accept Invite</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles(palette).declineInviteButton}
+              onPress={async () => {
+                await supabase.from('hubroom_invites').update({ status: 'declined' }).eq('id', invite.id);
+                Alert.alert('Invite Declined', 'Group invite declined.');
+                onRefresh();
+              }}
+            >
+              <ThemedText style={styles(palette).declineInviteButtonText}>Decline Invite</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      ))}
     </ScrollView>
   );
 }
@@ -1034,5 +1214,44 @@ const styles = (palette: any) => StyleSheet.create({
     marginLeft: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  notificationBanner: {
+    backgroundColor: palette.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  notificationText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  acceptInviteButton: {
+    backgroundColor: palette.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  acceptInviteButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  declineInviteButton: {
+    backgroundColor: palette.error,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  declineInviteButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 14,
   },
 });

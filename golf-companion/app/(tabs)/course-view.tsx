@@ -334,12 +334,12 @@ export default function CourseViewScreen() {
                 latitude: selectedHole.tee_latitude!,
                 longitude: selectedHole.tee_longitude!,
               }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={{ x: 0.6, y: 1}}
               title={`Hole ${selectedHole.hole_number} Tee`}
             >
               <Image
                 source={require("@/assets/images/golf-logo.png")}
-                style={{ width: 30, height: 30 }}
+                style={{ width: 50, height: 50, tintColor: palette.yellow,}}
                 resizeMode="contain"
               />
             </Marker>
@@ -348,12 +348,12 @@ export default function CourseViewScreen() {
                 latitude: selectedHole.green_latitude!,
                 longitude: selectedHole.green_longitude!,
               }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={{ x: 0.6, y: 1 }}
               title={`Hole ${selectedHole.hole_number} Green`}
             >
               <Image
                 source={require("@/assets/images/flag.png")}
-                style={{ width: 30, height: 30 }}
+                style={{ width: 50, height: 50 }}
                 resizeMode="contain"
               />
             </Marker>
@@ -531,8 +531,8 @@ pinButtonText: {
 //---------Distance Overlay Styling ------
 distanceOverlay: {
   position: "absolute",
-  top: 80,
-  right: 20,
+  top: 105,
+  right: 50,
   backgroundColor: palette.third,
   paddingVertical: 8,
   paddingHorizontal: 12,

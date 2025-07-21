@@ -57,7 +57,8 @@ export default function HomeScreen() {
     return (
       <ThemedView style={[styles(palette).container]}>
         <ParallaxScrollView
-          style={{ flex: 1 }}
+        style={styles(palette).scrollRoot}
+        contentContainerStyle={styles(palette).scrollContent}
           headerBackgroundColor={{ light: palette.background, dark: palette.primary }}
           headerImage={
             <ThemedView style={styles(palette).headerRow}>
@@ -77,7 +78,7 @@ export default function HomeScreen() {
               </View>
             </ThemedView>
           }
-          contentContainerStyle={styles(palette).contentContainer}
+          //contentContainerStyle={styles(palette).contentContainer}
         >
           <ThemedView style={styles(palette).authContainer}>
             <ThemedText type="subtitle" style={styles(palette).authTitle}>Loading...</ThemedText>
@@ -91,6 +92,8 @@ export default function HomeScreen() {
   return (
     <ThemedView style={[styles(palette).container]}>
       <ParallaxScrollView
+      style={styles(palette).scrollRoot}
+      contentContainerStyle={styles(palette).scrollContent}
         headerBackgroundColor={{ light: palette.background, dark: palette.primary }}
         headerImage={
           <ThemedView style={styles(palette).headerRow}>
@@ -110,7 +113,7 @@ export default function HomeScreen() {
             </View>
           </ThemedView>
         }
-        contentContainerStyle={styles(palette).contentContainer}
+        //contentContainerStyle={styles(palette).contentContainer}
       >
         {/* Conditional Auth/Welcome Section */}
         <ThemedView style={styles(palette).authContainer}>
@@ -193,11 +196,13 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     justifyContent: 'center',
     marginVertical: 5,
     gap:8,
+    
   },
   stepContainer: {
     marginTop:0,
     gap: 8,
     marginBottom: 8,
+    
   },
   reactLogo: {
     height: 178,
@@ -231,6 +236,7 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     alignItems: 'flex-start',
     width: 60,
     marginRight: 8,
+    
   },
   rotatingTextContainer: {
     flex: 1,
@@ -310,6 +316,16 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'space-between',
     backgroundColor: palette.background,
+    paddingBottom: 20,
+  },
+  scrollRoot: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: palette.background,
+    justifyContent: "space-between",
     paddingBottom: 20,
   },
 });

@@ -29,14 +29,19 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Restore session from SecureStore on mount
   useEffect(() => {
     const restoreSession = async () => {
+      console.log('Starting session restore...');
       const accessToken = await SecureStore.getItemAsync('supabase_access_token');
       const refreshToken = await SecureStore.getItemAsync('supabase_refresh_token');
-      console.log('RestoreSession: accessToken', accessToken, 'refreshToken', refreshToken);
+      console.log('RestoreSession: accessToken length:', accessToken?.length || 0);
+      console.log('RestoreSession: refreshToken length:', refreshToken?.length || 0);
+
       if (accessToken && refreshToken) {
+        console.log('Both tokens found, restoring session...');
         const { data, error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -45,34 +50,55 @@ export function AuthProvider({ children }: AuthProviderProps) {
           console.log('Failed to restore session:', error);
           await SecureStore.deleteItemAsync('supabase_access_token');
           await SecureStore.deleteItemAsync('supabase_refresh_token');
+        } else {
+          console.log('Session restored successfully');
         }
+      } else {
+        console.log('Missing tokens, cannot restore session');
       }
-      // Always get the latest session from Supabase
+      
+      // Always get the current session and update state
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
       setLoading(false);
+      setIsInitialized(true);
+      console.log('Session restore complete. User:', session?.user ? 'found' : 'not found');
     };
     restoreSession();
   }, []);
 
   // Listen for auth state changes and sync with SecureStore
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state change:', event);
+      console.log('Session present:', !!session);
+      
+      // Don't clear tokens on INITIAL_SESSION if we haven't finished restoring yet
+      if (event === 'INITIAL_SESSION' && !isInitialized) {
+        console.log('Skipping INITIAL_SESSION cleanup - still restoring');
+        return;
+      }
+      
       if (session) {
-        // Store only tokens, not the whole session object
+        console.log('Saving tokens to SecureStore');
+        console.log('Access token present:', !!session.access_token);
+        console.log('Refresh token present:', !!session.refresh_token);
+        
         SecureStore.setItemAsync('supabase_access_token', session.access_token);
         SecureStore.setItemAsync('supabase_refresh_token', session.refresh_token);
         setUser(session.user);
       } else {
+        console.log('Clearing tokens from SecureStore');
         SecureStore.deleteItemAsync('supabase_access_token');
         SecureStore.deleteItemAsync('supabase_refresh_token');
         setUser(null);
       }
     });
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [isInitialized]);
 
   const signOut = async () => {
+    console.log('Signing out...');
     await supabase.auth.signOut();
     await SecureStore.deleteItemAsync('supabase_access_token');
     await SecureStore.deleteItemAsync('supabase_refresh_token');

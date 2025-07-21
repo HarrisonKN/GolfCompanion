@@ -10,7 +10,7 @@ import Animated, {
 
 import { ThemedView } from '@/components/ThemedView';
 import { useBottomTabOverflow } from '@/components/ui/TabBarBackground';
-import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
+import { Colors } from "@/constants/Colors"; //Importing Color themes for consistency
 import { useColorScheme } from '@/hooks/useColorScheme';
 import React from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
@@ -104,6 +104,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    backgroundColor: COLORS.background,
+    backgroundColor: Colors.light.background
   },
 });

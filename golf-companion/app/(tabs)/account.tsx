@@ -59,6 +59,45 @@ export default function AccountsScreen() {
   const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
 
   const { palette } = useTheme();
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000); // Hide after 2 seconds
+  }
+
+  // FriendTile component
+  function FriendTile({ friend }: { friend: any }) {
+    const { palette } = useTheme();
+    return (
+      <View style={styles(palette).friendTile}>
+        <View style={styles(palette).friendAvatarCircle}>
+          <ThemedText style={styles(palette).friendAvatarText}>
+            {friend.profiles?.full_name ? friend.profiles.full_name[0].toUpperCase() : '?'}
+          </ThemedText>
+        </View>
+        <View style={{ marginLeft: 12 }}>
+          <ThemedText style={styles(palette).friendTileName}>{friend.profiles?.full_name ?? 'Unknown'}</ThemedText>
+          <ThemedText style={styles(palette).friendTileEmail}>{friend.profiles?.email ?? ''}</ThemedText>
+        </View>
+      </View>
+    );
+  }
+
+  function SectionDivider() {
+    const { palette } = useTheme();
+    return (
+      <View style={{
+        height: 1,
+        backgroundColor: palette.grey,
+        marginVertical: 18,
+        marginHorizontal: 16,
+        opacity: 0.5,
+        borderRadius: 1,
+      }} />
+    );
+  }
+
 
   // Handle mounting state
   useEffect(() => {
@@ -212,11 +251,15 @@ export default function AccountsScreen() {
   );
 
   const handleLogout = async () => {
-    if (isRedirecting) return; //this line prevents multiple logout attempts and redirects if already trying to redirect
+    if (isRedirecting) return;
     try {
       await signOut();
-      safeNavigate('/login'); //after signing out, redirect to login
+      setIsRedirecting(true);
+      safeNavigate('/login');
+      // Reset isRedirecting after 2 seconds in case navigation fails
+      setTimeout(() => setIsRedirecting(false), 2000);
     } catch (error: any) {
+      setIsRedirecting(false);
       console.error('Logout error:', error);
       Alert.alert('Logout Error', 'An error occurred while logging out');
     }
@@ -229,15 +272,16 @@ export default function AccountsScreen() {
   };
 
   useEffect(() => {
+    if (!user?.id) return;
     const fetchFriends = async () => {
       const { data, error } = await supabase
         .from('friends')
-        .select('friend_id, profiles(full_name)')
+        .select('friend_id, profiles:friend_id(full_name)')
         .eq('user_id', user.id);
       setFriends(data || []);
     };
     fetchFriends();
-  }, [user]);
+  }, [user?.id]);
 
   const handleSearch = async () => {
     if (!search.trim()) return;
@@ -374,6 +418,44 @@ export default function AccountsScreen() {
     fetchCreatedGroups();
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Friend Requests
+    const friendRequestChannel = supabase
+      .channel('public:friend_requests')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: `requested_user_id=eq.${user.id}` },
+        (payload) => {
+          // New friend request received
+          showToast('New friend request received!');
+          // Optionally, fetch updated requests
+          setPendingFriendRequests(prev => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    // Hubroom Invites
+    const inviteChannel = supabase
+      .channel('public:hubroom_invites')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'hubroom_invites', filter: `invited_user_id=eq.${user.id}` },
+        (payload) => {
+          // New group invite received
+          showToast('New group invite received!');
+          setPendingInvites(prev => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      friendRequestChannel.unsubscribe();
+      inviteChannel.unsubscribe();
+    };
+  }, [user?.id]);
+
   // Early returns for loading and error states
   if (!isMounted || authLoading || isRedirecting) {
     return (
@@ -450,6 +532,25 @@ export default function AccountsScreen() {
         />
       }
     >
+      {toast && (
+        <View style={{
+          position: 'absolute',
+          top: 60,
+          alignSelf: 'center',
+          backgroundColor: palette.primary,
+          paddingHorizontal: 24,
+          paddingVertical: 10,
+          borderRadius: 20,
+          zIndex: 999,
+          shadowColor: palette.black,
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 2 },
+        }}>
+          <ThemedText style={{ color: palette.white, fontWeight: '700', fontSize: 16 }}>{toast}</ThemedText>
+        </View>
+      )}
+
       {/* Smaller Header */}
       <View style={styles(palette).headerSmall}>
         <ThemedText type="title" style={styles(palette).headerTitleSmall}>
@@ -499,6 +600,8 @@ export default function AccountsScreen() {
         <StatTile label="Fairways Hit" value={profile.fairways_hit?.toString() ?? 'N/A'} />
         <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
       </View>
+
+      <SectionDivider />
 
       <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
         Round History
@@ -730,28 +833,41 @@ export default function AccountsScreen() {
           </ScrollView>
         </View>
       </Modal>
-      <View>
-      <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
-        My Friends
-      </ThemedText>
-        {friends.length === 0 ? (
-          <ThemedText style={styles(palette).infoText}>No friends found.</ThemedText>
-        ) : (
-          friends.map(f => (
-            <View key={f.friend_id} style={{ marginBottom: 8 }}>
-              <ThemedText style={styles(palette).accountName}>{f.profiles?.full_name}</ThemedText>
-            </View>
-          ))
-        )}
-        {/* Add friend UI */}
-        <View style={{ marginTop: 16, alignItems: 'center' }}>
-          <Pressable
+
+      <SectionDivider />
+
+
+      <View style={styles(palette).friendsSection}>
+        <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
+          My Friends
+        </ThemedText>
+        <Pressable
             style={styles(palette).createButton}
             onPress={() => setFindFriendsModalVisible(true)}
           >
             <ThemedText style={styles(palette).createButtonText}>Find Friends</ThemedText>
           </Pressable>
-        </View>
+        {friends.length === 0 ? (
+          <ThemedText style={styles(palette).infoText}>No friends found.</ThemedText>
+        ) : (
+          <View style={styles(palette).friendsGrid}>
+            {friends.map(f => (
+              <View key={f.friend_id} style={styles(palette).friendTile}>
+                <View style={styles(palette).friendAvatarCircle}>
+                  <ThemedText style={styles(palette).friendAvatarText}>
+                    {f.profiles?.full_name ? f.profiles.full_name[0].toUpperCase() : '?'}
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles(palette).friendTileName} numberOfLines={1}>
+                  {f.profiles?.full_name ?? 'Unknown'}
+                </ThemedText>
+                <ThemedText style={styles(palette).friendTileEmail} numberOfLines={1}>
+                  {f.profiles?.email ?? ''}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        )}
         <Modal visible={findFriendsModalVisible} transparent animationType="slide" onRequestClose={() => setFindFriendsModalVisible(false)}>
           <View style={{
             flex: 1,
@@ -862,7 +978,7 @@ export default function AccountsScreen() {
               style={styles(palette).acceptInviteButton}
               onPress={async () => {
                 await supabase.from('hubroom_invites').update({ status: 'accepted' }).eq('id', invite.id);
-                Alert.alert('Invite Accepted', 'You have joined the group.');
+                showToast('Invite Accepted, You have joined the group.');
                 onRefresh();
               }}
             >
@@ -872,14 +988,15 @@ export default function AccountsScreen() {
               style={styles(palette).declineInviteButton}
               onPress={async () => {
                 await supabase.from('hubroom_invites').update({ status: 'declined' }).eq('id', invite.id);
-                Alert.alert('Invite Declined', 'Group invite declined.');
-                onRefresh();
+                showToast('Invite Declined');
+                setPendingInvites(prev => prev.filter(i => i.id !== invite.id));
               }}
             >
               <ThemedText style={styles(palette).declineInviteButtonText}>Decline Invite</ThemedText>
             </Pressable>
           </View>
         </View>
+        
       ))}
     </ScrollView>
   );
@@ -1253,5 +1370,62 @@ const styles = (palette: any) => StyleSheet.create({
     color: palette.white,
     fontWeight: '700',
     fontSize: 14,
+  },
+  friendsSection: {
+    marginTop: 24,
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  friendsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 12,
+    marginTop: 8,
+  },
+  friendTile: {
+    width: 90,
+    height: 90,
+    backgroundColor: palette.white,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: palette.grey,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+    padding: 6,
+  },
+  friendAvatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: palette.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  friendAvatarText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  friendTileName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: palette.primary,
+    textAlign: 'center',
+    marginBottom: 2,
+    maxWidth: 80,
+  },
+  friendTileEmail: {
+    fontSize: 10,
+    color: palette.textLight,
+    textAlign: 'center',
+    maxWidth: 80,
   },
 });

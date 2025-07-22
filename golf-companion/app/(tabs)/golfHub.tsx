@@ -36,6 +36,7 @@ type VoiceGroup = {
   name: string;
   description?: string;
   created_at?: string;
+  creator_id: string;
 };
 
 export default function GolfHubScreen() {
@@ -61,6 +62,8 @@ export default function GolfHubScreen() {
   const router = useRouter();
   const [friends, setFriends] = useState<any[]>([]);
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
 
   const engineRef = useRef<any>(null); // Use 'any' or the correct instance type if available
   const flatListRef = useRef<FlatList>(null);
@@ -239,13 +242,15 @@ export default function GolfHubScreen() {
   useEffect(() => {
     const fetchGroups = async () => {
       const { data, error } = await supabase
-        .from('voice_groups')
-        .select('*')
-        .order('created_at', { ascending: true });
-      if (!error && data) setGroups(data);
+        .from('voice_group_members')
+        .select('group_id, voice_groups(*)')
+        .eq('user_id', user.id);
+      if (!error && data) {
+        setGroups(data.map((row: any) => row.voice_groups));
+      }
     };
     fetchGroups();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (joinedGroupId) {
@@ -339,7 +344,10 @@ export default function GolfHubScreen() {
       paddingHorizontal: 10,
     }}>
       <Pressable
-        onPress={() => handleDeleteGroup(groupId)}
+        onPress={() => {
+          setGroupToDelete(groupId);
+          setDeleteConfirmVisible(true);
+        }}
         style={{
           backgroundColor: palette.error,
           borderRadius: 8,
@@ -594,6 +602,71 @@ export default function GolfHubScreen() {
                 onPress={() => setCreateModalVisible(false)}
               >
                 <ThemedText style={styles(palette).leaveButtonText}>Cancel</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={deleteConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDeleteConfirmVisible(false)}
+      >
+        <View style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0,0,0,0.3)'
+        }}>
+          <View style={{
+            backgroundColor: palette.white,
+            padding: 24,
+            borderRadius: 16,
+            width: '80%',
+            alignItems: 'center'
+          }}>
+            <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, color: palette.error }}>
+              Delete Group?
+            </ThemedText>
+            <ThemedText style={{ fontSize: 15, color: palette.textDark, marginBottom: 18, textAlign: 'center' }}>
+              Deleting will remove you from this group permanently. You will need to be reinvited or create a new group to join again.
+            </ThemedText>
+            <View style={{ flexDirection: 'row' }}>
+              <Pressable
+                style={[styles(palette).leaveButton, { marginRight: 8 }]}
+                onPress={async () => {
+                  if (!groupToDelete) return;
+                  const group = groups.find(g => g.id === groupToDelete);
+                  if (!group) return;
+              
+                  if (group.creator_id === user.id) {
+                    // Creator: delete the group for everyone
+                    await supabase.from('voice_groups').delete().eq('id', groupToDelete);
+                    await supabase.from('voice_group_members').delete().eq('group_id', groupToDelete); // Clean up memberships
+                  } else {
+                    // Member: remove only their membership
+                    await supabase
+                      .from('voice_group_members')
+                      .delete()
+                      .eq('group_id', groupToDelete)
+                      .eq('user_id', user.id);
+                  }
+                  setGroups(groups.filter(g => g.id !== groupToDelete));
+                  setDeleteConfirmVisible(false);
+                  setGroupToDelete(null);
+                }}
+              >
+                <ThemedText style={styles(palette).leaveButtonText}>
+                  {groupToDelete && groups.find(g => g.id === groupToDelete)?.creator_id === user.id ? 'Delete' : 'Leave'}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles(palette).createButton}
+                onPress={() => setDeleteConfirmVisible(false)}
+              >
+                <ThemedText style={styles(palette).createButtonText}>Cancel</ThemedText>
               </Pressable>
             </View>
           </View>

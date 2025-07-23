@@ -10,7 +10,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View
+  View,
+  Modal,
+  TextInput,
+  Button,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
@@ -59,6 +62,8 @@ export default function CourseViewScreen() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [droppedPins, setDroppedPins] = useState<{ latitude: number; longitude: number }[]>([]);
   const [distanceToPin, setDistanceToPin] = useState<number | null>(null);
+  const [showAddCourseModal, setShowAddCourseModal] = useState(false);
+  const [newCourseName, setNewCourseName] = useState("");
 
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView>(null);
@@ -134,12 +139,13 @@ export default function CourseViewScreen() {
         .order("name");
       if (error) throw error;
       setCourses(data || []);
-      setCourseItems(
-        (data || []).map((course) => ({
+      setCourseItems([
+        ...(data || []).map(course => ({
           label: course.name,
           value: course.id,
-        }))
-      );
+        })),
+        { label: "Add a course", value: "add_course" },
+      ]);
     } catch (error: any) {
       setConnectionError(`Course fetch error: ${error.message}`);
     }
@@ -165,6 +171,136 @@ export default function CourseViewScreen() {
       setConnectionError(`Hole fetch error: ${error.message}`);
     }
   };
+
+  // Add course
+   const handleConfirmAddCourse = async () => {
+    try {
+      setLoading(true);
+      // Insert new course into Supabase (other columns will default to null)
+      const { data, error } = await supabase
+        .from("GolfCourses")
+        .insert({ name: newCourseName })
+        .select();
+      if (error) throw error;
+      const added = data![0];
+
+      // Update local courses list and dropdown items
+      safeSetState(setCourses, (prev: Course[]) => [...prev, added]);
+      safeSetState(setCourseItems, (prev: any[]) => [
+        ...prev.filter(item => item.value !== "add_course"),
+        { label: added.name, value: added.id },
+        { label: "Add a course", value: "add_course" },
+      ]);
+
+      // Select the new course & prepare placeholder holes
+      safeSetState(setSelectedCourseId, added.id);
+      safeSetState(setSelectedHoleNumber, null);
+      // <-- Change highlighted: insert 18 empty holes into DB using the new course ID
+    const { data: newHoles, error: holesError } = await supabase
+      .from("holes")
+      .insert(
+        // Each hole record uses course_id = added.id to link back to the new course
+        Array.from({ length: 18 }, (_, i) => ({
+          course_id: added.id,
+          hole_number: i + 1,
+        }))
+      )
+      .select();
+    if (holesError) throw holesError;
+
+    // <-- Change highlighted: update local holes and holeItems
+        safeSetState(setHoles, newHoles || []);
+        safeSetState(
+          setHoleItems,
+          (newHoles || []).map((h) => ({ label: `Hole ${h.hole_number}`, value: h.hole_number }))
+        );
+      } catch (error: any) {
+        setConnectionError(`Add course error: ${error.message}`);
+      } finally {
+        setLoading(false);
+        setShowAddCourseModal(false);
+        setNewCourseName("");
+      }
+    };
+  
+   // ------------------- NEW HANDLERS FOR TEE/FAIRWAY/GREEN -------------------------
+      const handleAddTeeBox = async () => {
+      if (!selectedHole) return;
+      setLoading(true);
+      try {
+        // fetch fresh location
+        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+
+        const { data, error } = await supabase
+          .from("holes")
+          .update({
+            tee_latitude: current.coords.latitude,
+            tee_longitude: current.coords.longitude,
+          })
+          .eq("id", selectedHole.id)
+          .select();
+
+        if (error) throw error;
+        // refetch so UI + DB stay in sync
+        await fetchHoles();
+      } catch (err: any) {
+        setConnectionError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleAddFairwayTarget = async () => {
+      if (!selectedHole) return;
+      setLoading(true);
+      try {
+        // fetch fresh location
+        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+
+        const { data, error } = await supabase
+          .from("holes")
+          .update({
+            fairway_latitude: current.coords.latitude,
+            fairway_longitude: current.coords.longitude,
+          })
+          .eq("id", selectedHole.id)
+          .select();
+
+        if (error) throw error;
+        await fetchHoles();
+      } catch (err: any) {
+        setConnectionError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleAddGreen = async () => {
+      if (!selectedHole) return;
+      setLoading(true);
+      try {
+        // fetch fresh location
+        const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+
+        const { data, error } = await supabase
+          .from("holes")
+          .update({
+            green_latitude: current.coords.latitude,
+            green_longitude: current.coords.longitude,
+          })
+          .eq("id", selectedHole.id)
+          .select();
+
+        if (error) throw error;
+        await fetchHoles();
+      } catch (err: any) {
+        setConnectionError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+
 
   // Ensure initialization on mount
   useFocusEffect(
@@ -273,6 +409,22 @@ export default function CourseViewScreen() {
   // ------------------- COURSE VIEW UI -------------------------
   return (
     <View style={styles(palette).container}>
+    <Modal visible={showAddCourseModal} transparent animationType="slide">
+        <View style={styles(palette).modalContainer}>
+          <View style={styles(palette).modalContent}>
+            <Text style={styles(palette).modalTitle}>Add New Course</Text>
+              <TextInput style={styles(palette).modalInput}
+              placeholder="Course name"
+              value={newCourseName}
+              onChangeText={setNewCourseName}
+            />
+            <View style={styles(palette).modalButtons}>
+              <Button title="Cancel" onPress={() => { setShowAddCourseModal(false); setNewCourseName(""); }} />
+              <Button title="Add" onPress={handleConfirmAddCourse} disabled={!newCourseName.trim()} />
+            </View>
+          </View>
+        </View>
+      </Modal>
       <View style={styles(palette).overlayContainer}>
         <DropDownPicker
           placeholder="Select a course..."
@@ -282,8 +434,15 @@ export default function CourseViewScreen() {
           setOpen={setCourseOpen}
           setValue={(cb) => {
             const v = cb(selectedCourseId);
+            //closes drop down before modal pop up for text input
+             if (v === "add_course") {
+            setCourseOpen(false);
+            setShowAddCourseModal(true);
+             }
+             else{
             setSelectedCourseId(v);
             setSelectedHoleNumber(null);
+            }
           }}
           setItems={setCourseItems}
           style={styles(palette).dropdown}
@@ -317,105 +476,128 @@ export default function CourseViewScreen() {
       </View>
 
       <MapView
-        provider={PROVIDER_GOOGLE}
-        ref={mapRef}
-        style={{ flex: 1 }}
-        region={region || { latitude: -37.8136, longitude: 144.9631, latitudeDelta: 0.05, longitudeDelta: 0.05 }} // use `region` here
-        showsUserLocation={!!location}
-        showsMyLocationButton={!!location}
-        mapType="hybrid"
-        onMapReady={() => console.log('🗺️ Map is ready')}
-        onMapLoaded={() => console.log('🗺️ Tiles loaded')}
-      >
-        {selectedHole && (
-          <>
-            <Marker
-              coordinate={{
-                latitude: selectedHole.tee_latitude!,
-                longitude: selectedHole.tee_longitude!,
-              }}
-              anchor={{ x: 0.6, y: 1}}
-              title={`Hole ${selectedHole.hole_number} Tee`}
-            >
-              <Image
-                source={require("@/assets/images/golf-logo.png")}
-                style={{ width: 50, height: 50, tintColor: palette.yellow,}}
-                resizeMode="contain"
-              />
-            </Marker>
-            <Marker
-              coordinate={{
-                latitude: selectedHole.green_latitude!,
-                longitude: selectedHole.green_longitude!,
-              }}
-              anchor={{ x: 0.6, y: 1 }}
-              title={`Hole ${selectedHole.hole_number} Green`}
-            >
-              <Image
-                source={require("@/assets/images/flag.png")}
-                style={{ width: 50, height: 50 }}
-                resizeMode="contain"
-              />
-            </Marker>
-            <Polyline
-              coordinates={[
-                {
-                  latitude: selectedHole.tee_latitude!,
-                  longitude: selectedHole.tee_longitude!,
-                },
-                ...(selectedHole.fairway_latitude && selectedHole.fairway_longitude
-                  ? [
-                      {
-                        latitude: selectedHole.fairway_latitude,
-                        longitude: selectedHole.fairway_longitude,
-                      },
-                    ]
-                  : []),
-                {
-                  latitude: selectedHole.green_latitude!,
-                  longitude: selectedHole.green_longitude!,
-                },
-              ]}
-              strokeColor="#00BFFF"
-              strokeWidth={2}
-            />
-          </>
-        )}
-        {droppedPins.map((pin, index) => (
-          <Marker
-            key={`pin-${index}`}
-            coordinate={pin}
-            pinColor="orange"
-            title={`Pin ${index + 1}`}
-          />
-        ))}
+  provider={PROVIDER_GOOGLE}
+  ref={mapRef}
+  style={{ flex: 1 }}
+  region={
+    region || {
+      latitude: -37.8136,
+      longitude: 144.9631,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    }
+  }
+  showsUserLocation={!!location}
+  showsMyLocationButton={!!location}
+  mapType="hybrid"
+  onMapReady={() => console.log("🗺️ Map is ready")}
+  onMapLoaded={() => console.log("🗺️ Tiles loaded")}
+>
+  {/* Tee marker */}
+  {selectedHole?.tee_latitude != null &&
+   selectedHole?.tee_longitude != null && (  // <-- Change highlighted
+    <Marker
+      coordinate={{
+        latitude: selectedHole.tee_latitude,
+        longitude: selectedHole.tee_longitude,
+      }}
+      anchor={{ x: 0.6, y: 1 }}
+      title={`Hole ${selectedHole.hole_number} Tee`}
+    >
+      <Image
+        source={require("@/assets/images/golf-logo.png")}
+        style={{ width: 50, height: 50, tintColor: palette.yellow }}
+        resizeMode="contain"
+      />
+    </Marker>
+  )}
 
-        {selectedHole && droppedPins.length >= 1 && (
-          <Polyline
-            coordinates={[
+  {/* Green marker */}
+  {selectedHole?.green_latitude != null &&
+   selectedHole?.green_longitude != null && (  // <-- Change highlighted
+    <Marker
+      coordinate={{
+        latitude: selectedHole.green_latitude,
+        longitude: selectedHole.green_longitude,
+      }}
+      anchor={{ x: 0.6, y: 1 }}
+      title={`Hole ${selectedHole.hole_number} Green`}
+    >
+      <Image
+        source={require("@/assets/images/flag.png")}
+        style={{ width: 50, height: 50 }}
+        resizeMode="contain"
+      />
+    </Marker>
+  )}
+
+  {/* Tee→(Fairway)→Green polyline */}
+  {selectedHole?.tee_latitude != null &&
+   selectedHole?.tee_longitude != null &&
+   selectedHole?.green_latitude != null &&
+   selectedHole?.green_longitude != null && (  // <-- Change highlighted
+    <Polyline
+      coordinates={[
+        {
+          latitude: selectedHole.tee_latitude,
+          longitude: selectedHole.tee_longitude,
+        },
+        ...(selectedHole.fairway_latitude != null &&
+        selectedHole.fairway_longitude != null
+          ? [
               {
-                latitude: selectedHole?.tee_latitude!,
-                longitude: selectedHole?.tee_longitude!,
+                latitude: selectedHole.fairway_latitude,
+                longitude: selectedHole.fairway_longitude,
               },
-              droppedPins[0],
-            ]}
-            strokeColor="rgba(30, 144, 255, 0.5)"
-            strokeWidth={2}
-            lineDashPattern={[10, 5]} // Dotted line
-          />
-        )}
+            ]
+          : []),
+        {
+          latitude: selectedHole.green_latitude,
+          longitude: selectedHole.green_longitude,
+        },
+      ]}
+      strokeColor="#00BFFF"
+      strokeWidth={2}
+    />
+  )}
 
-        {selectedHole && droppedPins.length > 1 &&
-          droppedPins.slice(1).map((pin, index) => (
-            <Polyline
-              key={`line-${index}`}
-              coordinates={[droppedPins[index], pin]}
-              strokeColor="rgba(30, 144, 255, 0.5)"
-              strokeWidth={2}
-              lineDashPattern={[10, 5]}
-            />
-          ))}
-      </MapView>
+  {/* Dropped pins and connecting lines (unchanged) */}
+  {droppedPins.map((pin, index) => (
+    <Marker
+      key={`pin-${index}`}
+      coordinate={pin}
+      pinColor="orange"
+      title={`Pin ${index + 1}`}
+    />
+  ))}
+
+  {selectedHole && droppedPins.length >= 1 && (
+    <Polyline
+      coordinates={[
+        {
+          latitude: selectedHole.tee_latitude ?? 0,
+          longitude: selectedHole.tee_longitude ?? 0,
+        },
+        droppedPins[0],
+      ]}
+      strokeColor="rgba(30, 144, 255, 0.5)"
+      strokeWidth={2}
+      lineDashPattern={[10, 5]}
+    />
+  )}
+
+  {selectedHole &&
+    droppedPins.length > 1 &&
+    droppedPins.slice(1).map((pin, idx) => (
+      <Polyline
+        key={`line-${idx}`}
+        coordinates={[droppedPins[idx], pin]}
+        strokeColor="rgba(30, 144, 255, 0.5)"
+        strokeWidth={2}
+        lineDashPattern={[10, 5]}
+      />
+    ))}
+</MapView>
       {!!selectedHole && (
       <View style={[styles(palette).scoreOverlay, { zIndex: 2000 }]}>
         <View style={styles(palette).statControl}>
@@ -456,9 +638,69 @@ export default function CourseViewScreen() {
         <Text style={styles(palette).pinButtonText}>Drop Pin</Text>
       </Pressable>
       )}
-    </View>
+       {/* Action Buttons for New Holes */}
+        {selectedHole && (
+          <View style={styles(palette).actionButtonsContainer}>
+            {/* <-- Show only if tee coords are null */}
+            {selectedHole.tee_latitude == null &&
+            selectedHole.tee_longitude == null && (             // <-- Change highlighted
+              <Pressable
+                onPress={handleAddTeeBox}
+                android_ripple={{ color: palette.secondary }}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles(palette).actionButton,
+                  pressed && styles(palette).actionButtonPressed,  // <-- Change highlighted
+                ]}
+              >
+                <Text style={styles(palette).actionButtonText}>
+                  Add Tee Box
+                </Text>
+              </Pressable>
+            )}
+
+            {/* <-- Show only if fairway coords are null */}
+            {selectedHole.fairway_latitude == null &&
+            selectedHole.fairway_longitude == null && (        // <-- Change highlighted
+              <Pressable
+                onPress={handleAddFairwayTarget}
+                android_ripple={{ color: palette.secondary }}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles(palette).actionButton,
+                  pressed && styles(palette).actionButtonPressed,  // <-- Change highlighted
+                ]}
+              >
+                <Text style={styles(palette).actionButtonText}>
+                  Add Fairway Target
+                </Text>
+              </Pressable>
+            )}
+
+            {/* <-- Show only if green coords are null */}
+            {selectedHole.green_latitude == null &&
+            selectedHole.green_longitude == null && (         // <-- Change highlighted
+              <Pressable
+                onPress={handleAddGreen}
+                android_ripple={{ color: palette.secondary }}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles(palette).actionButton,
+                  pressed && styles(palette).actionButtonPressed,  // <-- Change highlighted
+                ]}
+              >
+                <Text style={styles(palette).actionButtonText}>
+                  Add Green
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+  </View>
   );
-}
+
+   
+};
 
 // ------------------- UI Styling -------------------------
 const styles = (palette: any) => StyleSheet.create({
@@ -594,5 +836,40 @@ scoreOverlay: {
   enterText: {
     color: palette.white,
     fontWeight: "700",
+  },
+  //---------Add course styling -------
+  modalContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalContent: { width: '80%', backgroundColor: palette.primary || '#fff', padding: 20, borderRadius: 8 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  modalInput: { borderWidth: 1, borderColor: palette.primary || '#ccc', padding: 10, marginBottom: 10, borderRadius: 4 },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+  actionButtonsContainer: { 
+    flexDirection: "column",             
+    justifyContent: "space-between",
+    borderRadius: 8,
+    position: "absolute",
+    bottom: 120,  
+    left: 10,                       
+    width: "30%",
+    alignSelf: "center",
+    zIndex: 2000,
+    elevation: 20,
+    pointerEvents: "box-none",
+   },
+  actionButton: {
+    backgroundColor: palette.primary, // now you can control this
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    elevation:4,
+  },
+  actionButtonPressed: {
+    opacity: 0.6,             // dim when pressed
+  },
+  actionButtonText: {
+    color: palette.white,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

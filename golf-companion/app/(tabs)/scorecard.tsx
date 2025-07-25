@@ -513,7 +513,7 @@ export default function ScorecardScreen() {
 const styles = (palette: any) => StyleSheet.create({
   gradientBg: {
     flex: 1,
-    backgroundColor: palette.third,
+    backgroundColor: palette.scorecardBackground,
     padding: 16,
   },
   topHeader: {

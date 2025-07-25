@@ -285,43 +285,93 @@ export default function AccountsScreen() {
     fetchFriends();
   }, [user?.id]);
 
-  const handleSearch = async () => {
-    if (!search.trim()) return;
-    const { data, error, status } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .ilike('full_name', `%${search.trim()}%`);
-    console.log('Find Friends Search Query:', { search: search.trim(), status, error, data });
-    setSearchResults(data || []);
+  const handleSearch = async (searchText: string) => {
+    if (!searchText.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .or(`full_name.ilike.%${searchText.trim()}%,email.ilike.%${searchText.trim()}%`)
+        .limit(50) // Increased from default to show more users
+        .order('full_name', { ascending: true });
+      
+      if (error) throw error;
+      
+      console.log('Find Friends Search Query:', { search: searchText.trim(), data });
+      setSearchResults(data || []);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    }
   };
 
   // Add friend handler
   const handleAddFriend = async (friendId: string) => {
     // Prevent adding yourself
     if (user.id === friendId) {
-      Alert.alert('Cannot add yourself as a friend.');
+      Alert.alert('Error', 'Cannot add yourself as a friend.');
       return;
     }
-    // Check if already requested
-    const { data: existing, error: existingError } = await supabase
-      .from('friend_requests')
-      .select('id')
-      .eq('requester_user_id', user.id)
-      .eq('requested_user_id', friendId)
-      .eq('status', 'pending')
-      .single();
-    if (existing) {
-      Alert.alert('Friend request already sent.');
-      return;
+  
+    try {
+      // Check if already requested
+      const { data: existing, error: existingError } = await supabase
+        .from('friend_requests')
+        .select('id')
+        .eq('requester_user_id', user.id)
+        .eq('requested_user_id', friendId)
+        .eq('status', 'pending')
+        .single();
+  
+      if (existing) {
+        Alert.alert('Already Sent', 'Friend request already sent to this user.');
+        return;
+      }
+  
+      // Check if already friends
+      const { data: friendship } = await supabase
+        .from('friends')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('friend_id', friendId)
+        .single();
+  
+      if (friendship) {
+        Alert.alert('Already Friends', 'You are already friends with this user.');
+        return;
+      }
+  
+      // Send friend request
+      const { error } = await supabase.from('friend_requests').insert({
+        requester_user_id: user.id,
+        requested_user_id: friendId,
+        status: 'pending'
+      });
+  
+      if (error) throw error;
+  
+      Alert.alert(
+        'Success!', 
+        'Friend request sent successfully!',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              setFindFriendsModalVisible(false);
+              setSearch('');
+              setSearchResults([]);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      Alert.alert('Error', 'Failed to send friend request. Please try again.');
     }
-    // Send friend request
-    await supabase.from('friend_requests').insert({
-      requester_user_id: user.id,
-      requested_user_id: friendId,
-      status: 'pending'
-    });
-    Alert.alert('Friend request sent!');
-    setFindFriendsModalVisible(false);
   };
 
   // Refresh handler
@@ -1009,53 +1059,118 @@ const inviteChannel = supabase
             </View>
           )}
         <Modal visible={findFriendsModalVisible} transparent animationType="slide" onRequestClose={() => setFindFriendsModalVisible(false)}>
-          <View style={{
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: 'rgba(0,0,0,0.3)'
-          }}>
-            <View style={{
-              backgroundColor: palette.white,
-              padding: 24,
-              borderRadius: 16,
-              width: '80%',
-              alignItems: 'center'
-            }}>
-              <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 12, color: palette.black }}>Find Friends</ThemedText>
-              <TextInput
-                style={{
-                  width: '100%',
-                  borderWidth: 1,
-                  borderColor: palette.primary,
-                  borderRadius: 8,
-                  padding: 8,
-                  marginBottom: 16,
-                  color: palette.textDark,
-                  backgroundColor: palette.background,
-                }}
-                placeholder="Search by name or email"
-                placeholderTextColor={palette.textLight}
-                value={search}
-                onChangeText={setSearch}
-              />
-              <Pressable
-                style={styles(palette).createButton}
-                onPress={handleSearch}
-              >
-                <ThemedText style={styles(palette).createButtonText}>Search</ThemedText>
-              </Pressable>
-              {searchResults.map(u => (
-                <Pressable key={u.id} onPress={() => handleAddFriend(u.id)}>
-                  <ThemedText style={{color: palette.black}}>{u.full_name} ({u.email})</ThemedText>
+          <View style={styles(palette).modalOverlay}>
+            <View style={styles(palette).modalContainer}>
+              {/* Header */}
+              <View style={styles(palette).modalHeader}>
+                <ThemedText style={styles(palette).modalTitle}>Find Friends</ThemedText>
+                <Pressable
+                  style={styles(palette).modalCloseButton}
+                  onPress={() => setFindFriendsModalVisible(false)}
+                >
+                  <MaterialIcons name="close" size={24} color={palette.textDark} />
                 </Pressable>
-              ))}
-              <Pressable
-                style={[styles(palette).leaveButton, { marginTop: 12 }]}
-                onPress={() => setFindFriendsModalVisible(false)}
-              >
-                <ThemedText style={styles(palette).leaveButtonText}>Close</ThemedText>
-              </Pressable>
+              </View>
+
+              {/* Search Input */}
+              <View style={styles(palette).searchContainer}>
+                <View style={styles(palette).searchInputContainer}>
+                  <MaterialIcons name="search" size={20} color={palette.textLight} style={styles(palette).searchIcon} />
+                  <TextInput
+                    style={styles(palette).searchInput}
+                    placeholder="Search by name or email..."
+                    placeholderTextColor={palette.textLight}
+                    value={search}
+                    onChangeText={(text) => {
+                      setSearch(text);
+                      handleSearch(text); // Search as user types
+                    }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {search.length > 0 && (
+                    <Pressable
+                      style={styles(palette).clearButton}
+                      onPress={() => {
+                        setSearch('');
+                        setSearchResults([]);
+                      }}
+                    >
+                      <MaterialIcons name="clear" size={20} color={palette.textLight} />
+                    </Pressable>
+                  )}
+                </View>
+                
+                {/* Optional: Show search count */}
+                {searchResults.length > 0 && (
+                  <ThemedText style={styles(palette).searchResultsCount}>
+                    Found {searchResults.length} user{searchResults.length !== 1 ? 's' : ''}
+                    {searchResults.length >= 100 ? ' (showing first 100)' : ''}
+                  </ThemedText>
+                )}
+              </View>
+
+              {/* Results List */}
+              <View style={styles(palette).resultsContainer}>
+                {searchResults.length === 0 ? (
+                  <View style={styles(palette).emptyState}>
+                    <MaterialIcons name="people-outline" size={48} color={palette.textLight} />
+                    <ThemedText style={styles(palette).emptyStateText}>
+                      {search.trim() ? 'No users found' : 'Search for friends to connect'}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ScrollView 
+                    style={styles(palette).resultsList}
+                    showsVerticalScrollIndicator={true}
+                    contentContainerStyle={styles(palette).resultsListContent}
+                    nestedScrollEnabled={true}
+                    bounces={true}
+                    indicatorStyle={palette === PALETTES.dark ? 'white' : 'black'}
+                  >
+                    {searchResults.map((user, index) => (
+                      <Pressable
+                        key={user.id}
+                        style={({ pressed }) => [
+                          styles(palette).userResultTile,
+                          pressed && styles(palette).userResultTilePressed,
+                          { 
+                            opacity: pressed ? 0.8 : 1,
+                            transform: pressed ? [{ scale: 0.98 }] : [{ scale: 1 }]
+                          }
+                        ]}
+                        onPress={() => handleAddFriend(user.id)}
+                      >
+                        <View style={styles(palette).userResultInfo}>
+                          <View style={styles(palette).userResultAvatar}>
+                            <ThemedText style={styles(palette).userResultAvatarText}>
+                              {user.full_name ? user.full_name[0].toUpperCase() : '?'}
+                            </ThemedText>
+                          </View>
+                          <View style={styles(palette).userResultDetails}>
+                            <ThemedText style={styles(palette).userResultName}>
+                              {user.full_name || 'Unknown User'}
+                            </ThemedText>
+                            <ThemedText style={styles(palette).userResultEmail}>
+                              {user.email}
+                            </ThemedText>
+                          </View>
+                        </View>
+                        <View style={styles(palette).addFriendButton}>
+                          <MaterialIcons name="person-add" size={18} color={palette.white} />
+                        </View>
+                      </Pressable>
+                    ))}
+                    
+                    {/* Bottom padding and end indicator */}
+                    <View style={styles(palette).listEnd}>
+                      <ThemedText style={styles(palette).listEndText}>
+                        {searchResults.length} user{searchResults.length !== 1 ? 's' : ''} found
+                      </ThemedText>
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
             </View>
           </View>
         </Modal>
@@ -1617,4 +1732,193 @@ const styles = (palette: any) => StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
+  // Add these styles to your existing styles function:
+
+modalOverlay: {
+  flex: 1,
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+modalContainer: {
+  backgroundColor: palette.white,
+  borderRadius: 20,
+  width: '95%', // Increased from 90% to 95%
+  height: '85%', // Changed from maxHeight to fixed height
+  shadowColor: palette.black,
+  shadowOpacity: 0.15,
+  shadowRadius: 15,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 8,
+  flexDirection: 'column', // Ensure column layout
+},
+modalHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingHorizontal: 20,
+  paddingVertical: 16,
+  borderBottomWidth: 1,
+  borderBottomColor: palette.grey,
+  flexShrink: 0, // Don't shrink this section
+},
+searchContainer: {
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: palette.grey,
+  flexShrink: 0, // Don't shrink this section
+},
+emptyState: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 40,
+},
+resultsList: {
+  flex: 1, // Take remaining space
+  backgroundColor: 'transparent',
+},
+resultsListContent: {
+  padding: 16, // Reduced from 20 to 16
+  paddingBottom: 30, // Reduced from 40 to 30
+  flexGrow: 1, // Allow content to grow
+},
+userResultTile: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  backgroundColor: palette.background,
+  padding: 10, // Slightly increased for better touch target
+  borderRadius: 12,
+  marginBottom: 8,
+  borderWidth: 1,
+  borderColor: palette.grey,
+  shadowColor: palette.black,
+  shadowOpacity: 0.05,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
+},
+userResultAvatar: {
+  width: 40, // Slightly larger for better visibility
+  height: 40,
+  borderRadius: 20,
+  backgroundColor: palette.primary,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: 12,
+},
+userResultAvatarText: {
+  color: palette.white,
+  fontSize: 16,
+  fontWeight: '700',
+},
+userResultName: {
+  fontSize: 15,
+  fontWeight: '600',
+  color: palette.textDark,
+  marginBottom: 2,
+},
+userResultEmail: {
+  fontSize: 13,
+  color: palette.textLight,
+},
+addFriendButton: {
+  backgroundColor: palette.primary,
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  justifyContent: 'center',
+  alignItems: 'center',
+  shadowColor: palette.primary,
+  shadowOpacity: 0.3,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 3,
+},
+clearButton: {
+  padding: 4,
+  marginLeft: 8,
+},
+searchResultsCount: {
+  fontSize: 12,
+  color: palette.textLight,
+  textAlign: 'center',
+  marginTop: 8,
+  fontWeight: '500',
+},
+modalTitle: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: palette.primary,
+},
+
+modalCloseButton: {
+  padding: 8,
+  borderRadius: 12,
+  backgroundColor: palette.background,
+},
+
+searchInputContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: palette.background,
+  borderRadius: 12,
+  paddingHorizontal: 12,
+  marginBottom: 12,
+  borderWidth: 1,
+  borderColor: palette.grey,
+},
+
+searchIcon: {
+  marginRight: 8,
+},
+
+searchInput: {
+  flex: 1,
+  paddingVertical: 12,
+  fontSize: 16,
+  color: palette.textDark,
+},
+
+emptyStateText: {
+  fontSize: 16,
+  color: palette.textLight,
+  textAlign: 'center',
+  marginTop: 12,
+},
+
+userResultInfo: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+},
+
+userResultDetails: {
+  flex: 1,
+},
+
+userResultTilePressed: {
+  backgroundColor: palette.secondary,
+  borderColor: palette.primary,
+},
+
+resultsContainer: {
+  flex: 1,
+  minHeight: 400, // Increased from 300
+},
+
+listEnd: {
+  paddingVertical: 20,
+  alignItems: 'center',
+  borderTopWidth: 1,
+  borderTopColor: palette.grey,
+  marginTop: 10,
+},
+
+listEndText: {
+  fontSize: 12,
+  color: palette.textLight,
+  fontStyle: 'italic',
+},
 });

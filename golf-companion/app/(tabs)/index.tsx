@@ -13,7 +13,7 @@ import { useTheme } from '@/components/ThemeContext';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, ScrollView } from 'react-native';
 import Toast from 'react-native-toast-message';
 
 
@@ -57,9 +57,9 @@ export default function HomeScreen() {
     return (
       <ThemedView style={[styles(palette).container]}>
         <ParallaxScrollView
-        style={styles(palette).scrollRoot}
-        contentContainerStyle={styles(palette).scrollContent}
-          headerBackgroundColor={{ light: palette.background, dark: palette.primary }}
+          style={styles(palette).scrollRoot}
+          contentContainerStyle={styles(palette).scrollContent}
+          headerBackgroundColor={{ light: palette.background, dark: palette.background }}
           headerImage={
             <ThemedView style={styles(palette).headerRow}>
               <View style={styles(palette).logoContainer}>
@@ -78,7 +78,6 @@ export default function HomeScreen() {
               </View>
             </ThemedView>
           }
-          //contentContainerStyle={styles(palette).contentContainer}
         >
           <ThemedView style={styles(palette).authContainer}>
             <ThemedText type="subtitle" style={styles(palette).authTitle}>Loading...</ThemedText>
@@ -92,9 +91,9 @@ export default function HomeScreen() {
   return (
     <ThemedView style={[styles(palette).container]}>
       <ParallaxScrollView
-      style={styles(palette).scrollRoot}
-      contentContainerStyle={styles(palette).scrollContent}
-        headerBackgroundColor={{ light: palette.background, dark: palette.primary }}
+        style={styles(palette).scrollRoot}
+        contentContainerStyle={styles(palette).scrollContent}
+        headerBackgroundColor={{ light: palette.background, dark: palette.background }}
         headerImage={
           <ThemedView style={styles(palette).headerRow}>
             <View style={styles(palette).logoContainer}>
@@ -113,7 +112,6 @@ export default function HomeScreen() {
             </View>
           </ThemedView>
         }
-        //contentContainerStyle={styles(palette).contentContainer}
       >
         {/* Conditional Auth/Welcome Section */}
         <ThemedView style={styles(palette).authContainer}>
@@ -159,15 +157,13 @@ export default function HomeScreen() {
           </ThemedText>
         </ThemedView>
 
-        {/* Rest of your feature cards remain the same */}
+        {/* Feature Cards */}
         <ThemedView style={styles(palette).featureCard}>
           <ThemedText type="subtitle" style={styles(palette).featureTitle}>{featureCards[currentCardIndex].title}</ThemedText>
           <ThemedText style={styles(palette).featureText}>
             {featureCards[currentCardIndex].description}
           </ThemedText>
         </ThemedView>
-
-
       </ParallaxScrollView>  
       <Toast/>
     </ThemedView>
@@ -188,7 +184,26 @@ type PaletteType = {
 const styles = (palette: PaletteType) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background, // full-page background
+    backgroundColor: palette.background,
+  },
+  scrollRoot: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: palette.background,
+    paddingBottom: 20,
+  },
+  headerRow: {
+    backgroundColor: palette.third, // Changed from palette.third to palette.background
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 80,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    flex: 1, // Add this to ensure it fills the header space
   },
   titleContainer: {
     flexDirection: 'row',
@@ -210,15 +225,6 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
-  },
-  headerRow: {
-    backgroundColor: palette.third,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingLeft: 80,
-    paddingTop: 10,
-    paddingHorizontal: 16,
   },
   logoContainer: {
     width: 120,
@@ -316,16 +322,6 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'space-between',
     backgroundColor: palette.background,
-    paddingBottom: 20,
-  },
-  scrollRoot: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    backgroundColor: palette.background,
-    justifyContent: "space-between",
     paddingBottom: 20,
   },
 });

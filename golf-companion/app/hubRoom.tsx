@@ -63,7 +63,7 @@ export default function HubRoomScreen() {
       .order('created_at', { ascending: true });
 
     if (!error && data) {
-      const userIds = [...new Set(data.map((msg: any) => msg.user_id))];
+      const userIds = Array.from(new Set(data.map((msg: any) => msg.user_id)));
       let userNames: Record<string, string> = {};
 
       if (userIds.length > 0) {
@@ -233,7 +233,7 @@ export default function HubRoomScreen() {
   
       // Get all unique user IDs including creator
       const memberUserIds = (membersData || []).map(m => m.user_id);
-      const allUserIds = [...new Set([...memberUserIds, groupData?.creator_id].filter(Boolean))];
+      const allUserIds = Array.from(new Set([...memberUserIds, groupData?.creator_id].filter(Boolean)));
   
       // Fetch profiles for all users
       const { data: profilesData, error: profilesError } = await supabase
@@ -362,11 +362,7 @@ export default function HubRoomScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: palette.background, paddingTop: insets.top }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 64 : insets.top + 60}
-    >
+    <View style={{ flex: 1, backgroundColor: palette.background, paddingTop: insets.top }}>
       {/* Toast */}
       {toast && (
         <View style={styles(palette).toast}>
@@ -410,55 +406,67 @@ export default function HubRoomScreen() {
         </Pressable>
       </View>
 
-      {/* Messages */}
-      <View style={styles(palette).messagesContainer}>
-        <KeyboardAwareFlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(_, idx) => idx.toString()}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles(palette).messageBubble,
-                item.user === 'You'
-                  ? styles(palette).myMessage
-                  : styles(palette).otherMessage,
-              ]}
+      {/* Messages Container with KeyboardAvoidingView */}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <View style={{ flex: 1 }}>
+          {/* Messages */}
+          <View style={styles(palette).messagesContainer}>
+            <KeyboardAwareFlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(_, idx) => idx.toString()}
+              renderItem={({ item }) => (
+                <View
+                  style={[
+                    styles(palette).messageBubble,
+                    item.user === 'You'
+                      ? styles(palette).myMessage
+                      : styles(palette).otherMessage,
+                  ]}
+                >
+                  <ThemedText style={styles(palette).messageUser}>{item.user}</ThemedText>
+                  <ThemedText style={styles(palette).messageText}>{item.text}</ThemedText>
+                </View>
+              )}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 10, paddingHorizontal: 8 }}
+              keyboardShouldPersistTaps="handled"
+              extraHeight={100}
+              enableOnAndroid={true}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+          
+          {/* Input Bar */}
+          <View style={[styles(palette).inputBar, { marginBottom: insets.bottom }]}>
+            <TextInput
+              style={styles(palette).input}
+              value={chatInput}
+              onChangeText={setChatInput}
+              placeholder="Type a message..."
+              placeholderTextColor={palette.textLight}
+              onSubmitEditing={sendMessage}
+              returnKeyType="send"
+              multiline={false}
+            />
+            <Pressable 
+              style={({ pressed }) => [
+                styles(palette).sendButton,
+                pressed && styles(palette).sendButtonPressed,
+              ]} 
+              onPress={sendMessage}
             >
-              <ThemedText style={styles(palette).messageUser}>{item.user}</ThemedText>
-              <ThemedText style={styles(palette).messageText}>{item.text}</ThemedText>
-            </View>
-          )}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 80, paddingHorizontal: 8 }}
-          keyboardShouldPersistTaps="handled"
-          extraHeight={100}
-          enableOnAndroid={true}
-        />
-      </View>
+              <ThemedText style={styles(palette).sendButtonText}>Send</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
 
-      {/* Input Bar */}
-      <View style={styles(palette).inputBar}>
-        <TextInput
-          style={styles(palette).input}
-          value={chatInput}
-          onChangeText={setChatInput}
-          placeholder="Type a message..."
-          placeholderTextColor={palette.textLight}
-          onSubmitEditing={sendMessage}
-          returnKeyType="send"
-        />
-        <Pressable 
-          style={({ pressed }) => [
-            styles(palette).sendButton,
-            pressed && styles(palette).sendButtonPressed,
-          ]} 
-          onPress={sendMessage}
-        >
-          <ThemedText style={styles(palette).sendButtonText}>Send</ThemedText>
-        </Pressable>
-      </View>
-
+      {/* Your existing modals stay the same... */}
       {/* Invite Modal */}
       <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
         <View style={styles(palette).modalOverlay}>
@@ -631,7 +639,7 @@ export default function HubRoomScreen() {
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -744,9 +752,9 @@ const styles = (palette: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: palette.white,
-    padding: 12,
+    padding: 4,
+    marginHorizontal: 12,
     borderRadius: 16,
-    margin: 12,
     elevation: 2,
     shadowColor: palette.primary,
     shadowOpacity: 0.08,

@@ -223,7 +223,7 @@ export default function GolfHubScreen() {
   
     if (!error && data) {
       // Get all unique user_ids
-      const userIds = [...new Set(data.map((msg: any) => msg.user_id))];
+      const userIds = Array.from(new Set(data.map((msg: any) => msg.user_id)));
       let userNames: Record<string, string> = {};
   
       if (userIds.length > 0) {

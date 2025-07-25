@@ -40,6 +40,7 @@ export const PALETTES = {
     background: "#E9EBF8",
     secondary: "#9DC08b",
     third: "#4B5842",
+    scorecardBackground: "#587e3a",
     error: "#EF4444",
     textDark: "#111827",
     textLight: "#6B7280",
@@ -49,10 +50,10 @@ export const PALETTES = {
     yellow: "#FFFF00"
   },
   dark: {
-    primary: "#7FC7AF",
-    background: "#1A3636",
-    secondary: "#1B2A41",
-    third: "#0F1924",
+    primary: "#10B981",  
+    background: "#0F172A",   
+    secondary: "#1E293B",
+    third: "#334155",
     error: "#EF4444",
     textDark: "#F3F4F6",
     textLight: "#9CA3AF",

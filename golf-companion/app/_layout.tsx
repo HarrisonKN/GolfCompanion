@@ -30,6 +30,7 @@ export default function RootLayout() {
               <Stack.Screen name="login" options={{ headerShown: false }} />
               <Stack.Screen name="signup" options={{ headerShown: false }} />
               <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
+              <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" />
             </Stack>
             <StatusBar style="auto" />

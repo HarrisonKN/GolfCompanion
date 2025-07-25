@@ -6,9 +6,11 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme } from "@/components/ThemeContext";
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput, RefreshControl } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput, RefreshControl, StatusBar } from 'react-native';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { MaterialIcons } from '@expo/vector-icons';
+import { PALETTES } from '@/constants/theme';
+
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -59,6 +61,45 @@ export default function AccountsScreen() {
   const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
 
   const { palette } = useTheme();
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000); // Hide after 2 seconds
+  }
+
+  // FriendTile component
+  function FriendTile({ friend }: { friend: any }) {
+    const { palette } = useTheme();
+    return (
+      <View style={styles(palette).friendTile}>
+        <View style={styles(palette).friendAvatarCircle}>
+          <ThemedText style={styles(palette).friendAvatarText}>
+            {friend.profiles?.full_name ? friend.profiles.full_name[0].toUpperCase() : '?'}
+          </ThemedText>
+        </View>
+        <View style={{ marginLeft: 12 }}>
+          <ThemedText style={styles(palette).friendTileName}>{friend.profiles?.full_name ?? 'Unknown'}</ThemedText>
+          <ThemedText style={styles(palette).friendTileEmail}>{friend.profiles?.email ?? ''}</ThemedText>
+        </View>
+      </View>
+    );
+  }
+
+  function SectionDivider() {
+    const { palette } = useTheme();
+    return (
+      <View style={{
+        height: 1,
+        backgroundColor: palette.grey,
+        marginVertical: 18,
+        marginHorizontal: 16,
+        opacity: 0.5,
+        borderRadius: 1,
+      }} />
+    );
+  }
+
 
   // Handle mounting state
   useEffect(() => {
@@ -212,11 +253,15 @@ export default function AccountsScreen() {
   );
 
   const handleLogout = async () => {
-    if (isRedirecting) return; //this line prevents multiple logout attempts and redirects if already trying to redirect
+    if (isRedirecting) return;
     try {
       await signOut();
-      safeNavigate('/login'); //after signing out, redirect to login
+      setIsRedirecting(true);
+      safeNavigate('/login');
+      // Reset isRedirecting after 2 seconds in case navigation fails
+      setTimeout(() => setIsRedirecting(false), 2000);
     } catch (error: any) {
+      setIsRedirecting(false);
       console.error('Logout error:', error);
       Alert.alert('Logout Error', 'An error occurred while logging out');
     }
@@ -229,15 +274,16 @@ export default function AccountsScreen() {
   };
 
   useEffect(() => {
+    if (!user?.id) return;
     const fetchFriends = async () => {
       const { data, error } = await supabase
         .from('friends')
-        .select('friend_id, profiles(full_name)')
+        .select('friend_id, profiles:friend_id(full_name, email)')
         .eq('user_id', user.id);
       setFriends(data || []);
     };
     fetchFriends();
-  }, [user]);
+  }, [user?.id]);
 
   const handleSearch = async () => {
     if (!search.trim()) return;
@@ -316,7 +362,16 @@ export default function AccountsScreen() {
       if (!user?.id) return;
       const { data } = await supabase
         .from('hubroom_invites')
-        .select('id, group_id, voice_groups(name), inviter_user_id, status')
+        .select(`
+          id, 
+          group_id, 
+          inviter_user_id, 
+          status,
+          voice_groups (
+            name,
+            description
+          )
+        `)
         .eq('invited_user_id', user.id)
         .eq('status', 'pending');
       setPendingInvites(data || []);
@@ -337,41 +392,184 @@ export default function AccountsScreen() {
     fetchFriendRequests();
   }, [user?.id]);
 
-  useEffect(() => {
-    const fetchMyGroups = async () => {
-      if (!user?.id) return;
-      const { data: myGroups } = await supabase
-        .from('voice_groups')
-        .select('*')
-        .or(`creator_id.eq.${user.id},invited_users.cs.{${user.id}}`);
-      console.log('My Groups:', myGroups);
-    };
-    fetchMyGroups();
-  }, [user?.id]);
-
-  useEffect(() => {
-    const fetchInvitedGroups = async () => {
-      if (!user?.id) return;
-      const { data: invitedGroups } = await supabase
+  const acceptInvite = async (inviteId: string, groupId: string) => {
+    try {
+      // Add user to group members
+      const { error: memberError } = await supabase
+        .from('voice_group_members')
+        .insert({
+          group_id: groupId,
+          user_id: user.id,
+        });
+  
+      if (memberError) throw memberError;
+  
+      // Update invite status
+      const { error: inviteError } = await supabase
         .from('hubroom_invites')
-        .select('group_id, voice_groups(*)')
-        .eq('invited_user_id', user.id)
-        .eq('status', 'accepted');
-      console.log('Invited Groups:', invitedGroups);
-    };
-    fetchInvitedGroups();
-  }, [user?.id]);
+        .update({ status: 'accepted' })
+        .eq('id', inviteId);
+  
+      if (inviteError) throw inviteError;
+  
+      // Get group details for navigation
+      const { data: groupData, error: groupError } = await supabase
+        .from('voice_groups')
+        .select('name, description')
+        .eq('id', groupId)
+        .single();
+  
+      if (groupError) throw groupError;
+  
+      // Remove from pending invites
+      setPendingInvites(prev => prev.filter(invite => invite.id !== inviteId));
+      
+      showToast('Joined group successfully!');
+      
+      // Navigate to the room after a short delay
+      setTimeout(() => {
+        router.push({
+          pathname: '/hubRoom',
+          params: {
+            roomId: groupId,
+            roomName: groupData?.name || 'Group Chat',
+            roomDesc: groupData?.description || ''
+          }
+        });
+      }, 1000);
+  
+    } catch (error) {
+      console.error('Error accepting invite:', error);
+      showToast('Error joining group');
+    }
+  };
 
   useEffect(() => {
-    const fetchCreatedGroups = async () => {
-      if (!user?.id) return;
-      const { data: createdGroups, error: creatorError } = await supabase
-        .from('voice_groups')
-        .select('*')
-        .eq('creator_id', user.id);
-      console.log('Created Groups:', createdGroups);
+    if (!user?.id) return;
+
+    console.log('Setting up realtime subscriptions for user:', user.id);
+
+    // Friend requests received
+    const friendRequestChannel = supabase
+      .channel('public:friend_requests')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: `requested_user_id=eq.${user.id}` },
+        (payload) => {
+          console.log('🔥 NEW FRIEND REQUEST:', payload);
+          showToast('New friend request received!');
+          setPendingFriendRequests(prev => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    // Friend request status updates (for when your requests are accepted/declined)
+    const friendRequestUpdateChannel = supabase
+      .channel('public:friend_requests_updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'friend_requests', filter: `requester_user_id=eq.${user.id}` },
+        (payload) => {
+          console.log('🔥 FRIEND REQUEST UPDATE:', payload);
+          if (payload.new.status === 'accepted') {
+            showToast('Friend request accepted!');
+          } else if (payload.new.status === 'declined') {
+            showToast('Friend request declined');
+          }
+        }
+      )
+      .subscribe();
+
+    // Friends added - bidirectional listening
+    const friendsChannel = supabase
+      .channel('public:friends')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'friends', filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          console.log('🔥 NEW FRIEND ADDED (as user):', payload);
+          const { data: friendProfile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', payload.new.friend_id)
+            .single();
+          
+          setFriends(prev => [...prev, {
+            friend_id: payload.new.friend_id,
+            profiles: friendProfile
+          }]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'friends', filter: `friend_id=eq.${user.id}` },
+        async (payload) => {
+          console.log('🔥 SOMEONE ADDED ME AS FRIEND (reverse):', payload);
+          // This is when someone accepts YOUR friend request
+          // You need to also add them to your friends list
+          const { data: friendProfile } = await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', payload.new.user_id)
+            .single();
+          
+          // Check if they're not already in your friends list
+          setFriends(prev => {
+            const exists = prev.some(f => f.friend_id === payload.new.user_id);
+            if (exists) return prev;
+            
+            return [...prev, {
+              friend_id: payload.new.user_id,
+              profiles: friendProfile
+            }];
+          });
+          
+          showToast('You have a new friend!');
+        }
+      )
+      .subscribe();
+
+    // Group invites
+    // Add this to your existing useEffect with realtime subscriptions
+
+// Group invites
+const inviteChannel = supabase
+.channel('public:hubroom_invites')
+.on(
+  'postgres_changes',
+  { event: 'INSERT', schema: 'public', table: 'hubroom_invites', filter: `invited_user_id=eq.${user.id}` },
+  async (payload) => {
+    // Fetch group details
+    const { data: groupData } = await supabase
+      .from('voice_groups')
+      .select('name')
+      .eq('id', payload.new.group_id)
+      .single();
+    
+    showToast(`Invited to join ${groupData?.name || 'a group'}!`);
+    setPendingInvites(prev => [...prev, payload.new]);
+  }
+)
+.on(
+  'postgres_changes',
+  { event: 'UPDATE', schema: 'public', table: 'hubroom_invites', filter: `invited_user_id=eq.${user.id}` },
+  (payload) => {
+    setPendingInvites(prev =>
+      prev.map(invite => invite.id === payload.new.id ? payload.new : invite)
+    );
+  }
+)
+.subscribe();
+
+// Don't forget to add inviteChannel.unsubscribe() in the cleanup function
+
+    return () => {
+      console.log('Unsubscribing from realtime channels');
+      friendRequestChannel.unsubscribe();
+      friendRequestUpdateChannel.unsubscribe();
+      friendsChannel.unsubscribe();
+      inviteChannel.unsubscribe();
     };
-    fetchCreatedGroups();
   }, [user?.id]);
 
   // Early returns for loading and error states
@@ -438,6 +636,12 @@ export default function AccountsScreen() {
 
 // ------------------- ACCOUNTS UI -------------------------
   return (
+    <>
+    <StatusBar
+      barStyle={palette === PALETTES.dark ? "light-content" : "dark-content"}
+      backgroundColor={palette.background}
+      translucent={false}
+    />
     <ScrollView
       style={styles(palette).screen}
       contentContainerStyle={{ paddingBottom: SCREEN_HEIGHT * 0.10 }}
@@ -450,12 +654,33 @@ export default function AccountsScreen() {
         />
       }
     >
-      {/* Smaller Header */}
+      {toast && (
+        <View style={{
+          position: 'absolute',
+          top: 60,
+          alignSelf: 'center',
+          backgroundColor: palette.primary,
+          paddingHorizontal: 24,
+          paddingVertical: 10,
+          borderRadius: 20,
+          zIndex: 999,
+          shadowColor: palette.black,
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 2 },
+        }}>
+          <ThemedText style={{ color: palette.white, fontWeight: '700', fontSize: 16 }}>{toast}</ThemedText>
+        </View>
+      )}
+
+      {/* Condensed Header */}
       <View style={styles(palette).headerSmall}>
-        <ThemedText type="title" style={styles(palette).headerTitleSmall}>
-          Your Account
-        </ThemedText>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <ThemedText type="title" style={styles(palette).headerTitleSmall}>
+            Your Account
+          </ThemedText>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Pressable
             style={({ pressed }) => [
               styles(palette).logoutButton,
@@ -469,20 +694,19 @@ export default function AccountsScreen() {
             style={styles(palette).settingsButton}
             onPress={() => router.push('../settings')}
           >
-            <MaterialIcons size={28} name="settings" color={palette.grey} />
+            <MaterialIcons size={24} name="settings" color={palette.grey} />
           </Pressable>
         </View>
       </View>
 
-      {/* Account Description */}
+      {/* Condensed Account Info */}
       <View style={styles(palette).accountDescContainer}>
-        {/* Avatar placeholder */}
         <View style={styles(palette).avatarCircle}>
           <ThemedText style={styles(palette).avatarText}>
             {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
           </ThemedText>
         </View>
-        <View style={{ marginLeft: 16 }}>
+        <View style={{ marginLeft: 12, flex: 1 }}>
           <ThemedText style={styles(palette).accountName}>{profile.full_name ?? 'Unknown User'}</ThemedText>
           <ThemedText style={styles(palette).accountEmail}>{profile.email ?? ''}</ThemedText>
         </View>
@@ -499,6 +723,8 @@ export default function AccountsScreen() {
         <StatTile label="Fairways Hit" value={profile.fairways_hit?.toString() ?? 'N/A'} />
         <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
       </View>
+
+      <SectionDivider />
 
       <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
         Round History
@@ -534,7 +760,7 @@ export default function AccountsScreen() {
                       <View style={[styles(palette).scorecardTable, { alignSelf: 'center' }]}>
                         {(() => {
                           try {
-                            const scorecard = JSON.parse(round.scorecard ?? JSON.stringify(selectedScorecard));
+                            const scorecard = JSON.parse(round.scorecard!);
                             const maxHoles = Math.max(...scorecard.map((player: any) => player.scores.length), 18);
                             const parseScore = (text: string) => parseInt((text || '').split('/')[0]?.trim()) || 0;
 
@@ -730,28 +956,58 @@ export default function AccountsScreen() {
           </ScrollView>
         </View>
       </Modal>
-      <View>
-      <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
-        My Friends
-      </ThemedText>
-        {friends.length === 0 ? (
-          <ThemedText style={styles(palette).infoText}>No friends found.</ThemedText>
-        ) : (
-          friends.map(f => (
-            <View key={f.friend_id} style={{ marginBottom: 8 }}>
-              <ThemedText style={styles(palette).accountName}>{f.profiles?.full_name}</ThemedText>
-            </View>
-          ))
-        )}
-        {/* Add friend UI */}
-        <View style={{ marginTop: 16, alignItems: 'center' }}>
-          <Pressable
+
+      <SectionDivider />
+
+
+      <View style={styles(palette).friendsSection}>
+        <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
+          My Friends
+        </ThemedText>
+        <Pressable
             style={styles(palette).createButton}
             onPress={() => setFindFriendsModalVisible(true)}
           >
             <ThemedText style={styles(palette).createButtonText}>Find Friends</ThemedText>
           </Pressable>
-        </View>
+          {friends.length === 0 ? (
+            <ThemedText style={styles(palette).infoText}>No friends found.</ThemedText>
+          ) : (
+            <View style={styles(palette).friendsGrid}>
+              {friends.map(f => (
+                <Pressable
+                  key={f.friend_id}
+                  style={({ pressed }) => [
+                    styles(palette).friendTile,
+                    pressed && { backgroundColor: palette.secondary, transform: [{ scale: 0.95 }] }
+                  ]}
+                  onPress={() => {
+                    // Navigate to friend's profile
+                    router.push({
+                      pathname: '/friendProfile',
+                      params: {
+                        friendId: f.friend_id,
+                        friendName: f.profiles?.full_name || 'Unknown',
+                        friendEmail: f.profiles?.email || ''
+                      }
+                    });
+                  }}
+                >
+                  <View style={styles(palette).friendAvatarCircle}>
+                    <ThemedText style={styles(palette).friendAvatarText}>
+                      {f.profiles?.full_name ? f.profiles.full_name[0].toUpperCase() : '?'}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={styles(palette).friendTileName} numberOfLines={1}>
+                    {f.profiles?.full_name ?? 'Unknown'}
+                  </ThemedText>
+                  <ThemedText style={styles(palette).friendTileEmail} numberOfLines={1}>
+                    {f.profiles?.email ?? ''}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          )}
         <Modal visible={findFriendsModalVisible} transparent animationType="slide" onRequestClose={() => setFindFriendsModalVisible(false)}>
           <View style={{
             flex: 1,
@@ -825,18 +1081,33 @@ export default function AccountsScreen() {
               style={styles(palette).acceptInviteButton}
               onPress={async () => {
                 try {
-                  await supabase.from('friends').insert([
+                  // Insert friendship in both directions with proper structure
+                  const { error: friendsError } = await supabase.from('friends').insert([
                     { user_id: user.id, friend_id: request.requester_user_id },
                     { user_id: request.requester_user_id, friend_id: user.id }
                   ]);
+
+                  if (friendsError) throw friendsError;
+
+                  // Update friend request status
                   await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', request.id);
-                  Alert.alert('Friend Added!', 'You are now friends.');
+                  
+                  showToast('Friend Added!');
+                  
+                  // Remove the request from pending list immediately
+                  setPendingFriendRequests(prev => prev.filter(req => req.id !== request.id));
+                  
+                  // Optionally refresh friends list immediately
+                  const { data: updatedFriends } = await supabase
+                    .from('friends')
+                    .select('friend_id, profiles:friend_id(full_name, email)')
+                    .eq('user_id', user.id);
+                  setFriends(updatedFriends || []);
+                  
                 } catch (err) {
-                  if (!String(err).includes('duplicate')) {
-                    Alert.alert('Error', 'Could not add friend.');
-                  }
+                  console.error('Friend acceptance error:', err);
+                  showToast('Error adding friend');
                 }
-                onRefresh();
               }}
             >
               <ThemedText style={styles(palette).acceptInviteButtonText}>Accept Request</ThemedText>
@@ -855,33 +1126,65 @@ export default function AccountsScreen() {
         </View>
       ))}
       {pendingInvites.map(invite => (
-        <View key={invite.id}>
-          <ThemedText>Group invite from {invite.inviter_user_id}</ThemedText>
-          <View style={{ flexDirection: 'row' }}>
+        <View key={invite.id} style={{
+          backgroundColor: palette.white,
+          padding: 16,
+          marginHorizontal: 16,
+          marginVertical: 8,
+          borderRadius: 12,
+          shadowColor: palette.primary,
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          shadowOffset: { width: 0, height: 2 },
+          elevation: 2,
+        }}>
+          <ThemedText style={{
+            fontSize: 16,
+            fontWeight: '600',
+            color: palette.primary,
+            marginBottom: 4
+          }}>
+            Group Invitation
+          </ThemedText>
+          <ThemedText style={{
+            fontSize: 14,
+            color: palette.textDark,
+            marginBottom: 12
+          }}>
+            You've been invited to join "{invite.voice_groups?.name || 'a group'}"
+          </ThemedText>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
             <Pressable
-              style={styles(palette).acceptInviteButton}
-              onPress={async () => {
-                await supabase.from('hubroom_invites').update({ status: 'accepted' }).eq('id', invite.id);
-                Alert.alert('Invite Accepted', 'You have joined the group.');
-                onRefresh();
-              }}
+              style={({ pressed }) => [
+                styles(palette).acceptInviteButton,
+                pressed && { backgroundColor: '#2563EB', transform: [{ scale: 0.95 }] } // Use hardcoded darker blue
+              ]}
+              onPress={() => acceptInvite(invite.id, invite.group_id)}
             >
-              <ThemedText style={styles(palette).acceptInviteButtonText}>Accept Invite</ThemedText>
+              <ThemedText style={styles(palette).acceptInviteButtonText}>
+                Accept & Join
+              </ThemedText>
             </Pressable>
             <Pressable
-              style={styles(palette).declineInviteButton}
+              style={({ pressed }) => [
+                styles(palette).declineInviteButton,
+                pressed && { backgroundColor: '#B91C1C', transform: [{ scale: 0.95 }] }
+              ]}
               onPress={async () => {
                 await supabase.from('hubroom_invites').update({ status: 'declined' }).eq('id', invite.id);
-                Alert.alert('Invite Declined', 'Group invite declined.');
-                onRefresh();
+                showToast('Invite Declined');
+                setPendingInvites(prev => prev.filter(i => i.id !== invite.id));
               }}
             >
-              <ThemedText style={styles(palette).declineInviteButtonText}>Decline Invite</ThemedText>
+              <ThemedText style={styles(palette).declineInviteButtonText}>
+                Decline
+              </ThemedText>
             </Pressable>
           </View>
         </View>
       ))}
     </ScrollView>
+    </>
   );
 }
 
@@ -903,7 +1206,7 @@ const styles = (palette: any) => StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: palette.background,
-    marginTop: SCREEN_HEIGHT * 0.04,
+    marginTop: SCREEN_HEIGHT * 0
   },
   centerContent: {
     justifyContent: 'center',
@@ -915,7 +1218,7 @@ const styles = (palette: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SCREEN_WIDTH * 0.08,
-    paddingVertical: SCREEN_HEIGHT * 0.04,
+    paddingVertical: SCREEN_HEIGHT * 0.02,
     borderBottomWidth: 1,
     borderBottomColor: palette.grey,
     backgroundColor: palette.white,
@@ -925,41 +1228,60 @@ const styles = (palette: any) => StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
     zIndex: 10,
-    marginTop: SCREEN_HEIGHT * 0.05,
   },
   headerSmall: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SCREEN_WIDTH * 0.05,
-    paddingVertical: SCREEN_HEIGHT * 0.015,
+    paddingTop: SCREEN_HEIGHT * 0.04, // Move higher up
+    paddingBottom: SCREEN_HEIGHT * 0.01, // More condensed
+    backgroundColor: palette.white,
+    borderBottomWidth: 0, // Remove bottom border for cleaner look
+  },
+
+  headerTitleSmall: {
+    fontSize: SCREEN_WIDTH * 0.05, // Slightly smaller
+    fontWeight: '700',
+    color: palette.primary,
+  },
+
+  accountDescContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SCREEN_WIDTH * 0.05,
+    paddingTop: SCREEN_HEIGHT * 0.005, // Minimal top padding
+    paddingBottom: SCREEN_HEIGHT * 0.015, // Reduced bottom padding
+    backgroundColor: palette.white,
     borderBottomWidth: 1,
     borderBottomColor: palette.grey,
-    backgroundColor: palette.white,
   },
-  headerTitle: {
-    fontSize: SCREEN_WIDTH * 0.07,
-    fontWeight: '700',
-    color: palette.primary,
+
+  avatarCircle: {
+    width: SCREEN_WIDTH * 0.12, // Slightly smaller avatar
+    height: SCREEN_WIDTH * 0.12,
+    borderRadius: (SCREEN_WIDTH * 0.12) / 2,
+    backgroundColor: palette.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTitleSmall: {
-    fontSize: SCREEN_WIDTH * 0.055,
-    fontWeight: '700',
-    color: palette.primary,
-  },
-  logoutButton: {
-    backgroundColor: palette.error,
-    paddingHorizontal: SCREEN_WIDTH * 0.04,
-    paddingVertical: SCREEN_HEIGHT * 0.01,
-    borderRadius: 20,
-  },
-  logoutButtonPressed: {
-    backgroundColor: "#B91C1C",
-  },
-  logoutButtonText: {
+
+  avatarText: {
     color: palette.white,
+    fontSize: SCREEN_WIDTH * 0.055, // Smaller text to match smaller avatar
     fontWeight: '700',
-    fontSize: SCREEN_WIDTH * 0.04,
+  },
+
+  accountName: {
+    fontSize: SCREEN_WIDTH * 0.045, // Slightly smaller name
+    fontWeight: '700',
+    color: palette.primary,
+    marginBottom: 2, // Add small margin for better spacing
+  },
+
+  accountEmail: {
+    fontSize: SCREEN_WIDTH * 0.035, // Smaller email text
+    color: palette.textLight,
   },
   container: {
     paddingHorizontal: SCREEN_WIDTH * 0.08,
@@ -1150,37 +1472,6 @@ const styles = (palette: any) => StyleSheet.create({
     fontWeight: '600',
     color: palette.textDark,
   },
-  accountDescContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SCREEN_WIDTH * 0.05,
-    paddingVertical: SCREEN_HEIGHT * 0.02,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.grey,
-    backgroundColor: palette.white,
-  },
-  avatarCircle: {
-    width: SCREEN_WIDTH * 0.15,
-    height: SCREEN_WIDTH * 0.15,
-    borderRadius: (SCREEN_WIDTH * 0.15) / 2,
-    backgroundColor: palette.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: palette.white,
-    fontSize: SCREEN_WIDTH * 0.07,
-    fontWeight: '700',
-  },
-  accountName: {
-    fontSize: SCREEN_WIDTH * 0.05,
-    fontWeight: '700',
-    color: palette.primary,
-  },
-  accountEmail: {
-    fontSize: SCREEN_WIDTH * 0.04,
-    color: palette.textLight,
-  },
   createButton: {
     backgroundColor: palette.primary,
     paddingVertical: 14,
@@ -1250,6 +1541,78 @@ const styles = (palette: any) => StyleSheet.create({
     marginLeft: 4,
   },
   declineInviteButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  friendsSection: {
+    marginTop: 24,
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  friendsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    gap: 12,
+    marginTop: 8,
+  },
+  friendTile: {
+    width: 90,
+    height: 90,
+    backgroundColor: palette.white,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: palette.grey,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+    padding: 6,
+  },
+  friendAvatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: palette.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  friendAvatarText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  friendTileName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: palette.primary,
+    textAlign: 'center',
+    marginBottom: 2,
+    maxWidth: 80,
+  },
+  friendTileEmail: {
+    fontSize: 10,
+    color: palette.textLight,
+    textAlign: 'center',
+    maxWidth: 80,
+  },
+  logoutButton: {
+    backgroundColor: palette.error,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  logoutButtonPressed: {
+    backgroundColor: '#B91C1C', // darker red
+    transform: [{ scale: 0.95 }],
+  },
+  logoutButtonText: {
     color: palette.white,
     fontWeight: '700',
     fontSize: 14,

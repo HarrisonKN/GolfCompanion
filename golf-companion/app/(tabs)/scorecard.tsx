@@ -118,43 +118,59 @@ export default function ScorecardScreen() {
     else      setParValues(Array(holeCount).fill(4));
   }, [selectedCourse, courses]);
 
-  //----------------Syncing Scorecard and Courseview Logic--------
-  //  Whenever this screen is focused, reload hole-by-hole scores:
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!playerId || !courseId) return;
-      (async () => {
-        // fetch all the saved scores for this user+course
-        const { data: scoreData, error } = await supabase
-          .from('scores')
-          .select('hole_number, score, putts')
-          .eq('player_id', playerId)
-          .eq('course_id', courseId)
-          .order('hole_number');
+  //----------------Sync & Clear pending “scores” rows---------------
+  // Whenever this screen is focused, grab any recently-entered hole scores,
+  // show them in your table, then delete them from Supabase.
+  // ------------------- Sync & Clear pending “scores” rows ---------------
+useFocusEffect(
+  React.useCallback(() => {
+    if (!user || !selectedCourse) return;
+    (async () => {
+      // 1️⃣ pull in the raw rows, including id
+      const { data: scoreData, error: fetchError } = await supabase
+        .from('scores')
+        .select('hole_number, score, putts')
+        .eq('player_id', user.id)
+        .eq('course_id', selectedCourse)
+        .order('hole_number');
 
-        if (error) {
-          console.error('Error loading scores:', error.message);
-          return;
+      if (fetchError) {
+        console.error('Error loading scores:', fetchError.message);
+        return;
+      }
+
+      // 2️⃣ if nothing new, do not overwrite UI
+      if (!scoreData || scoreData.length === 0) {
+        return;
+      }
+
+      // 3️⃣ merge into existing players[0].scores
+      setPlayers(old => {
+        // copy the current first player's scores (or default blanks)
+        const base = old[0]?.scores?.slice() ?? Array(holeCount).fill('');
+        // overlay each fetched hole_number
+        for (let rec of scoreData) {
+          base[rec.hole_number - 1] = `${rec.score} / ${rec.putts}`;
         }
+        return [{ name: old[0]?.name || displayName, scores: base }];
+      });
 
-        // Turn that into an array of "X / Y" strings, one per hole
-        const row = Array(holeCount)
-          .fill('')
-          .map((_, i) => {
-            const rec = scoreData!.find(r => r.hole_number === i + 1);
-            return rec ? `${rec.score} / ${rec.putts}` : '';
-          });
+      // 4️⃣ delete only what we just merged
+      const holeNumbers = scoreData.map(r => r.hole_number);
+      const { error: deleteError, data: deleted } = await supabase
+        .from('scores')
+        .delete()
+        .eq('player_id', user.id)
+        .eq('course_id', selectedCourse)
+        .in('hole_number', holeNumbers);
 
-        // If you only ever show 1 player ("You"), overwrite players:
-        setPlayers([{ name: players[0]?.name || 'You', scores: row }]);
+      if (deleteError) {
+        console.error('Error clearing fetched scores:', deleteError.message);
+      } 
+    })();
+  }, [user, selectedCourse])
+);
 
-        // *Optionally* auto‐select the course dropdown too:
-        if (courseId !== selectedCourse) {
-          setSelectedCourse(courseId);
-        }
-      })();
-    }, [playerId, courseId])
-  );
 
   useEffect(() => {
     if (courseId && courseId !== selectedCourse) {

@@ -1,20 +1,24 @@
 // ------------------- IMPORTS -------------------------
-import { supabase, testSupabaseConnection } from "@/components/supabase";
 import { useAuth } from "@/components/AuthContext";
+import { useCourse } from '@/components/CourseContext';
+import { supabase, testSupabaseConnection } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as Location from "expo-location";
-import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import haversine from "haversine-distance";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
+  Button,
   Image,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
-  View,
-  Modal,
   TextInput,
-  Button,
+  ToastAndroid,
+  View,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
@@ -23,8 +27,6 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region
 } from "react-native-maps";
-import { Platform, ToastAndroid, Alert } from 'react-native';
-import { useCourse } from '@/components/CourseContext';
 
 // …
 
@@ -101,47 +103,62 @@ export default function CourseViewScreen() {
 
 
  const handleEnter = async () => {
-   // 1) require a logged-in user
-   if (!user) {
-     showMessage("Please sign in before recording scores.");
-     return;
-   }
+  if (!user) {
+    showMessage("Please sign in before recording scores.");
+    return;
+  }
+  if (!selectedHole) {
+    showMessage("Please select a hole first.");
+    return;
+  }
 
-   // 2) require a selected hole
-   if (!selectedHole) return;
+  console.log("👉 Inserting score:", {
+    player_id: user.id,
+    course_id: selectedCourse,
+    hole_number: selectedHole.hole_number,
+    score,
+    putts,
+  });
 
-   // 3) write this hole's score & putts into the `scores` table
-   setLoading(true);
-   try {
-     const { error } = await supabase
-       .from("scores")
-       .insert({
-         player_id:   user.id,                  // who
-         course_id:   selectedCourse!,        // which course
-         hole_number: selectedHole.hole_number, // which hole
-         score,                                  // strokes
-         putts,                                  // putts
-       });
-     if (error) throw error;
-   } catch (err: any) {
-     setConnectionError(err.message);
-     return;
-   } finally {
-     setLoading(false);
-   }
+  setLoading(true);
+  try {
+    const { data, error } = await supabase
+      .from("scores")
+      .insert([{
+        player_id: user.id,
+        course_id: selectedCourse!,
+        hole_number: selectedHole.hole_number,
+        score,
+        putts,
+     }]);
 
-   // 4) now advance locally
-   const idx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
-   const next = holes[idx + 1];
-   if (next) {
-     setSelectedHoleNumber(next.hole_number);
-   } else {
-     router.push({
-       pathname: "/scorecard",
-       params: { playerId: user.id, courseId: selectedCourse! },
-     });
-   }
- };
+    if (error) {
+      console.error("❌ Supabase insert error:", error);
+      showMessage(`Error saving score: ${error.message}`);
+      return;
+    }
+
+    console.log("✅ Insert result:", data);
+
+    // advance to next hole
+    const idx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
+    const next = holes[idx + 1];
+    if (next) {
+      setSelectedHoleNumber(next.hole_number);
+    } else {
+      router.push({
+        pathname: "/scorecard",
+        params: { playerId: user.id, courseId: selectedCourse! },
+      });
+    }
+
+  } catch (err: any) {
+    console.error("❌ Unexpected error:", err);
+    showMessage(`Unexpected error: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   // Initialize App and set user location
@@ -381,6 +398,11 @@ export default function CourseViewScreen() {
   }, [selectedCourse]);
 
   const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
+  useEffect(() => {
+  if (holes.length > 0 && selectedHoleNumber === null) {
+    setSelectedHoleNumber(holes[0].hole_number);
+  }
+  }, [holes]);
 
   // Center map when hole data changes
   useEffect(() => {
@@ -498,6 +520,7 @@ export default function CourseViewScreen() {
              }
              else{
             setSelectedCourse(v);
+            setCourseOpen(false);
             setSelectedHoleNumber(null);
             }
           }}
@@ -523,7 +546,12 @@ export default function CourseViewScreen() {
             }}
             setItems={setHoleItems}
             style={styles(palette).dropdown}
-            dropDownContainerStyle={[styles(palette).dropdownContainer, { maxHeight: 400 }]} // keep maxheight here to display all holes rather than 1-5
+              listMode="SCROLLVIEW"                 // ← switch to ScrollView
+              scrollViewProps={{
+              nestedScrollEnabled: true,
+              showsVerticalScrollIndicator: true,
+              }}
+            dropDownContainerStyle={[styles(palette).dropdownContainer, { maxHeight: 300 }]}
             placeholderStyle={styles(palette).placeholder}
             textStyle={styles(palette).text}
             listItemLabelStyle={styles(palette).listItemLabel}

@@ -1,29 +1,28 @@
 // ------------------- IMPORTS -------------------------
 
+import { useAuth } from '@/components/AuthContext';
+import { useCourse } from '@/components/CourseContext';
 import ScoreEntryModal from '@/components/ScoreEntryModal';
-import React, { useState, useEffect } from 'react';
+import { supabase } from "@/components/supabase";
+import { useTheme } from "@/components/ThemeContext";
+import * as MediaLibrary from 'expo-media-library';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Button,
+  Dimensions,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  Dimensions,
-  Alert
+  View
 } from 'react-native';
-import { supabase } from "@/components/supabase";
 import DropDownPicker from "react-native-dropdown-picker";
-import { useAuth } from '@/components/AuthContext';
-import { router } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
-import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
-import { useTheme } from "@/components/ThemeContext";
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-
 
 // ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
@@ -46,17 +45,22 @@ export default function ScorecardScreen() {
 
   const { user } = useAuth();
   const displayName =
-  user?.user_metadata?.full_name
-  || user?.email
-  || "You"
-  
+    user?.user_metadata?.full_name
+    || user?.email
+    || "You";
+
   const { palette } = useTheme();
 
   // Dropdown state
   const [courses, setCourses] = useState<Course[]>([]);
   const [courseItems, setCourseItems] = useState<CourseDropdownItem[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courseOpen, setCourseOpen] = useState(false);
+
+  // 📣 missing modal state
+  const [showAddCourseModal, setShowAddCourseModal] = useState(false);
+
+  // 📣 pull in the shared course‐ID state instead of a local one
+  const { selectedCourse, setSelectedCourse } = useCourse();
 
   const [parValues, setParValues] = useState<number[]>(Array(holeCount).fill(0));
 
@@ -108,116 +112,86 @@ export default function ScorecardScreen() {
 
   // Update par values when course changes
   useEffect(() => {
-    if (!selectedCourseId) return;
-    const course = courses.find((c) => c.id === selectedCourseId);
-    if (course && Array.isArray(course.par_values)) {
-      setParValues(course.par_values);
-    } else {
-      setParValues(Array(holeCount).fill(4)); // fallback
-    }
-  }, [selectedCourseId, courses]);
+    if (!selectedCourse) return;
+    const course = courses.find(c => c.id === selectedCourse);
+    if (course) setParValues(course.par_values);
+    else      setParValues(Array(holeCount).fill(4));
+  }, [selectedCourse, courses]);
 
   //----------------Syncing Scorecard and Courseview Logic--------
   //  Whenever this screen is focused, reload hole-by-hole scores:
-    useFocusEffect(
-      React.useCallback(() => {
-        if (!playerId || !courseId) return;
-        (async () => {
-          // fetch all the saved scores for this user+course
-          const { data: scoreData, error } = await supabase
-            .from('scores')
-            .select('hole_number, score, putts')
-            .eq('player_id', playerId)
-            .eq('course_id', courseId)
-            .order('hole_number');
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!playerId || !courseId) return;
+      (async () => {
+        // fetch all the saved scores for this user+course
+        const { data: scoreData, error } = await supabase
+          .from('scores')
+          .select('hole_number, score, putts')
+          .eq('player_id', playerId)
+          .eq('course_id', courseId)
+          .order('hole_number');
 
-          if (error) {
-            console.error('Error loading scores:', error.message);
-            return;
-          }
+        if (error) {
+          console.error('Error loading scores:', error.message);
+          return;
+        }
 
-          // Turn that into an array of "X / Y" strings, one per hole
-          const row = Array(holeCount)
-            .fill('')
-            .map((_, i) => {
-              const rec = scoreData!.find(r => r.hole_number === i + 1);
-              return rec ? `${rec.score} / ${rec.putts}` : '';
-            });
+        // Turn that into an array of "X / Y" strings, one per hole
+        const row = Array(holeCount)
+          .fill('')
+          .map((_, i) => {
+            const rec = scoreData!.find(r => r.hole_number === i + 1);
+            return rec ? `${rec.score} / ${rec.putts}` : '';
+          });
 
-          // If you only ever show 1 player ("You"), overwrite players:
-          setPlayers([{ name: players[0]?.name || 'You', scores: row }]);
-          
-          // *Optionally* auto‐select the course dropdown too:
-          if (courseId !== selectedCourseId) {
-            setSelectedCourseId(courseId);
-          }
-        })();
-      }, [playerId, courseId])
-    );
+        // If you only ever show 1 player ("You"), overwrite players:
+        setPlayers([{ name: players[0]?.name || 'You', scores: row }]);
 
-    useEffect(() => {
-    if (courseId && courseId !== selectedCourseId) {
-      setSelectedCourseId(courseId);
+        // *Optionally* auto‐select the course dropdown too:
+        if (courseId !== selectedCourse) {
+          setSelectedCourse(courseId);
+        }
+      })();
+    }, [playerId, courseId])
+  );
+
+  useEffect(() => {
+    if (courseId && courseId !== selectedCourse) {
+      setSelectedCourse(courseId);
     }
-    }, [courseId]);
+  }, [courseId]);
 
-    useEffect(() => {
-  if (user && fullName !== null && players.length === 0) {
-    //use this section to display only first name of user
+  useEffect(() => {
+    if (user && fullName !== null && players.length === 0) {
+      //use this section to display only first name of user
       const first =
-      fullName.split(' ')[0] ||
-      user.email!.split('@')[0] ||
-      'You';
-    setPlayers([{ name: first, scores: Array(holeCount).fill('') }]);
-  }
+        fullName.split(' ')[0] ||
+        user.email!.split('@')[0] ||
+        'You';
+      setPlayers([{ name: first, scores: Array(holeCount).fill('') }]);
+    }
   }, [user, fullName]);
 
-    
-    //use below to show users full name
-    /*setPlayers([{
-    name: displayName, scores: Array(holeCount).fill("") }]);
-  }
-}, [user, displayName]);*/
-
-
-//replaced with below needed to change logic to be able to first name
-  /*useEffect(() => {
+  // 2) fetch their real full_name out of your profiles table
+  useEffect(() => {
     if (!user) return;
-    const fetchProfile = async () => {
+    (async () => {
       const { data, error } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
         .single();
       if (error) {
-        console.error("Error loading profile:", error.message);
-        setFullName("");
-      } else if (data?.full_name) {
-        setFullName(data.full_name);
+        console.error('failed to load profile', error.message);
+        // mark as “done” but empty
+        setFullName('');
+      } else {
+        // either their full_name or empty string
+        setFullName(data.full_name || '');
       }
-    };
-    //fetchProfile();
-  }, [user]);*/
-
-  // 2) fetch their real full_name out of your profiles table
-useEffect(() => {
-  if (!user) return;
-  (async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('full_name')
-      .eq('id', user.id)
-      .single();
-    if (error) {
-      console.error('failed to load profile', error.message);
-      // mark as “done” but empty
-      setFullName('');
-    } else {
-      // either their full_name or empty string
-      setFullName(data.full_name || '');
-    }
-  })();
-}, [user]);
+    })();
+  }, [user]);
 
   // Add/remove player logic
   const addPlayer = () => {
@@ -253,7 +227,8 @@ useEffect(() => {
     // Prepare round data
     const roundData = {
       user_id: user.id,
-      course_name: courses.find(c => c.id === selectedCourseId)?.name || 'Unknown Course',
+      course_name: courses.find(c => c.id === selectedCourse
+      )?.name || 'Unknown Course',
       date: new Date().toISOString().slice(0, 10),
       score: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
         const score = parseInt(val.split('/')[0]?.trim()) || 0;
@@ -266,7 +241,7 @@ useEffect(() => {
         return sum + putts;
       }, 0) : null,
       scorecard: JSON.stringify(players), // Save the full scorecard for later retrieval
-      course_id: selectedCourseId,
+      course_id: selectedCourse,
     };
 
     const { error } = await supabase.from('golf_rounds').insert(roundData);
@@ -325,12 +300,20 @@ useEffect(() => {
       {/* Course Dropdown */}
       <View style={{ marginBottom: 16 }}>
         <DropDownPicker
-          placeholder="Select a course..."
+          placeholder="Select a course…"
           open={courseOpen}
-          value={selectedCourseId}
+          value={selectedCourse}                            
           items={courseItems}
           setOpen={setCourseOpen}
-          setValue={setSelectedCourseId}
+          setValue={(cb) => {
+            const v = cb(selectedCourse);
+            if (v === 'add_course') {
+              setCourseOpen(false);
+              setShowAddCourseModal(true);
+            } else {
+              setSelectedCourse(v);                       
+            }
+          }}
           setItems={setCourseItems}
           style={styles(palette).dropdown}
           dropDownContainerStyle={styles(palette).dropdownContainer}

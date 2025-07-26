@@ -24,6 +24,8 @@ import MapView, {
   Region
 } from "react-native-maps";
 import { Platform, ToastAndroid, Alert } from 'react-native';
+import { useCourse } from '@/components/CourseContext';
+
 // …
 
 
@@ -54,7 +56,6 @@ export default function CourseViewScreen() {
   const [region, setRegion] = useState<Region | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [holes, setHoles] = useState<Hole[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedHoleNumber, setSelectedHoleNumber] = useState<number | null>(null);
   const [courseOpen, setCourseOpen] = useState(false);
   const [holeOpen, setHoleOpen] = useState(false);
@@ -74,9 +75,11 @@ export default function CourseViewScreen() {
   const { palette } = useTheme();
   const [score, setScore] = useState<number>(0);
   const [putts, setPutts] = useState<number>(0);
-  //Grabbing CourseID 
-  const { courseId: initialCourseId } = useLocalSearchParams<{ courseId?: string }>();
+    // grab `courseId` from the URL (if any)
+  const { courseId } = useLocalSearchParams<{ courseId?: string }>()
   const router = useRouter();
+  // seed your dropdown state from that param:
+  const { selectedCourse, setSelectedCourse } = useCourse();
 
   
 
@@ -114,7 +117,7 @@ export default function CourseViewScreen() {
        .from("scores")
        .insert({
          player_id:   user.id,                  // who
-         course_id:   selectedCourseId!,        // which course
+         course_id:   selectedCourse!,        // which course
          hole_number: selectedHole.hole_number, // which hole
          score,                                  // strokes
          putts,                                  // putts
@@ -135,7 +138,7 @@ export default function CourseViewScreen() {
    } else {
      router.push({
        pathname: "/scorecard",
-       params: { playerId: user.id, courseId: selectedCourseId! },
+       params: { playerId: user.id, courseId: selectedCourse! },
      });
    }
  };
@@ -198,12 +201,12 @@ export default function CourseViewScreen() {
   };
 
   const fetchHoles = async () => {
-    if (!selectedCourseId) return;
+    if (!selectedCourse) return;
     try {
       const { data, error } = await supabase
         .from("holes")
         .select("*")
-        .eq("course_id", selectedCourseId)
+        .eq("course_id", selectedCourse)
         .order("hole_number");
       if (error) throw error;
       setHoles(data || []);
@@ -239,7 +242,7 @@ export default function CourseViewScreen() {
       ]);
 
       // Select the new course & prepare placeholder holes
-      safeSetState(setSelectedCourseId, added.id);
+      safeSetState(setSelectedCourse, added.id);
       safeSetState(setSelectedHoleNumber, null);
       // <-- Change highlighted: insert 18 empty holes into DB using the new course ID
     const { data: newHoles, error: holesError } = await supabase
@@ -347,13 +350,14 @@ export default function CourseViewScreen() {
     };
 
 //------------------------USE STATE HOOKS---------------------------
-   useEffect(() => {
-   if (initialCourseId && initialCourseId !== selectedCourseId) {
-     setSelectedCourseId(initialCourseId);
-     setSelectedHoleNumber(null);
-   }
- }, [initialCourseId]);
-
+//------------------------SYNC URL → STATE---------------------------
+// whenever someone navigates here with ?courseId=XXX, select it
+  useEffect(() => {
+    if (courseId && courseId !== selectedCourse) {
+      setSelectedCourse(courseId);
+      setSelectedHoleNumber(null);
+    }
+  }, [courseId]);
 
   // Ensure initialization on mount
   useFocusEffect(
@@ -373,8 +377,8 @@ export default function CourseViewScreen() {
 
   // Fetch holes when a course is selected
   useEffect(() => {
-    if (selectedCourseId) fetchHoles();
-  }, [selectedCourseId]);
+    if (selectedCourse) fetchHoles();
+  }, [selectedCourse]);
 
   const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
 
@@ -482,18 +486,18 @@ export default function CourseViewScreen() {
         <DropDownPicker
           placeholder="Select a course..."
           open={courseOpen}
-          value={selectedCourseId}
+          value={selectedCourse}
           items={courseItems}
           setOpen={setCourseOpen}
           setValue={(cb) => {
-            const v = cb(selectedCourseId);
+            const v = cb(selectedCourse);
             //closes drop down before modal pop up for text input
              if (v === "add_course") {
             setCourseOpen(false);
             setShowAddCourseModal(true);
              }
              else{
-            setSelectedCourseId(v);
+            setSelectedCourse(v);
             setSelectedHoleNumber(null);
             }
           }}
@@ -506,7 +510,7 @@ export default function CourseViewScreen() {
           zIndex={2000}
         />
 
-        {selectedCourseId && (
+        {selectedCourse && (
           <DropDownPicker
             placeholder="Select a hole..."
             open={holeOpen}

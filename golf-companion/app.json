@@ -46,6 +46,7 @@
     },
     "plugins": [
       "expo-router",
+
       [
         "expo-splash-screen",
         {
@@ -55,6 +56,15 @@
           "backgroundColor": "#003b23"
         }
       ],
+
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "We need your location to drop tee/fairway/green pins.",
+          "locationWhenInUsePermission": "We need your location to drop tee/fairway/green pins."
+        }
+      ],
+
       [
         "react-native-permissions",
         {
@@ -71,6 +81,7 @@
           }
         }
       ],
+
       "expo-secure-store"
     ],
     "experiments": {

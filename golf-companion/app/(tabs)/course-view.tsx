@@ -526,6 +526,17 @@ export default function CourseViewScreen() {
           }}
           setItems={setCourseItems}
           style={styles(palette).dropdown}
+          listMode="MODAL"
+            modalProps={{
+            animationType: 'slide',
+            transparent: true,
+          }}
+          modalContentContainerStyle={{
+            backgroundColor: palette.secondary,
+            maxHeight: 300,             // whatever height you want
+            marginHorizontal: 20,       // gives you side padding
+            borderRadius: 8,
+          }}
           dropDownContainerStyle={styles(palette).dropdownContainer}
           placeholderStyle={styles(palette).placeholder}
           textStyle={styles(palette).text}
@@ -546,11 +557,19 @@ export default function CourseViewScreen() {
             }}
             setItems={setHoleItems}
             style={styles(palette).dropdown}
-              listMode="SCROLLVIEW"                 // ← switch to ScrollView
-              scrollViewProps={{
-              nestedScrollEnabled: true,
-              showsVerticalScrollIndicator: true,
-              }}
+              // FLATLIST is more reliable in release builds…
+            listMode="MODAL"
+            modalProps={{
+            animationType: 'slide',
+            transparent: true,
+          }}
+          modalContentContainerStyle={{
+            backgroundColor: palette.secondary,
+            maxHeight: 300, 
+            marginVertical:75,            // whatever height you want
+            marginHorizontal: 20,       // gives you side padding
+            borderRadius: 8,
+          }}
             dropDownContainerStyle={[styles(palette).dropdownContainer, { maxHeight: 300 }]}
             placeholderStyle={styles(palette).placeholder}
             textStyle={styles(palette).text}
@@ -573,7 +592,7 @@ export default function CourseViewScreen() {
     }
   }
   showsUserLocation={!!location}
-  showsMyLocationButton={!!location}
+  showsMyLocationButton={false}
   mapType="hybrid"
   onMapReady={() => console.log("🗺️ Map is ready")}
   onMapLoaded={() => console.log("🗺️ Tiles loaded")}
@@ -649,10 +668,10 @@ export default function CourseViewScreen() {
   {/* Dropped pins and connecting lines (unchanged) */}
   {droppedPins.map((pin, index) => (
     <Marker
-      key={`pin-${index}`}
+      key={`shot-${index}`}
       coordinate={pin}
       pinColor="orange"
-      title={`Pin ${index + 1}`}
+      title={`Shot ${index + 1}`}
     />
   ))}
 
@@ -719,10 +738,31 @@ export default function CourseViewScreen() {
         </View>
       )}
       {selectedHole && (
-      <Pressable style={styles(palette).pinButton} onPress={handleDropPin}>
-        <Text style={styles(palette).pinButtonText}>Drop Pin</Text>
-      </Pressable>
-      )}
+  <>
+    <Pressable
+      style={[styles(palette).pinButton, { left: 20 }]}    // existing Drop Pin
+      onPress={handleDropPin}
+    >
+      <Text style={styles(palette).pinButtonText}>Drop Pin</Text>
+    </Pressable>
+
+    <Pressable
+      style={[styles(palette).pinButton, { left: 140 }]}   // new My Location button
+      onPress={() => {
+        if (location && mapRef.current) {
+          mapRef.current.animateToRegion({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }, 500);
+        }
+      }}
+    >
+      <Text style={styles(palette).pinButtonText}>My Location</Text>
+    </Pressable>
+  </>
+)}
        {/* Action Buttons for New Holes */}
         {selectedHole && (
           <View style={styles(palette).actionButtonsContainer}>
@@ -957,4 +997,15 @@ scoreOverlay: {
     fontWeight: "600",
     textAlign: "center",
   },
+  getLocationButton: {
+  position: 'absolute',
+  bottom: 80,
+  left: 140,
+  backgroundColor: palette.primary,
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+  borderRadius: 8,
+  elevation: 3,
+},
+
 });

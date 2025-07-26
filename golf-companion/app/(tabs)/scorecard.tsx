@@ -22,6 +22,8 @@ import { captureRef } from 'react-native-view-shot';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from "@/components/ThemeContext";
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+
 
 // ------------------- CONSTANTS & TYPES -------------------------
 const ACCENT = '#2979FF';
@@ -43,6 +45,11 @@ export default function ScorecardScreen() {
   const holeCount = 18;
 
   const { user } = useAuth();
+  const displayName =
+  user?.user_metadata?.full_name
+  || user?.email
+  || "You"
+  
   const { palette } = useTheme();
 
   // Dropdown state
@@ -68,7 +75,16 @@ export default function ScorecardScreen() {
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
   const scorecardRef = React.useRef<View>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
 
+  // grab courseId layerId from the URL
+  const { courseId, playerId } = useLocalSearchParams<{
+    courseId?: string;
+    playerId?: string;
+  }>();
+
+
+  //---------------HOOKS---------------------------------
   // Fetch courses from Supabase
   useEffect(() => {
     const fetchCourses = async () => {
@@ -100,6 +116,108 @@ export default function ScorecardScreen() {
       setParValues(Array(holeCount).fill(4)); // fallback
     }
   }, [selectedCourseId, courses]);
+
+  //----------------Syncing Scorecard and Courseview Logic--------
+  //  Whenever this screen is focused, reload hole-by-hole scores:
+    useFocusEffect(
+      React.useCallback(() => {
+        if (!playerId || !courseId) return;
+        (async () => {
+          // fetch all the saved scores for this user+course
+          const { data: scoreData, error } = await supabase
+            .from('scores')
+            .select('hole_number, score, putts')
+            .eq('player_id', playerId)
+            .eq('course_id', courseId)
+            .order('hole_number');
+
+          if (error) {
+            console.error('Error loading scores:', error.message);
+            return;
+          }
+
+          // Turn that into an array of "X / Y" strings, one per hole
+          const row = Array(holeCount)
+            .fill('')
+            .map((_, i) => {
+              const rec = scoreData!.find(r => r.hole_number === i + 1);
+              return rec ? `${rec.score} / ${rec.putts}` : '';
+            });
+
+          // If you only ever show 1 player ("You"), overwrite players:
+          setPlayers([{ name: players[0]?.name || 'You', scores: row }]);
+          
+          // *Optionally* auto‐select the course dropdown too:
+          if (courseId !== selectedCourseId) {
+            setSelectedCourseId(courseId);
+          }
+        })();
+      }, [playerId, courseId])
+    );
+
+    useEffect(() => {
+    if (courseId && courseId !== selectedCourseId) {
+      setSelectedCourseId(courseId);
+    }
+    }, [courseId]);
+
+    useEffect(() => {
+  if (user && fullName !== null && players.length === 0) {
+    //use this section to display only first name of user
+      const first =
+      fullName.split(' ')[0] ||
+      user.email!.split('@')[0] ||
+      'You';
+    setPlayers([{ name: first, scores: Array(holeCount).fill('') }]);
+  }
+  }, [user, fullName]);
+
+    
+    //use below to show users full name
+    /*setPlayers([{
+    name: displayName, scores: Array(holeCount).fill("") }]);
+  }
+}, [user, displayName]);*/
+
+
+//replaced with below needed to change logic to be able to first name
+  /*useEffect(() => {
+    if (!user) return;
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      if (error) {
+        console.error("Error loading profile:", error.message);
+        setFullName("");
+      } else if (data?.full_name) {
+        setFullName(data.full_name);
+      }
+    };
+    //fetchProfile();
+  }, [user]);*/
+
+  // 2) fetch their real full_name out of your profiles table
+useEffect(() => {
+  if (!user) return;
+  (async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single();
+    if (error) {
+      console.error('failed to load profile', error.message);
+      // mark as “done” but empty
+      setFullName('');
+    } else {
+      // either their full_name or empty string
+      setFullName(data.full_name || '');
+    }
+  })();
+}, [user]);
 
   // Add/remove player logic
   const addPlayer = () => {

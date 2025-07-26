@@ -1,8 +1,9 @@
 // ------------------- IMPORTS -------------------------
 import { supabase, testSupabaseConnection } from "@/components/supabase";
+import { useAuth } from "@/components/AuthContext";
 import { useTheme } from "@/components/ThemeContext";
 import * as Location from "expo-location";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter, useLocalSearchParams } from "expo-router";
 import haversine from "haversine-distance";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -22,6 +23,7 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region
 } from "react-native-maps";
+import { Platform, ToastAndroid, Alert } from 'react-native';
 // …
 
 
@@ -64,6 +66,7 @@ export default function CourseViewScreen() {
   const [distanceToPin, setDistanceToPin] = useState<number | null>(null);
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [newCourseName, setNewCourseName] = useState("");
+  const { user } = useAuth();
 
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView>(null);
@@ -71,7 +74,11 @@ export default function CourseViewScreen() {
   const { palette } = useTheme();
   const [score, setScore] = useState<number>(0);
   const [putts, setPutts] = useState<number>(0);
+  //Grabbing CourseID 
+  const { courseId: initialCourseId } = useLocalSearchParams<{ courseId?: string }>();
   const router = useRouter();
+
+  
 
   // Safe state update to avoid changing state after the component is unmounted
   const safeSetState = (setter: any, value: any) => {
@@ -80,19 +87,58 @@ export default function CourseViewScreen() {
     }
   };
 
-  const handleEnter = async () => {
-  if (!selectedHole) return;
+  //Toast alerts for user login on course view - fall back to alert for ios
+  const showMessage = (msg: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(msg, ToastAndroid.SHORT);
+    } else {
+      Alert.alert(msg);
+    }
+  };
 
-  const idx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
-  const next = holes[idx + 1];
-  if (next) {
-    setSelectedHoleNumber(next.hole_number);
-  } else {
-    // e.g. navigate back to a Summary screen
-    // expo-router navigation:
-    router.push("/scorecard");
-  }
-};
+
+ const handleEnter = async () => {
+   // 1) require a logged-in user
+   if (!user) {
+     showMessage("Please sign in before recording scores.");
+     return;
+   }
+
+   // 2) require a selected hole
+   if (!selectedHole) return;
+
+   // 3) write this hole's score & putts into the `scores` table
+   setLoading(true);
+   try {
+     const { error } = await supabase
+       .from("scores")
+       .insert({
+         player_id:   user.id,                  // who
+         course_id:   selectedCourseId!,        // which course
+         hole_number: selectedHole.hole_number, // which hole
+         score,                                  // strokes
+         putts,                                  // putts
+       });
+     if (error) throw error;
+   } catch (err: any) {
+     setConnectionError(err.message);
+     return;
+   } finally {
+     setLoading(false);
+   }
+
+   // 4) now advance locally
+   const idx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
+   const next = holes[idx + 1];
+   if (next) {
+     setSelectedHoleNumber(next.hole_number);
+   } else {
+     router.push({
+       pathname: "/scorecard",
+       params: { playerId: user.id, courseId: selectedCourseId! },
+     });
+   }
+ };
 
 
   // Initialize App and set user location
@@ -300,6 +346,13 @@ export default function CourseViewScreen() {
       }
     };
 
+//------------------------USE STATE HOOKS---------------------------
+   useEffect(() => {
+   if (initialCourseId && initialCourseId !== selectedCourseId) {
+     setSelectedCourseId(initialCourseId);
+     setSelectedHoleNumber(null);
+   }
+ }, [initialCourseId]);
 
 
   // Ensure initialization on mount

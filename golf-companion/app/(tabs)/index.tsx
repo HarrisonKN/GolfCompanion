@@ -191,6 +191,7 @@ type PaletteType = {
   black: string;
   white: string;
   textDark: string;
+  textLight: string;
 };
 const styles = (palette: PaletteType) => StyleSheet.create({
   container: {
@@ -207,7 +208,7 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     paddingBottom: 20,
   },
   headerRow: {
-    backgroundColor: palette.third, // Changed from palette.third to palette.background
+    backgroundColor: palette.third,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

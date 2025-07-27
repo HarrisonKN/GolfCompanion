@@ -515,13 +515,13 @@ export default function CourseViewScreen() {
             const v = cb(selectedCourse);
             //closes drop down before modal pop up for text input
              if (v === "add_course") {
-            setCourseOpen(false);
-            setShowAddCourseModal(true);
+              setCourseOpen(false);
+              setShowAddCourseModal(true);
              }
              else{
-            setSelectedCourse(v);
-            setCourseOpen(false);
-            setSelectedHoleNumber(null);
+              setSelectedCourse(v);
+              setCourseOpen(false);
+              setSelectedHoleNumber(null);
             }
           }}
           setItems={setCourseItems}
@@ -707,21 +707,21 @@ export default function CourseViewScreen() {
         <View style={styles(palette).statControl}>
           <Text style={styles(palette).statLabel}>Score</Text>
           <Pressable onPress={() => setScore(s => s + 1)} style={styles(palette).button}>
-            <Text style={styles(palette).buttonText}>＋</Text>
+            <Text style={styles(palette).buttonText}>-</Text>
           </Pressable>
           <Text style={styles(palette).statValue}>{score}</Text>
           <Pressable onPress={() => setScore(s => Math.max(0, s - 1))} style={styles(palette).button}>
-            <Text style={styles(palette).buttonText}>－</Text>
+            <Text style={styles(palette).buttonText}>+</Text>
           </Pressable>
         </View>
         <View style={styles(palette).statControl}>
           <Text style={styles(palette).statLabel}>Putts</Text>
           <Pressable onPress={() => setPutts(p => p + 1)} style={styles(palette).button}>
-            <Text style={styles(palette).buttonText}>＋</Text>
+            <Text style={styles(palette).buttonText}>-</Text>
           </Pressable>
           <Text style={styles(palette).statValue}>{putts}</Text>
           <Pressable onPress={() => setPutts(p => Math.max(0, p - 1))} style={styles(palette).button}>
-            <Text style={styles(palette).buttonText}>－</Text>
+            <Text style={styles(palette).buttonText}>+</Text>
           </Pressable>
         </View>
         <Pressable style={styles(palette).enterButton} onPress={handleEnter}>

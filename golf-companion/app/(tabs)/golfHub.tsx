@@ -18,8 +18,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from "@/components/ThemeContext";
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { IRtcEngine, createAgoraRtcEngine } from 'react-native-agora';
-import { AGORA_APP_ID } from '@/constants/agora';
 import { supabase } from '@/components/supabase';
 import { useAuth } from '@/components/AuthContext';
 import { useRouter } from 'expo-router';
@@ -79,130 +77,7 @@ export default function GolfHubScreen() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ------------------- AGORA INIT -------------------------
-    useEffect(() => {
-      const initAgora = async () => {
-        if (Platform.OS === 'android') {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-            {
-              title: 'Microphone Permission',
-              message: 'We need access to your microphone for voice chat.',
-              buttonPositive: 'OK',
-            }
-          );
-      
-          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-            console.warn('Microphone permission denied');
-            return;
-          }
-        }
-      
-        try {
-          const engine: IRtcEngine = createAgoraRtcEngine();
-          engine.initialize({ appId: AGORA_APP_ID });
-          engine.enableAudio();
-      
-          // Register active speaker handler
-          engine.registerEventHandler({
-            onActiveSpeaker: (connection, uid) => {
-              setActiveSpeakerUid(uid);
-              console.log('Active speaker UID:', uid);
-            },
-            onJoinChannelSuccess: (connection, uid) => {
-              console.log('Successfully joined channel:', connection.channelId, 'with UID:', uid);
-            },
-            onUserJoined: (connection, remoteUid) => {
-              console.log('User joined:', remoteUid);
-            },
-            onUserOffline: (connection, remoteUid) => {
-              console.log('User offline:', remoteUid);
-            }
-          });
-      
-          engineRef.current = engine;
-        } catch (error) {
-          console.error('Agora init error:', error);
-        }
-      };
 
-    initAgora();
-
-    return () => {
-      engineRef.current?.release();
-    };
-  }, []);
-
-  // ------------------- VOICE CHAT -------------------------
-  const joinVoiceGroup = async (groupId: string, channelName: string) => {
-    if (!engineRef.current) return;
-  
-    await engineRef.current.joinChannel(null, channelName, null, 0);
-    setJoinedGroupId(groupId);
-    setJoinedGroupName(channelName);
-  
-    // Add to Supabase presence table
-    await supabase.from('voice_participants').insert({
-      user_id: 0,
-      group_id: groupId,
-    });
-  };
-  
-  const leaveVoiceGroup = async () => {
-    if (!engineRef.current || !joinedGroupId) return;
-  
-    await engineRef.current.leaveChannel();
-    setJoinedGroupId(null);
-    setJoinedGroupName(null);
-  
-    // Remove from Supabase presence table
-    await supabase
-      .from('voice_participants')
-      .delete()
-      .eq('user_id', 0)
-      .eq('group_id', joinedGroupId);
-  };
-
-  const toggleMute = () => {
-    if (engineRef.current) {
-      engineRef.current.muteLocalAudioStream(!isMuted);
-      setIsMuted((prev) => !prev);
-    }
-  };
-
-  const toggleSpeaker = () => {
-    if (engineRef.current) {
-      const newSpeakerState = !isSpeakerEnabled;
-      engineRef.current.setEnableSpeakerphone(newSpeakerState);
-      setIsSpeakerEnabled(newSpeakerState);
-    }
-  };
-
-  const handleDeleteGroup = async (groupId: string) => {
-    await supabase.from('voice_groups').delete().eq('id', groupId);
-    setGroups(groups.filter(g => g.id !== groupId));
-  };
-
-  const handleEditGroup = (groupId: string) => {
-    const group = groups.find(g => g.id === groupId);
-    if (!group) return;
-    setEditGroupId(groupId);
-    setEditGroupName(group.name);
-    setEditGroupDesc(group.description ?? ''); // <-- Add this
-    setEditModalVisible(true);
-  };
-
-  const sendMessage = async () => {
-    if (!chatInput.trim()) return;
-    setMessages([...messages, { user: user?.full_name ?? 'Me', text: chatInput }]);
-    setChatInput('');
-    // Optionally, send to Supabase
-    await supabase.from('voice_messages').insert({
-      group_id: joinedGroupId,
-      user_id: user?.id,
-      text: chatInput,
-    });
-  };
 
   const saveEditedGroupName = async () => {
     if (!editGroupId || !editGroupName.trim()) return;

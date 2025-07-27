@@ -9,6 +9,9 @@ import {
   Keyboard,
   Modal,
   Alert,
+  PermissionsAndroid,
+  FlatList,
+  AppState,
 } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from "@/components/ThemeContext";
@@ -18,7 +21,15 @@ import { useAuth } from '@/components/AuthContext';
 import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { FlatList } from 'react-native';
+import { IRtcEngine, createAgoraRtcEngine } from 'react-native-agora';
+import { AGORA_APP_ID } from '@/constants/agora';
+import { Audio } from 'expo-av';
+
+
+const playSound = async (soundFile: any) => {
+  const { sound } = await Audio.Sound.createAsync(soundFile);
+  await sound.playAsync();
+};
 
 export const unstable_settings = {
   initialRoute: false,
@@ -48,6 +59,11 @@ export default function HubRoomScreen() {
   const [groupDetails, setGroupDetails] = useState<any>(null);
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [isGroupCreator, setIsGroupCreator] = useState(false);
+  const engineRef = useRef<IRtcEngine | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [activeSpeakerUid, setActiveSpeakerUid] = useState<number | null>(null);
+  const [isJoined, setIsJoined] = useState(false);
+  const [voiceMembers, setVoiceMembers] = useState<any[]>([]); // Only users actually in voice channel
 
   // Toast function
   const showToast = (message: string) => {
@@ -191,7 +207,6 @@ export default function HubRoomScreen() {
       if (error) throw error;
       
       setChatInput('');
-      // Don't call fetchMessages() here as realtime will handle it
     } catch (error) {
       console.error('Error sending message:', error);
       showToast('Error sending message');
@@ -308,7 +323,7 @@ export default function HubRoomScreen() {
               if (error) throw error;
               
               showToast('Left group successfully');
-              router.back(); // Navigate back to GolfHub
+              router.back();
               
             } catch (error) {
               console.error('Error leaving group:', error);
@@ -344,7 +359,7 @@ export default function HubRoomScreen() {
               if (error) throw error;
               
               showToast('Group deleted successfully');
-              router.back(); // Navigate back to GolfHub
+              router.back();
               
             } catch (error) {
               console.error('Error deleting group:', error);
@@ -359,6 +374,194 @@ export default function HubRoomScreen() {
   const handleGroupInfoPress = () => {
     fetchGroupDetails();
     setGroupInfoModalVisible(true);
+  };
+
+  useEffect(() => {
+    const initAgora = async () => {
+      console.log('Initializing Agora...');
+      console.log('AGORA_APP_ID:', AGORA_APP_ID);
+
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone Permission',
+            message: 'We need access to your microphone for voice chat.',
+            buttonPositive: 'OK',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          showToast('Microphone permission denied');
+          return;
+        }
+      }
+
+      try {
+        const engine = createAgoraRtcEngine();
+        engine.initialize({
+          appId: AGORA_APP_ID,
+          channelProfile: 1, // Communication profile
+        });
+        engine.enableAudio();
+        engine.setAudioProfile(0, 0); // Default quality, Default scenario
+
+        engine.registerEventHandler({
+          onJoinChannelSuccess: async (connection, uid) => {
+            showToast('Joined voice channel');
+            setIsJoined(true);
+            playSound(require('@/assets/audio/join.mp3'));
+            await supabase.from('voice_channel_presence').upsert({
+              group_id: roomId,
+              user_id: user?.id,
+              joined_at: new Date().toISOString()
+            });
+          },
+          onUserJoined: (connection, remoteUid) => {
+            showToast(`User ${remoteUid} joined voice`);
+          },
+          onUserOffline: (connection, remoteUid) => {
+            showToast(`User ${remoteUid} left voice`);
+          },
+          onActiveSpeaker: (connection, uid) => {
+            setActiveSpeakerUid(uid);
+          },
+          onError: (err, msg) => {
+            console.error('❌ Agora error:', err, msg);
+            showToast(`Agora error: ${msg}`);
+          },
+          onLeaveChannel: async (connection, stats) => {
+            setIsJoined(false);
+            await supabase.from('voice_channel_presence')
+            .delete()
+            .eq('group_id', roomId)
+            .eq('user_id', user?.id);
+          },
+        });
+
+        engineRef.current = engine;
+        console.log('✅ Agora initialization complete');
+      } catch (error) {
+        console.error('❌ Agora init error:', error);
+        showToast('Failed to initialize voice chat');
+      }
+    };
+
+    initAgora();
+
+    return () => {
+      if (engineRef.current) {
+        engineRef.current.leaveChannel();
+        engineRef.current.release();
+      }
+    };
+  }, []);
+
+  // Clear ALL voice presence when entering room (ensure fresh start)
+  useEffect(() => {
+    const clearAllPresence = async () => {
+      await supabase
+        .from('voice_channel_presence')
+        .delete()
+        .eq('group_id', roomId);
+    };
+    clearAllPresence();
+  }, [roomId]);
+
+  // Fetch ONLY voice channel members (not all group members)
+  useEffect(() => {
+    const fetchVoiceMembers = async () => {
+      const { data } = await supabase
+        .from('voice_channel_presence')
+        .select('user_id')
+        .eq('group_id', roomId);
+      console.log('Fetched voice members:', data);
+
+      if (data && data.length > 0) {
+        const userIds = data.map((m: any) => m.user_id);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds);
+
+        setVoiceMembers(
+          userIds.map(uid => ({
+            user_id: uid,
+            profiles: profiles?.find((p: any) => p.id === uid) || null
+          }))
+        );
+      } else {
+        setVoiceMembers([]);
+      }
+    };
+
+    fetchVoiceMembers();
+
+    // Real-time updates for voice presence
+    const channel = supabase
+      .channel('voice_presence_updates')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'voice_channel_presence', 
+        filter: `group_id=eq.${roomId}` 
+      }, (payload) => {
+        console.log('Realtime voice presence event:', payload);
+        fetchVoiceMembers();
+      })
+      .subscribe();
+
+    // Listen for app focus to refresh
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'active') {
+        fetchVoiceMembers();
+      }
+    };
+    AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      channel.unsubscribe();
+      AppState.removeListener('change', handleAppStateChange);
+    };
+  }, [roomId]);
+
+  const fetchAgoraToken = async (channelName: string, uid: number | string): Promise<string> => {
+    return ''; // No token needed for App ID only mode
+  };
+
+
+
+  const joinVoiceChannel = async () => {
+    if (!engineRef.current || isJoined) return;
+    try {
+      const token = await fetchAgoraToken(roomId, user?.id || Math.floor(Math.random() * 100000));
+      const uid = user?.id ? parseInt(user.id.replace(/-/g, '').substring(0, 8), 16) : Math.floor(Math.random() * 100000);
+      await engineRef.current.joinChannel(token, roomId, uid, {});
+      fetchVoiceMembers(); // <--- Add this
+    } catch (error) {
+      showToast('Failed to join voice channel');
+    }
+  };
+  
+  const leaveVoiceChannel = async () => {
+    // ...existing code...
+    try {
+      await engineRef.current.leaveChannel();
+      await supabase.from('voice_channel_presence')
+        .delete()
+        .eq('group_id', roomId)
+        .eq('user_id', user?.id);
+      fetchVoiceMembers(); // <--- Add this
+      showToast('Left voice channel');
+    } catch (error) {
+      showToast('Failed to leave voice channel');
+    }
+  };
+
+  const toggleMute = () => {
+    if (!engineRef.current) return;
+    engineRef.current.muteLocalAudioStream(!isMuted);
+    setIsMuted(!isMuted);
+    showToast(isMuted ? 'Unmuted' : 'Muted');
   };
 
   return (
@@ -406,6 +609,84 @@ export default function HubRoomScreen() {
         </Pressable>
       </View>
 
+      {/* Voice Members Bar - Shows ONLY users in voice channel */}
+      <View style={[styles(palette).voiceMembersBar, { backgroundColor: palette.secondary, borderRadius: 12, margin: 8, elevation: 2 }]}>
+        <ThemedText style={styles(palette).sectionTitle}>Voice Channel ({voiceMembers.length})</ThemedText>
+        <FlatList
+          horizontal
+          data={voiceMembers}
+          keyExtractor={item => item.user_id}
+          renderItem={({ item }) => (
+            <View style={[
+              styles(palette).voiceMemberAvatar,
+              item.user_id === activeSpeakerUid ? styles(palette).activeSpeaker : null
+            ]}>
+              <ThemedText style={styles(palette).voiceMemberInitial}>
+                {item.profiles?.full_name?.[0]?.toUpperCase() || '?'}
+              </ThemedText>
+              <ThemedText style={styles(palette).voiceMemberName}>
+                {item.profiles?.full_name || 'Unknown'}
+              </ThemedText>
+              {item.user_id === user?.id && isMuted && (
+                <ThemedText style={{ color: palette.error, fontSize: 10 }}>Muted</ThemedText>
+              )}
+            </View>
+          )}
+          ListEmptyComponent={
+            <ThemedText style={styles(palette).emptyText}>No one in voice channel</ThemedText>
+          }
+          style={{ paddingVertical: 8 }}
+          showsHorizontalScrollIndicator={false}
+        />
+      </View>
+
+      {/* Voice Controls Bar */}
+      <View style={[styles(palette).voiceControlsBar, { backgroundColor: palette.third, borderRadius: 12, marginHorizontal: 8, marginBottom: 8, elevation: 2 }]}>
+        <Pressable
+          onPress={joinVoiceChannel}
+          style={[
+            styles(palette).voiceControlButton,
+            { backgroundColor: isJoined ? palette.grey : palette.success || '#22C55E' },
+            isJoined && { opacity: 0.5 }
+          ]}
+          disabled={isJoined}
+        >
+          <ThemedText style={styles(palette).voiceControlButtonText}>
+            {isJoined ? 'Joined' : 'Join'}
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={leaveVoiceChannel}
+          style={[
+            styles(palette).voiceControlButton,
+            { backgroundColor: !isJoined ? palette.grey : palette.error },
+            !isJoined && { opacity: 0.5 }
+          ]}
+          disabled={!isJoined}
+        >
+          <ThemedText style={styles(palette).voiceControlButtonText}>Leave</ThemedText>
+        </Pressable>
+        <Pressable 
+          onPress={toggleMute} 
+          style={[
+            styles(palette).voiceControlButton,
+            { backgroundColor: isMuted ? palette.warning || '#F59E42' : palette.primary },
+            !isJoined && { opacity: 0.5 }
+          ]}
+          disabled={!isJoined}
+        >
+          <ThemedText style={styles(palette).voiceControlButtonText}>
+            {isMuted ? 'Unmute' : 'Mute'}
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={fetchVoiceMembers}
+          style={[styles(palette).voiceControlButton, { backgroundColor: palette.primary }]}
+        >
+          <ThemedText style={styles(palette).voiceControlButtonText}>Refresh</ThemedText>
+        </Pressable>
+      </View>
+
       {/* Messages Container with KeyboardAvoidingView */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
@@ -414,7 +695,7 @@ export default function HubRoomScreen() {
       >
         <View style={{ flex: 1 }}>
           {/* Messages */}
-          <View style={styles(palette).messagesContainer}>
+          <View style={[styles(palette).messagesContainer, { backgroundColor: palette.background, borderRadius: 12, margin: 8, elevation: 1 }]}>
             <KeyboardAwareFlatList
               ref={flatListRef}
               data={messages}
@@ -466,7 +747,6 @@ export default function HubRoomScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Your existing modals stay the same... */}
       {/* Invite Modal */}
       <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
         <View style={styles(palette).modalOverlay}>
@@ -578,7 +858,10 @@ export default function HubRoomScreen() {
                   keyExtractor={(item) => item.user_id}
                   style={styles(palette).membersList}
                   renderItem={({ item }) => (
-                    <View style={styles(palette).memberItem}>
+                    <View style={[
+                      styles(palette).memberItem,
+                      item.user_id === activeSpeakerUid ? styles(palette).activeSpeaker : null
+                    ]}>
                       <View style={styles(palette).memberAvatar}>
                         <ThemedText style={styles(palette).memberAvatarText}>
                           {item.profiles?.full_name?.[0]?.toUpperCase() || '?'}
@@ -1046,6 +1329,73 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
   },
   leaveGroupButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  muteButton: {
+    backgroundColor: palette.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  muteButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  activeSpeaker: {
+    borderColor: palette.success || '#22C55E',
+    borderWidth: 3,
+    backgroundColor: palette.primaryLight || '#E0E7FF',
+  },
+  voiceMembersBar: {
+    backgroundColor: palette.secondary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    margin: 8,
+    elevation: 2,
+  },
+  voiceMemberAvatar: {
+    alignItems: 'center',
+    marginRight: 16,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: palette.primaryLight || '#E0E7FF',
+    borderWidth: 1,
+    borderColor: palette.grey,
+  },
+  voiceMemberInitial: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: palette.primary,
+  },
+  voiceMemberName: {
+    fontSize: 12,
+    color: palette.textDark,
+    marginTop: 4,
+  },
+  voiceControlsBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: palette.third,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginHorizontal: 8,
+    marginBottom: 8,
+    elevation: 2,
+  },
+  voiceControlButton: {
+    backgroundColor: palette.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  voiceControlButtonText: {
     color: palette.white,
     fontWeight: '700',
     fontSize: 16,

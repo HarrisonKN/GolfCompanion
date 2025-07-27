@@ -10,7 +10,7 @@ import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Tou
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { MaterialIcons } from '@expo/vector-icons';
 import { PALETTES } from '@/constants/theme';
-
+import { getAppVersion, getBuildInfo } from '@/utils/version';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -684,6 +684,9 @@ const inviteChannel = supabase
 
   // Only render profile if everything is loaded and valid
 
+  const { fullDisplayVersion } = getAppVersion();
+  const buildInfo = getBuildInfo();
+
 // ------------------- ACCOUNTS UI -------------------------
   return (
     <>
@@ -1298,6 +1301,28 @@ const inviteChannel = supabase
           </View>
         </View>
       ))}
+      <SectionDivider />
+      
+      <View style={styles(palette).appInfoSection}>
+        <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
+          App Information
+        </ThemedText>
+        <View style={styles(palette).appInfoContainer}>
+          <View style={styles(palette).appInfoRow}>
+            <ThemedText style={styles(palette).appInfoLabel}>Version:</ThemedText>
+            <ThemedText style={styles(palette).appInfoValue}>{fullDisplayVersion}</ThemedText>
+          </View>
+          <View style={styles(palette).appInfoRow}>
+            <ThemedText style={styles(palette).appInfoLabel}>Platform:</ThemedText>
+            <ThemedText style={styles(palette).appInfoValue}>{buildInfo.platform} {buildInfo.platformVersion}</ThemedText>
+          </View>
+          <View style={styles(palette).appInfoRow}>
+            <ThemedText style={styles(palette).appInfoLabel}>Device:</ThemedText>
+            <ThemedText style={styles(palette).appInfoValue}>{buildInfo.isDevice ? 'Physical Device' : 'Simulator'}</ThemedText>
+          </View>
+        </View>
+      </View>
+      
     </ScrollView>
     </>
   );
@@ -1920,5 +1945,39 @@ listEndText: {
   fontSize: 12,
   color: palette.textLight,
   fontStyle: 'italic',
+},
+appInfoSection: {
+  marginTop: 24,
+  marginBottom: 24,
+  paddingHorizontal: 8,
+},
+appInfoContainer: {
+  backgroundColor: palette.white,
+  borderRadius: 12,
+  padding: 16,
+  marginHorizontal: SCREEN_WIDTH * 0.05,
+  shadowColor: palette.black,
+  shadowOpacity: 0.05,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
+},
+appInfoRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingVertical: 8,
+  borderBottomWidth: 1,
+  borderBottomColor: palette.grey + '20',
+},
+appInfoLabel: {
+  fontSize: 14,
+  color: palette.textLight,
+  fontWeight: '600',
+},
+appInfoValue: {
+  fontSize: 14,
+  color: palette.textDark,
+  fontWeight: '500',
 },
 });

@@ -15,15 +15,19 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, ScrollView } from 'react-native';
 import Toast from 'react-native-toast-message';
-
+import { getAppVersion } from '@/utils/version';
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const { palette } = useTheme();
+  const { displayVersion } = getAppVersion(); // Add this line
 //----------------------------------------------------------------
 // Adding to make it so there is only 1 feature card at a time on the home screen
   const featureCards = [
+    { title: '🏌️‍♂️ Your Ultimate Golf Companion',
+      description: 'Connect with friends, track scores, and make your golf rounds more fun, social and smart ',
+    },
     {
       title: '📋 Digital Scorecard',
       description: `Track every stroke with our intuitive Scorecard screen. Add players, input scores, and get instant feedback on your game.`,
@@ -40,6 +44,14 @@ export default function HomeScreen() {
       title: '🎵 Sync Music with Spotify',
       description: `Start a shared Spotify session so your group can listen to the same music together.`,
     },
+    {
+      title: '📊 Stats and Analytics',
+      description: `Get detailed insights into your game with stats on strokes, putts, fairways hit, and more.`,
+    },
+    {
+      title: '🏆 Achievements and Leaderboards',
+      description: `Compete with friends and track your progress with achievements and leaderboards.`,
+    },    
   ];
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
    useEffect(() => {
@@ -149,19 +161,18 @@ export default function HomeScreen() {
           )}
         </ThemedView>
 
-        {/* App Overview */}
-        <ThemedView style={styles(palette).sectionContainer}>
-          <ThemedText type="subtitle" style={styles(palette).featureTitle}>🏌️‍♂️ Your Ultimate Golf Companion</ThemedText>
-          <ThemedText style={styles(palette).featureText}>
-            {`Connect with friends, track scores, and make your golf rounds more fun, social, and smart.`}
-          </ThemedText>
-        </ThemedView>
-
         {/* Feature Cards */}
         <ThemedView style={styles(palette).featureCard}>
           <ThemedText type="subtitle" style={styles(palette).featureTitle}>{featureCards[currentCardIndex].title}</ThemedText>
           <ThemedText style={styles(palette).featureText}>
             {featureCards[currentCardIndex].description}
+          </ThemedText>
+        </ThemedView>
+        
+        {/* Add version display at the bottom */}
+        <ThemedView style={styles(palette).versionContainer}>
+          <ThemedText style={styles(palette).versionText}>
+            Golf Companion {displayVersion}
           </ThemedText>
         </ThemedView>
       </ParallaxScrollView>  
@@ -323,5 +334,19 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: palette.background,
     paddingBottom: 20,
+  },
+  versionContainer: {
+    alignItems: 'center',
+    position: 'relative',
+    paddingVertical: 20,
+    marginTop: 20,
+    backgroundColor: "transparent",
+    
+  },
+  versionText: {
+    fontSize: 12,
+    color: palette.textLight,
+    fontWeight: '500',
+    opacity: 0.7,
   },
 });

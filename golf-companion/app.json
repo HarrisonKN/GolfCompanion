@@ -13,6 +13,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "buildNumber": "1", // iOS build number
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice chat.",
         "NSCameraUsageDescription": "This app may need access to your camera for video features.",
@@ -21,6 +22,7 @@
       "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
+      "versionCode": 1, // Android version code
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/golf-logo.png",
         "backgroundColor": "#003b23"
@@ -36,7 +38,9 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "RECORD_AUDIO",
-        "INTERNET"
+        "INTERNET",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -82,7 +86,13 @@
         }
       ],
 
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-dev-launcher",
+        {
+          "launchMode": "most-recent"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -90,7 +100,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "02cabf4b-6e9e-4f3d-a17d-fdf7f8206563"
+        "projectId": "f1e2b1b6-cf14-4bd6-8b9f-c1d4f9e17203"
       },
       "supabaseUrl": "https://emgqdjhbmkjepbjdpnmh.supabase.co/",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZ3FkamhibWtqZXBiamRwbm1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMzIyMDAsImV4cCI6MjA2NzYwODIwMH0.9HuTa44l_E_NTOpgOSIpe8LKnZEi_sjaOSbMVjU3NLc"

@@ -13,7 +13,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "1", // iOS build number
+      "buildNumber": "1", 
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice chat.",
         "NSCameraUsageDescription": "This app may need access to your camera for video features.",
@@ -22,7 +22,7 @@
       "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
-      "versionCode": 1, // Android version code
+      "versionCode": 1, 
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/golf-logo.png",
         "backgroundColor": "#003b23"

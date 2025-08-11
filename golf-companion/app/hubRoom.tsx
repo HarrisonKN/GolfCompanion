@@ -1,5 +1,42 @@
-//HUBROOM
+/**
+ * hubRoom.tsx
+ *
+ * Purpose
+ * - The main “room” screen for a voice group:
+ *   - Live voice controls (join/leave/mute) via VoiceContext.
+ *   - Presence strip showing users currently in the voice channel.
+ *   - Simple text chat for the group via Supabase (voice_messages).
+ *   - Group management UI (invite friends, view members, leave/delete group).
+ *
+ * Key Responsibilities
+ * - Read roomId/roomName from router params and render the group’s view.
+ * - Display live voice presence (voiceMembers) and speaking highlights.
+ * - Provide one-tap actions: Join, Leave, Mute, Refresh presence.
+ * - Fetch chat history, subscribe to new messages, and send chat messages.
+ * - Show a Group Info modal with group details and member list;
+ *   allow creator to remove members or delete the group, and non-creators to leave.
+ *
+ * Data & Realtime
+ * - Supabase tables:
+ *   - voice_messages: text chat (group_id, user_id, text)
+ *   - voice_groups, voice_group_members, profiles: metadata and membership
+ * - Realtime:
+ *   - Subscribes to INSERT on voice_messages for this group.
+ * - Voice presence:
+ *   - Provided by VoiceContext via public.voice_channel_presence.
+ *
+ * UX Notes
+ * - Voice Members Bar shows only users currently in voice, with active speaker highlight.
+ * - Buttons are disabled/enabled based on isJoined.
+ * - “Invite Friends” modal lists existing friends to invite to the group.
+ *
+ * Known Pitfalls
+ * - Active speaker highlight in the Group Info modal compares user_id (uuid) to activeSpeakerUid (number).
+ *   That will never match. It’s documented below; keep it until you add per-member agora_uid there.
+ * - Ensure RLS policies allow the current user to read voice_messages and group metadata.
+ */
 
+// ===== Section: Imports =====
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
@@ -26,11 +63,13 @@ import { useVoice } from '@/components/VoiceContext';
 import { Audio } from 'expo-av';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
+// ===== Section: Utilities =====
 const playSound = async (soundFile: any) => {
   const { sound } = await Audio.Sound.createAsync(soundFile);
   await sound.playAsync();
 };
 
+// ===== Section: Navigation/Expo Router Options =====
 export const unstable_settings = {
   initialRoute: false,
   tabBarVisible: false,
@@ -43,9 +82,13 @@ export const navigationOptions = {
   tabBarButton: () => null,
 };
 
+// ===== Section: Screen Component =====
 export default function HubRoomScreen() {
+  // ---- Router Params + Auth ----
   const { roomId, roomName } = useLocalSearchParams<{ roomId: string; roomName: string }>();
   const { user } = useAuth();
+
+  // ---- Local State (chat, modals, lists, toasts) ----
   const [messages, setMessages] = useState<{ user: string; text: string; user_id: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
   const flatListRef = useRef<KeyboardAwareFlatList>(null);
@@ -60,6 +103,7 @@ export default function HubRoomScreen() {
   const [groupMembers, setGroupMembers] = useState<any[]>([]);
   const [isGroupCreator, setIsGroupCreator] = useState(false);
 
+  // ---- Voice Context (live presence and controls) ----
   const {
     isJoined,
     isMuted,
@@ -71,12 +115,13 @@ export default function HubRoomScreen() {
     fetchVoiceMembers,
   } = useVoice();
 
-  // Toast function
+  // ===== Section: Toast helper =====
   const showToast = (message: string) => {
     setToast(message);
     setTimeout(() => setToast(null), 3000);
   };
 
+  // ===== Section: Chat — initial fetch =====
   const fetchMessages = async () => {
     const { data, error } = await supabase
       .from('voice_messages')
@@ -85,6 +130,7 @@ export default function HubRoomScreen() {
       .order('created_at', { ascending: true });
 
     if (!error && data) {
+      // Resolve user names for sender labels
       const userIds = Array.from(new Set(data.map((msg: any) => msg.user_id)));
       let userNames: Record<string, string> = {};
 
@@ -113,7 +159,7 @@ export default function HubRoomScreen() {
     fetchMessages();
   }, [roomId]);
 
-  // Realtime updates
+  // ===== Section: Chat — realtime subscription =====
   useEffect(() => {
     const subscription = supabase
       .channel('public:voice_messages')
@@ -144,6 +190,7 @@ export default function HubRoomScreen() {
             },
           ]);
 
+          // Smooth autoscroll to bottom
           setTimeout(() => {
             flatListRef.current?.scrollToEnd(true);
           }, 100);
@@ -156,7 +203,7 @@ export default function HubRoomScreen() {
     };
   }, [roomId, user?.id]);
 
-  // Ensure scroll when keyboard opens
+  // ===== Section: Keyboard handling (auto-scroll on open) =====
   useEffect(() => {
     const keyboardShow = Keyboard.addListener('keyboardDidShow', () => {
       setTimeout(() => {
@@ -168,8 +215,8 @@ export default function HubRoomScreen() {
     };
   }, []);
 
+  // ===== Section: Friends list for invites =====
   useEffect(() => {
-    // Fetch friends for the current user
     const fetchFriends = async () => {
       if (!user?.id) return;
       const { data } = await supabase
@@ -181,6 +228,7 @@ export default function HubRoomScreen() {
     fetchFriends();
   }, [user?.id]);
 
+  // ===== Section: Invite helpers =====
   const inviteFriend = async (friendId: string) => {
     try {
       const { error } = await supabase.from('hubroom_invites').insert({
@@ -191,7 +239,6 @@ export default function HubRoomScreen() {
       });
 
       if (error) throw error;
-      
       showToast('Invite sent!');
       setInviteModalVisible(false);
     } catch (error) {
@@ -200,9 +247,10 @@ export default function HubRoomScreen() {
     }
   };
 
+  // ===== Section: Chat — send message =====
   const sendMessage = async () => {
     if (!chatInput.trim()) return;
-    
+
     try {
       const { error } = await supabase.from('voice_messages').insert({
         group_id: roomId,
@@ -211,7 +259,6 @@ export default function HubRoomScreen() {
       });
 
       if (error) throw error;
-      
       setChatInput('');
     } catch (error) {
       console.error('Error sending message:', error);
@@ -219,6 +266,7 @@ export default function HubRoomScreen() {
     }
   };
 
+  // ===== Section: Header handlers =====
   const handleBackPress = () => {
     router.back();
   };
@@ -231,85 +279,80 @@ export default function HubRoomScreen() {
     setInviteModalVisible(true);
   };
 
+  // ===== Section: Group Info — details and member list =====
   const fetchGroupDetails = async () => {
     try {
-      // Fetch group details
+      // Group details
       const { data: groupData, error: groupError } = await supabase
         .from('voice_groups')
         .select('*')
         .eq('id', roomId)
         .single();
-  
       if (groupError) throw groupError;
       setGroupDetails(groupData);
       setIsGroupCreator(groupData?.creator_id === user?.id);
-  
-      // Fetch group members
+
+      // Members
       const { data: membersData, error: membersError } = await supabase
         .from('voice_group_members')
         .select('user_id, joined_at')
         .eq('group_id', roomId);
-  
       if (membersError) throw membersError;
-  
-      // Get all unique user IDs including creator
+
+      // Unique userIds incl. creator
       const memberUserIds = (membersData || []).map(m => m.user_id);
       const allUserIds = Array.from(new Set([...memberUserIds, groupData?.creator_id].filter(Boolean)));
-  
-      // Fetch profiles for all users
+
+      // Profiles for display
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .in('id', allUserIds);
-  
       if (profilesError) throw profilesError;
-  
-      // Build final members list
+
+      // Final list for UI
       const finalMembers = allUserIds.map(userId => {
         const memberData = membersData?.find(m => m.user_id === userId);
         const profile = profilesData?.find(p => p.id === userId);
-        
         return {
           user_id: userId,
           joined_at: memberData?.joined_at || groupData?.created_at,
           profiles: profile || null
         };
       });
-  
+
       setGroupMembers(finalMembers);
-  
     } catch (error) {
       console.error('Error fetching group details:', error);
       showToast('Error loading group details');
     }
   };
 
+  // ===== Section: Group management (remove/leave/delete) =====
   const removeMember = async (memberId: string) => {
     if (!isGroupCreator) {
       showToast('Only group creators can remove members');
       return;
     }
-  
+
     try {
       const { error } = await supabase
         .from('voice_group_members')
         .delete()
         .eq('group_id', roomId)
         .eq('user_id', memberId);
-  
       if (error) throw error;
-  
-      // Update local state
+
       setGroupMembers(prev => prev.filter(member => member.user_id !== memberId));
       showToast('Member removed successfully');
-  
     } catch (error) {
       console.error('Error removing member:', error);
       showToast('Error removing member');
     }
   };
-  
+
   const leaveGroup = async () => {
+    // Note: RLS must allow current user to delete their membership row.
     Alert.alert(
       'Leave Group',
       'Are you sure you want to leave this group?',
@@ -325,12 +368,10 @@ export default function HubRoomScreen() {
                 .delete()
                 .eq('group_id', roomId)
                 .eq('user_id', user?.id);
-  
               if (error) throw error;
-              
+
               showToast('Left group successfully');
               router.back();
-              
             } catch (error) {
               console.error('Error leaving group:', error);
               showToast('Error leaving group');
@@ -340,13 +381,13 @@ export default function HubRoomScreen() {
       ]
     );
   };
-  
+
   const deleteGroup = async () => {
     if (!isGroupCreator) {
       showToast('Only group creators can delete groups');
       return;
     }
-  
+
     Alert.alert(
       'Delete Group',
       'Are you sure you want to delete this group? This action cannot be undone.',
@@ -361,12 +402,10 @@ export default function HubRoomScreen() {
                 .from('voice_groups')
                 .delete()
                 .eq('id', roomId);
-  
               if (error) throw error;
-              
+
               showToast('Group deleted successfully');
               router.back();
-              
             } catch (error) {
               console.error('Error deleting group:', error);
               showToast('Error deleting group');
@@ -376,12 +415,14 @@ export default function HubRoomScreen() {
       ]
     );
   };
-  
+
+  // ===== Section: Group Info modal toggle =====
   const handleGroupInfoPress = () => {
     fetchGroupDetails();
     setGroupInfoModalVisible(true);
   };
 
+  // ===== Section: Voice join/leave handlers =====
   const handleJoin = async () => {
     if (!isJoined && roomId && roomName) {
       await joinVoiceChannel(String(roomId), String(roomName));
@@ -394,6 +435,7 @@ export default function HubRoomScreen() {
     }
   };
 
+  // ===== Section: Render =====
   return (
     <View style={{ flex: 1, backgroundColor: palette.background, paddingTop: insets.top }}>
       {/* Toast */}
@@ -439,17 +481,17 @@ export default function HubRoomScreen() {
         </Pressable>
       </View>
 
-      {/* Voice Members Bar - Shows ONLY users in voice channel */}
+      {/* Voice Members Bar — shows ONLY users currently in the voice channel */}
       <View style={[styles(palette).voiceMembersBar, { backgroundColor: palette.secondary, borderRadius: 12, margin: 8, elevation: 2 }]}>
         <ThemedText style={styles(palette).sectionTitle}>Voice Channel ({voiceMembers.length})</ThemedText>
         <FlatList
           horizontal
           data={voiceMembers}
-          keyExtractor={(item) => `${item.user_id}:${item.session_id ?? ''}`}
+          keyExtractor={(item) => `${item.user_id}:${item.session_id ?? ''}`} // Stable key across updates
           renderItem={({ item }) => (
             <View style={[
               styles(palette).voiceMemberAvatar,
-              item.agora_uid === activeSpeakerUid ? styles(palette).activeSpeaker : null
+              item.agora_uid === activeSpeakerUid ? styles(palette).activeSpeaker : null // correct mapping: agora_uid -> activeSpeakerUid
             ]}>
               <ThemedText style={styles(palette).voiceMemberInitial}>
                 {item.profiles?.full_name?.[0]?.toUpperCase() || '?'}
@@ -458,12 +500,12 @@ export default function HubRoomScreen() {
                 {item.profiles?.full_name || 'Unknown'}
               </ThemedText>
 
-              {/* per-member mute indicator from presence */}
+              {/* Per-member mute indicator from presence */}
               {item.is_muted ? (
                 <ThemedText style={{ color: palette.error, fontSize: 10 }}>Muted</ThemedText>
               ) : null}
 
-              {/* optional: show explicit "You (Muted)" for self */}
+              {/* Explicit "You (Muted)" for the local user */}
               {item.user_id === user?.id && isMuted && (
                 <ThemedText style={{ color: palette.error, fontSize: 10 }}>You (Muted)</ThemedText>
               )}
@@ -524,7 +566,7 @@ export default function HubRoomScreen() {
         </Pressable>
 
         <Pressable
-          onPress={fetchVoiceMembers}
+          onPress={fetchVoiceMembers} // manual refresh helper
           style={({ pressed }) => [
             styles(palette).iconButton,
             styles(palette).iconRefresh,
@@ -543,7 +585,7 @@ export default function HubRoomScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <View style={{ flex: 1 }}>
-          {/* Messages */}
+          {/* Messages List */}
           <View style={[styles(palette).messagesContainer, { backgroundColor: palette.background, borderRadius: 12, margin: 8, elevation: 1 }]}>
             <KeyboardAwareFlatList
               ref={flatListRef}
@@ -709,6 +751,8 @@ export default function HubRoomScreen() {
                   renderItem={({ item }) => (
                     <View style={[
                       styles(palette).memberItem,
+                      // NOTE: This comparison will not highlight correctly because user_id (uuid) !== activeSpeakerUid (number).
+                      // Keep as a placeholder until you fetch/attach per-member agora_uid here.
                       item.user_id === activeSpeakerUid ? styles(palette).activeSpeaker : null
                     ]}>
                       <View style={styles(palette).memberAvatar}>

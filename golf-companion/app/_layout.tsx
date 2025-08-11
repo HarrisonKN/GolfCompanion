@@ -10,6 +10,10 @@ import { AuthProvider } from '@/components/AuthContext';
 import { ThemeProvider } from '@/components/ThemeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
+import { VoiceProvider } from '@/components/VoiceContext';
+import { GlobalVoiceBar } from '@/components/GlobalVoiceBar';
+
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
@@ -25,15 +29,18 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <AuthProvider>
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="login" options={{ headerShown: false }} />
-              <Stack.Screen name="signup" options={{ headerShown: false }} />
-              <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
-              <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style="auto" />
+            <VoiceProvider>
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="login" options={{ headerShown: false }} />
+                <Stack.Screen name="signup" options={{ headerShown: false }} />
+                <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
+                <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+              <GlobalVoiceBar />
+              <StatusBar style="auto" />
+            </VoiceProvider>
           </AuthProvider>
         </ThemeProvider>
       </SafeAreaProvider>

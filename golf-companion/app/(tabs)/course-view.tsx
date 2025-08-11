@@ -29,6 +29,7 @@ import MapView, {
   Region,
 } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { InteractionManager, Easing, Dimensions } from "react-native";
 
 // …
 
@@ -121,8 +122,13 @@ export default function CourseViewScreen() {
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView | null>(null);
 
+  const lastFlewCourseRef = useRef<string | null>(null);
+
   // --- animated crossfade overlay for hole transitions (our addition) ---
   const transitionOpacity = useRef(new Animated.Value(0)).current;
+  const switchingCourseRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [MapLoaded, setMapLoaded] = useState(false);
 
   // --- safe-area + dynamic map padding (our addition) ---
   const insets = useSafeAreaInsets();
@@ -133,6 +139,23 @@ export default function CourseViewScreen() {
   // your styles use these bottoms in px; keep in sync with styles:
   const SCORE_BOTTOM = 75;
   const ACTIONS_BOTTOM = 120;
+
+  //cloud animation for course selection
+  const { width: W } = Dimensions.get("window");
+
+// cloud overlay state
+  const [cloudsOn, setCloudsOn] = useState(false);
+  const cloudLeftX = useRef(new Animated.Value(-W)).current; // off-screen left
+  const cloudRightX = useRef(new Animated.Value(W)).current; // off-screen right
+  const cloudOpacity = useRef(new Animated.Value(0)).current;
+
+  // we’ll call this from the course-change effect to open the clouds
+  const openCloudsRef = useRef<null | (() => void)>(null);
+
+  // durations
+  const FLY_MS = 900;
+  const CLOUD_CLOSE_MS = 320;
+  const CLOUD_OPEN_MS = 700;
 
   // compute the bottom padding we need (max of visible stacks)
   const bottomPadPx = Math.max(
@@ -160,14 +183,14 @@ export default function CourseViewScreen() {
     }
   };
 
-  // ---------- animated cover helper (our addition) ----------
+  // ---------- animated cover helper (our addition) ---------- no longer used
   function runHoleTransition(
     cb: () => void,
     opts: { fadeInMs?: number; fadeOutMs?: number } = {}
   ) {
     const { fadeInMs = 180, fadeOutMs = 900 } = opts; // fade out matches flight
     Animated.timing(transitionOpacity, {
-      toValue: 1,
+      toValue: 0,
       duration: fadeInMs,
       useNativeDriver: true,
     }).start(() => {
@@ -179,6 +202,51 @@ export default function CourseViewScreen() {
       }).start();
     });
   }
+
+  //-----cloud animation helper ----------------
+  function closeCloudsThen(cb: () => void) {
+  setCloudsOn(true);
+  cloudOpacity.setValue(1);
+  cloudLeftX.setValue(-W);
+  cloudRightX.setValue(W);
+
+  Animated.parallel([
+    Animated.timing(cloudLeftX, {
+      toValue: 0,
+      duration: CLOUD_CLOSE_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }),
+    Animated.timing(cloudRightX, {
+      toValue: 0,
+      duration: CLOUD_CLOSE_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }),
+  ]).start(() => cb());
+}
+  openCloudsRef.current = () => {
+    Animated.parallel([
+      Animated.timing(cloudLeftX, {
+        toValue: -W,
+        duration: CLOUD_OPEN_MS,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(cloudRightX, {
+        toValue: W,
+        duration: CLOUD_OPEN_MS,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(cloudOpacity, {
+        toValue: 0,
+        delay: 300,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setCloudsOn(false));
+  };
 
   // ---------- oriented fly-to-hole (our addition) ----------
   async function orientedFlyToHole(
@@ -282,7 +350,8 @@ export default function CourseViewScreen() {
       );
       const next = holes[idx + 1];
       if (next) {
-        runHoleTransition(() => setSelectedHoleNumber(next.hole_number));
+        setSelectedHoleNumber(next.hole_number); // the effect above will just fly the camera, no flash
+        //runHoleTransition(() => setSelectedHoleNumber(next.hole_number));
       } else {
         router.push({
           pathname: "/scorecard",
@@ -544,18 +613,92 @@ export default function CourseViewScreen() {
     }
   }, [holes]);
 
-  // Hole change → fade cover, then fit + rotate tee→green (our addition)
   useEffect(() => {
-  if (!selectedHole || !mapRef.current) return;
-  orientedFlyToHole(mapRef, selectedHole, 900); // smooth fly, no flash
-}, [selectedHoleNumber, topPadPx, bottomPadPx]);
+  if (!MapLoaded || !mapRef.current || !selectedCourse) return;
 
-  useEffect(() => {
-    if (selectedHole) {
-      setScore(selectedHole.par ?? 0);
-      setPutts(2);
-    }
-  }, [selectedHole]);
+  // Only run immediately after a course is selected (you raise the cover there)
+  if (!switchingCourseRef.current) return;
+
+  // Prefer Hole 1; fall back to first hole available
+  const hole1 = holes.find(h => h.hole_number === 1) || holes[0];
+  if (!hole1) return;
+
+  const hasTee   = hole1.tee_latitude  != null && hole1.tee_longitude  != null;
+  const hasGreen = hole1.green_latitude!= null && hole1.green_longitude!= null;
+
+  // Make sure Hole 1 is selected; if not, select it and wait for next run
+  if (selectedHoleNumber !== hole1.hole_number) {
+    setSelectedHoleNumber(hole1.hole_number);
+    return;
+  }
+
+  // If no coords yet, just drop the cover and bail
+  if (!hasTee || !hasGreen) {
+    Animated.timing(transitionOpacity, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => { switchingCourseRef.current = false; });
+    return;
+  }
+
+  // Avoid double-running for the same course
+  if (lastFlewCourseRef.current === selectedCourse) return;
+
+  // Defer until markers are on screen, then fly and reveal
+  InteractionManager.runAfterInteractions(() => {
+    requestAnimationFrame(() => {
+      orientedFlyToHole(mapRef, hole1, 900);
+      Animated.timing(transitionOpacity, {
+        toValue: 0,      // reveal during the flight
+        duration: 900,
+        useNativeDriver: true,
+      }).start(() => {
+        switchingCourseRef.current = false;
+        lastFlewCourseRef.current = selectedCourse;
+      });
+    });
+  });
+}, [MapLoaded, selectedCourse, holes, selectedHoleNumber]);
+
+  // Hole change → fade cover, then fit + rotate tee→green (our addition)
+ useEffect(() => {
+  if (!mapReady || !mapRef.current || !selectedHole) return;
+
+  if (switchingCourseRef.current) return;
+
+  const hasTee =
+    selectedHole.tee_latitude != null && selectedHole.tee_longitude != null;
+  const hasGreen =
+    selectedHole.green_latitude != null && selectedHole.green_longitude != null;
+
+  if (!hasTee || !hasGreen) return; // wait until pins are there
+
+  const fly = () => orientedFlyToHole(mapRef, selectedHole, 900);
+
+  if (switchingCourseRef.current) {
+    // cover already up; defer a frame so markers render first
+    requestAnimationFrame(() => {
+      fly();
+      Animated.timing(transitionOpacity, {
+        toValue: 0,           // reveal
+        duration: 900,
+        useNativeDriver: true,
+      }).start(() => {
+        switchingCourseRef.current = false;
+      });
+    });
+  } else {
+    fly(); // normal hole-to-hole
+  }
+}, [
+  mapReady,
+  selectedHole?.id,
+  selectedHole?.tee_latitude,
+  selectedHole?.tee_longitude,
+  selectedHole?.green_latitude,
+  selectedHole?.green_longitude,
+]);
 
   // Clear dropped pins when a new hole is selected
   useEffect(() => {
@@ -654,6 +797,11 @@ export default function CourseViewScreen() {
               setCourseOpen(false);
               setShowAddCourseModal(true);
             } else {
+              // bring the cover up immediately and mark we're switching courses
+              switchingCourseRef.current = true;
+              transitionOpacity.stopAnimation?.();
+              transitionOpacity.setValue(1);   // opaque cover now
+
               setSelectedCourse(v);
               setCourseOpen(false);
               setSelectedHoleNumber(null);
@@ -732,8 +880,8 @@ export default function CourseViewScreen() {
         showsUserLocation={!!location}
         showsMyLocationButton={false}
         mapType="hybrid"
-        onMapReady={() => console.log("🗺️ Map is ready")}
-        onMapLoaded={() => console.log("🗺️ Tiles loaded")}
+        onMapReady={() => setMapReady(true)}
+        onMapLoaded={() => setMapLoaded(true)}
         paddingAdjustmentBehavior="always"
         // NOTE: dynamic padding so holes always fit above/below UI
         mapPadding={{

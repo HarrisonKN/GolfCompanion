@@ -60,7 +60,8 @@
     "react-native-webview": "13.13.5",
     "expo-device": "~7.1.4",
     "expo-application": "~6.1.5",
-    "expo-updates": "~0.28.17"
+    "expo-updates": "~0.28.17",
+    "expo": "~53.0.20"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

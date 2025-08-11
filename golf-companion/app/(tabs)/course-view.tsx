@@ -97,24 +97,21 @@ export default function CourseViewScreen() {
   const [region, setRegion] = useState<Region | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [holes, setHoles] = useState<Hole[]>([]);
-  const [selectedHoleNumber, setSelectedHoleNumber] = useState<number | null>(
-    null
-  );
+  const [selectedHoleNumber, setSelectedHoleNumber] = useState<number | null>(null);
   const [courseOpen, setCourseOpen] = useState(false);
   const [holeOpen, setHoleOpen] = useState(false);
   const [courseItems, setCourseItems] = useState<any[]>([]);
   const [holeItems, setHoleItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [droppedPins, setDroppedPins] = useState<
-    { latitude: number; longitude: number }[]
-  >([]);
+  const [droppedPins, setDroppedPins] = useState<{ latitude: number; longitude: number }[]>([]);
   const [distanceToPin, setDistanceToPin] = useState<number | null>(null);
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [newCourseName, setNewCourseName] = useState("");
 
   const { user } = useAuth();
   const { palette } = useTheme();
+  const S = React.useMemo(() => styles(palette), [palette]);
   const { courseId } = useLocalSearchParams<{ courseId?: string }>();
   const router = useRouter();
   const { selectedCourse, setSelectedCourse } = useCourse();
@@ -140,10 +137,10 @@ export default function CourseViewScreen() {
   const SCORE_BOTTOM = 75;
   const ACTIONS_BOTTOM = 120;
 
-  //cloud animation for course selection
+  // cloud animation for course selection
   const { width: W } = Dimensions.get("window");
 
-// cloud overlay state
+  // cloud overlay state
   const [cloudsOn, setCloudsOn] = useState(false);
   const cloudLeftX = useRef(new Animated.Value(-W)).current; // off-screen left
   const cloudRightX = useRef(new Animated.Value(W)).current; // off-screen right
@@ -157,15 +154,52 @@ export default function CourseViewScreen() {
   const CLOUD_CLOSE_MS = 320;
   const CLOUD_OPEN_MS = 700;
 
-  // compute the bottom padding we need (max of visible stacks)
-  const bottomPadPx = Math.max(
-    SCORE_BOTTOM + (scoreH || 0),
-    ACTIONS_BOTTOM + (actionsH || 0)
-  );
+  //Menu ui 
+  const LABEL_CLEARANCE = 24;
+  const ACTION_SIZE = 44;      // your S.fabAction size
+  const ACTION_GAP  = 30;      // space between buttons
+  const ACTION_SPACING = ACTION_SIZE + ACTION_GAP; // 58
 
   // --- scoring state (unchanged) ---
   const [score, setScore] = useState<number>(0);
   const [putts, setPutts] = useState<number>(0);
+
+  // show/hide the score panel (start hidden as you asked)
+  const [scoreVisible, setScoreVisible] = useState(false);
+
+  // speed-dial open/close
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+
+  const toggleFab = () => {
+    const to = fabOpen ? 0 : 1;
+    setFabOpen(!fabOpen);
+    Animated.spring(fabAnim, {
+      toValue: to,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 90,
+    }).start();
+  };
+
+  // animated positions for the two actions
+  const actionScoreY = fabAnim.interpolate({
+  inputRange: [0, 1],
+  outputRange: [0, -ACTION_SPACING],        // first action up one step
+  });
+
+  const actionLocY = fabAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -(ACTION_SPACING * 2)],  // second action up two steps
+  });
+  //const actionLocY   = fabAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -140] });
+  const rotateZ      = fabAnim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "45deg"] });
+
+  // compute the bottom padding we need (max of visible stacks)
+  const bottomPadPx = Math.max(
+    (scoreVisible ? SCORE_BOTTOM + (scoreH || 0) : 0),
+    ACTIONS_BOTTOM + (actionsH || 0)
+  );
 
   // Safe state update to avoid changing state after the component is unmounted
   const safeSetState = (setter: any, value: any) => {
@@ -174,7 +208,7 @@ export default function CourseViewScreen() {
     }
   };
 
-  //Toast alerts for user login on course view - fall back to alert for ios
+  // Toast alerts for user login on course view - fall back to alert for ios
   const showMessage = (msg: string) => {
     if (Platform.OS === "android") {
       ToastAndroid.show(msg, ToastAndroid.SHORT);
@@ -203,28 +237,28 @@ export default function CourseViewScreen() {
     });
   }
 
-  //-----cloud animation helper ----------------
+  // ----- cloud animation helper ----------------
   function closeCloudsThen(cb: () => void) {
-  setCloudsOn(true);
-  cloudOpacity.setValue(1);
-  cloudLeftX.setValue(-W);
-  cloudRightX.setValue(W);
+    setCloudsOn(true);
+    cloudOpacity.setValue(1);
+    cloudLeftX.setValue(-W);
+    cloudRightX.setValue(W);
 
-  Animated.parallel([
-    Animated.timing(cloudLeftX, {
-      toValue: 0,
-      duration: CLOUD_CLOSE_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }),
-    Animated.timing(cloudRightX, {
-      toValue: 0,
-      duration: CLOUD_CLOSE_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }),
-  ]).start(() => cb());
-}
+    Animated.parallel([
+      Animated.timing(cloudLeftX, {
+        toValue: 0,
+        duration: CLOUD_CLOSE_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(cloudRightX, {
+        toValue: 0,
+        duration: CLOUD_CLOSE_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => cb());
+  }
   openCloudsRef.current = () => {
     Animated.parallel([
       Animated.timing(cloudLeftX, {
@@ -250,59 +284,55 @@ export default function CourseViewScreen() {
 
   // ---------- oriented fly-to-hole (our addition) ----------
   async function orientedFlyToHole(
-  mapRef: { current: MapView | null },
-  hole: Hole,
-  flightMs = 900
-) {
-  if (!mapRef.current) return;
+    mapRef: { current: MapView | null },
+    hole: Hole,
+    flightMs = 900
+  ) {
+    if (!mapRef.current) return;
 
-  const tee =
-    hole.tee_latitude != null && hole.tee_longitude != null
-      ? { latitude: hole.tee_latitude, longitude: hole.tee_longitude }
-      : null;
-  const green =
-    hole.green_latitude != null && hole.green_longitude != null
-      ? { latitude: hole.green_latitude, longitude: hole.green_longitude }
-      : null;
-  if (!tee || !green) return;
+    const tee =
+      hole.tee_latitude != null && hole.tee_longitude != null
+        ? { latitude: hole.tee_latitude, longitude: hole.tee_longitude }
+        : null;
+    const green =
+      hole.green_latitude != null && hole.green_longitude != null
+        ? { latitude: hole.green_latitude, longitude: hole.green_longitude }
+        : null;
+    if (!tee || !green) return;
 
-  const heading = bearingDeg(tee, green);
+    const heading = bearingDeg(tee, green);
 
-  // Bias center a touch toward the green, then nudge back toward tee
-  const t = 0.5;
-  const mid = {
-    latitude: tee.latitude + (green.latitude - tee.latitude) * t,
-    longitude: tee.longitude + (green.longitude - tee.longitude) * t,
-  };
-  const center = nudgeAlongHeading(mid, heading, 20); // meters back toward tee
+    // Bias center a touch toward the green, then nudge back toward tee
+    const t = 0.5;
+    const mid = {
+      latitude: tee.latitude + (green.latitude - tee.latitude) * t,
+      longitude: tee.longitude + (green.longitude - tee.longitude) * t,
+    };
+    const center = nudgeAlongHeading(mid, heading, 20); // meters back toward tee
 
-  // Estimate zoom/altitude from hole length + visible height after paddings
-  const meters = haversine(
-    { lat: tee.latitude, lon: tee.longitude },
-    { lat: green.latitude, lon: green.longitude }
-  );
+    // Estimate zoom/altitude from hole length + visible height after paddings
+    const meters = haversine(
+      { lat: tee.latitude, lon: tee.longitude },
+      { lat: green.latitude, lon: green.longitude }
+    );
 
-  //const { height: H } = Dimensions.get('window');
-  // effective visible height fraction (0..1)
-  //const visibleFrac = Math.max(0.5, (H - topPadPx - bottomPadPx) / H);
-
-  if (Platform.OS === "ios") {
-  // iOS altitude (meters). Tighter baseline.
-  let altitude = Math.max(200, Math.min(1000, meters * 0.9 + 160));
-  mapRef.current.animateCamera(
-    { center, heading, pitch: 40, altitude },
-    { duration: flightMs }
-  );
-} else {
-  // Android zoom (higher = closer). Tighter baseline.
-  let zoom = 18.6 - Math.log2(Math.max(60, meters) / 150); // 150m ≈ 18.6
-  zoom = Math.max(16.2, Math.min(19, zoom));
-  mapRef.current.animateCamera(
-    { center, heading, pitch: 40, zoom },
-    { duration: flightMs }
-  );
-}
-}
+    if (Platform.OS === "ios") {
+      // iOS altitude (meters). Tighter baseline.
+      let altitude = Math.max(200, Math.min(1000, meters * 0.9 + 160));
+      mapRef.current.animateCamera(
+        { center, heading, pitch: 40, altitude },
+        { duration: flightMs }
+      );
+    } else {
+      // Android zoom (higher = closer). Tighter baseline.
+      let zoom = 18.6 - Math.log2(Math.max(60, meters) / 150); // 150m ≈ 18.6
+      zoom = Math.max(16.2, Math.min(19, zoom));
+      mapRef.current.animateCamera(
+        { center, heading, pitch: 40, zoom },
+        { duration: flightMs }
+      );
+    }
+  }
 
   // ------------------- SCORE SUBMIT -------------------------
   const handleEnter = async () => {
@@ -345,13 +375,10 @@ export default function CourseViewScreen() {
       console.log("✅ Insert result:", data);
 
       // advance to next hole (with transition)
-      const idx = holes.findIndex(
-        (h) => h.hole_number === selectedHoleNumber
-      );
+      const idx = holes.findIndex((h) => h.hole_number === selectedHoleNumber);
       const next = holes[idx + 1];
       if (next) {
         setSelectedHoleNumber(next.hole_number); // the effect above will just fly the camera, no flash
-        //runHoleTransition(() => setSelectedHoleNumber(next.hole_number));
       } else {
         router.push({
           pathname: "/scorecard",
@@ -614,91 +641,75 @@ export default function CourseViewScreen() {
   }, [holes]);
 
   useEffect(() => {
-  if (!MapLoaded || !mapRef.current || !selectedCourse) return;
+    if (!MapLoaded || !mapRef.current || !selectedCourse) return;
 
-  // Only run immediately after a course is selected (you raise the cover there)
-  if (!switchingCourseRef.current) return;
+    // Only run immediately after a course is selected (you raise the cover there)
+    if (!switchingCourseRef.current) return;
 
-  // Prefer Hole 1; fall back to first hole available
-  const hole1 = holes.find(h => h.hole_number === 1) || holes[0];
-  if (!hole1) return;
+    // Prefer Hole 1; fall back to first hole available
+    const hole1 = holes.find(h => h.hole_number === 1) || holes[0];
+    if (!hole1) return;
 
-  const hasTee   = hole1.tee_latitude  != null && hole1.tee_longitude  != null;
-  const hasGreen = hole1.green_latitude!= null && hole1.green_longitude!= null;
+    const hasTee   = hole1.tee_latitude  != null && hole1.tee_longitude  != null;
+    const hasGreen = hole1.green_latitude!= null && hole1.green_longitude!= null;
 
-  // Make sure Hole 1 is selected; if not, select it and wait for next run
-  if (selectedHoleNumber !== hole1.hole_number) {
-    setSelectedHoleNumber(hole1.hole_number);
-    return;
-  }
+    // Make sure Hole 1 is selected; if not, select it and wait for next run
+    if (selectedHoleNumber !== hole1.hole_number) {
+      setSelectedHoleNumber(hole1.hole_number);
+      return;
+    }
 
-  // If no coords yet, just drop the cover and bail
-  if (!hasTee || !hasGreen) {
-    Animated.timing(transitionOpacity, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => { switchingCourseRef.current = false; });
-    return;
-  }
-
-  // Avoid double-running for the same course
-  if (lastFlewCourseRef.current === selectedCourse) return;
-
-  // Defer until markers are on screen, then fly and reveal
-  InteractionManager.runAfterInteractions(() => {
-    requestAnimationFrame(() => {
-      orientedFlyToHole(mapRef, hole1, 900);
+    // If no coords yet, just drop the cover and bail
+    if (!hasTee || !hasGreen) {
       Animated.timing(transitionOpacity, {
-        toValue: 0,      // reveal during the flight
-        duration: 900,
+        toValue: 0,
+        duration: 300,
         useNativeDriver: true,
-      }).start(() => {
-        switchingCourseRef.current = false;
-        lastFlewCourseRef.current = selectedCourse;
+      }).start(() => { switchingCourseRef.current = false; });
+      return;
+    }
+
+    // Avoid double-running for the same course
+    if (lastFlewCourseRef.current === selectedCourse) return;
+
+    // Defer until markers are on screen, then fly and reveal
+    InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        orientedFlyToHole(mapRef, hole1, 900);
+        Animated.timing(transitionOpacity, {
+          toValue: 0,      // reveal during the flight
+          duration: 900,
+          useNativeDriver: true,
+        }).start(() => {
+          switchingCourseRef.current = false;
+          lastFlewCourseRef.current = selectedCourse;
+        });
       });
     });
-  });
-}, [MapLoaded, selectedCourse, holes, selectedHoleNumber]);
+  }, [MapLoaded, selectedCourse, holes, selectedHoleNumber]);
 
-  // Hole change → fade cover, then fit + rotate tee→green (our addition)
- useEffect(() => {
-  if (!mapReady || !mapRef.current || !selectedHole) return;
+  // Hole change → fit + rotate tee→green (our addition)
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !selectedHole) return;
 
-  if (switchingCourseRef.current) return;
+    if (switchingCourseRef.current) return;
 
-  const hasTee =
-    selectedHole.tee_latitude != null && selectedHole.tee_longitude != null;
-  const hasGreen =
-    selectedHole.green_latitude != null && selectedHole.green_longitude != null;
+    const hasTee =
+      selectedHole.tee_latitude != null && selectedHole.tee_longitude != null;
+    const hasGreen =
+      selectedHole.green_latitude != null && selectedHole.green_longitude != null;
 
-  if (!hasTee || !hasGreen) return; // wait until pins are there
+    if (!hasTee || !hasGreen) return; // wait until pins are there
 
-  const fly = () => orientedFlyToHole(mapRef, selectedHole, 900);
-
-  if (switchingCourseRef.current) {
-    // cover already up; defer a frame so markers render first
-    requestAnimationFrame(() => {
-      fly();
-      Animated.timing(transitionOpacity, {
-        toValue: 0,           // reveal
-        duration: 900,
-        useNativeDriver: true,
-      }).start(() => {
-        switchingCourseRef.current = false;
-      });
-    });
-  } else {
-    fly(); // normal hole-to-hole
-  }
-}, [
-  mapReady,
-  selectedHole?.id,
-  selectedHole?.tee_latitude,
-  selectedHole?.tee_longitude,
-  selectedHole?.green_latitude,
-  selectedHole?.green_longitude,
-]);
+    orientedFlyToHole(mapRef, selectedHole, 900);
+  }, [
+    mapReady,
+    selectedHole?.id,
+    selectedHole?.tee_latitude,
+    selectedHole?.tee_longitude,
+    selectedHole?.green_latitude,
+    selectedHole?.green_longitude,
+  ]);
 
   // Clear dropped pins when a new hole is selected
   useEffect(() => {
@@ -725,7 +736,7 @@ export default function CourseViewScreen() {
       ? { lat: location.coords.latitude, lon: location.coords.longitude }
       : null;
 
-    let targetCoords = null;
+    let targetCoords: { lat: number; lon: number } | null = null;
 
     if (droppedPins.length > 0) {
       const lastPin = droppedPins[droppedPins.length - 1];
@@ -746,18 +757,18 @@ export default function CourseViewScreen() {
 
   // ------------------- COURSE VIEW UI -------------------------
   return (
-    <View style={styles(palette).container}>
+    <View style={S.container}>
       <Modal visible={showAddCourseModal} transparent animationType="slide">
-        <View style={styles(palette).modalContainer}>
-          <View style={styles(palette).modalContent}>
-            <Text style={styles(palette).modalTitle}>Add New Course</Text>
+        <View style={S.modalContainer}>
+          <View style={S.modalContent}>
+            <Text style={S.modalTitle}>Add New Course</Text>
             <TextInput
-              style={styles(palette).modalInput}
+              style={S.modalInput}
               placeholder="Course name"
               value={newCourseName}
               onChangeText={setNewCourseName}
             />
-            <View style={styles(palette).modalButtons}>
+            <View style={S.modalButtons}>
               <Button
                 title="Cancel"
                 onPress={() => {
@@ -777,7 +788,7 @@ export default function CourseViewScreen() {
 
       {/* Top overlay (course + hole dropdowns). We measure its height to set map top padding */}
       <View
-        style={styles(palette).overlayContainer}
+        style={S.overlayContainer}
         onLayout={(e) => {
           const { y, height } = e.nativeEvent.layout;
           // y is already relative to the screen; no need to add insets.top
@@ -792,7 +803,7 @@ export default function CourseViewScreen() {
           setOpen={setCourseOpen}
           setValue={(cb) => {
             const v = cb(selectedCourse);
-            //closes drop down before modal pop up for text input
+            // closes drop down before modal pop up for text input
             if (v === "add_course") {
               setCourseOpen(false);
               setShowAddCourseModal(true);
@@ -800,7 +811,7 @@ export default function CourseViewScreen() {
               // bring the cover up immediately and mark we're switching courses
               switchingCourseRef.current = true;
               transitionOpacity.stopAnimation?.();
-              transitionOpacity.setValue(1);   // opaque cover now
+              transitionOpacity.setValue(1); // opaque cover now
 
               setSelectedCourse(v);
               setCourseOpen(false);
@@ -808,7 +819,7 @@ export default function CourseViewScreen() {
             }
           }}
           setItems={setCourseItems}
-          style={styles(palette).dropdown}
+          style={S.dropdown}
           listMode="MODAL"
           modalProps={{
             animationType: "slide",
@@ -820,10 +831,10 @@ export default function CourseViewScreen() {
             marginHorizontal: 20,
             borderRadius: 8,
           }}
-          dropDownContainerStyle={styles(palette).dropdownContainer}
-          placeholderStyle={styles(palette).placeholder}
-          textStyle={styles(palette).text}
-          listItemLabelStyle={styles(palette).listItemLabel}
+          dropDownContainerStyle={S.dropdownContainer}
+          placeholderStyle={S.placeholder}
+          textStyle={S.text}
+          listItemLabelStyle={S.listItemLabel}
           zIndex={2000}
         />
 
@@ -839,7 +850,7 @@ export default function CourseViewScreen() {
               setSelectedHoleNumber(v);
             }}
             setItems={setHoleItems}
-            style={styles(palette).dropdown}
+            style={S.dropdown}
             // FLATLIST is more reliable in release builds…
             listMode="MODAL"
             modalProps={{
@@ -853,13 +864,10 @@ export default function CourseViewScreen() {
               marginHorizontal: 20,
               borderRadius: 8,
             }}
-            dropDownContainerStyle={[
-              styles(palette).dropdownContainer,
-              { maxHeight: 300 },
-            ]}
-            placeholderStyle={styles(palette).placeholder}
-            textStyle={styles(palette).text}
-            listItemLabelStyle={styles(palette).listItemLabel}
+            dropDownContainerStyle={[S.dropdownContainer, { maxHeight: 300 }]}
+            placeholderStyle={S.placeholder}
+            textStyle={S.text}
+            listItemLabelStyle={S.listItemLabel}
             zIndex={1000}
           />
         )}
@@ -997,53 +1005,44 @@ export default function CourseViewScreen() {
           ))}
       </MapView>
 
-      {!!selectedHole && (
+      {/* Score overlay (hidden until opened from FAB) */}
+      {!!selectedHole && scoreVisible && (
         <View
-          style={[styles(palette).scoreOverlay, { zIndex: 2000 }]}
+          style={[S.scoreOverlay, { zIndex: 2000 }]}
           // NOTE: measure overlay to compute bottom map padding
           onLayout={(e) => setScoreH(e.nativeEvent.layout.height)}
         >
-          <View style={styles(palette).statControl}>
-            <Text style={styles(palette).statLabel}>Score</Text>
-            <Pressable
-              onPress={() => setScore((s) => s + 1)}
-              style={styles(palette).button}
-            >
-              <Text style={styles(palette).buttonText}>＋</Text>
+          <View style={S.statControl}>
+            <Text style={S.statLabel}>Score</Text>
+            <Pressable onPress={() => setScore((s) => s + 1)} style={S.button}>
+              <Text style={S.buttonText}>＋</Text>
             </Pressable>
-            <Text style={styles(palette).statValue}>{score}</Text>
-            <Pressable
-              onPress={() => setScore((s) => Math.max(0, s - 1))}
-              style={styles(palette).button}
-            >
-              <Text style={styles(palette).buttonText}>－</Text>
+            <Text style={S.statValue}>{score}</Text>
+            <Pressable onPress={() => setScore((s) => Math.max(0, s - 1))} style={S.button}>
+              <Text style={S.buttonText}>－</Text>
             </Pressable>
           </View>
-          <View style={styles(palette).statControl}>
-            <Text style={styles(palette).statLabel}>Putts</Text>
-            <Pressable
-              onPress={() => setPutts((p) => p + 1)}
-              style={styles(palette).button}
-            >
-              <Text style={styles(palette).buttonText}>＋</Text>
+
+          <View style={S.statControl}>
+            <Text style={S.statLabel}>Putts</Text>
+            <Pressable onPress={() => setPutts((p) => p + 1)} style={S.button}>
+              <Text style={S.buttonText}>＋</Text>
             </Pressable>
-            <Text style={styles(palette).statValue}>{putts}</Text>
-            <Pressable
-              onPress={() => setPutts((p) => Math.max(0, p - 1))}
-              style={styles(palette).button}
-            >
-              <Text style={styles(palette).buttonText}>－</Text>
+            <Text style={S.statValue}>{putts}</Text>
+            <Pressable onPress={() => setPutts((p) => Math.max(0, p - 1))} style={S.button}>
+              <Text style={S.buttonText}>－</Text>
             </Pressable>
           </View>
-          <Pressable style={styles(palette).enterButton} onPress={handleEnter}>
-            <Text style={styles(palette).enterText}>Enter</Text>
+
+          <Pressable style={S.enterButton} onPress={handleEnter}>
+            <Text style={S.enterText}>Enter</Text>
           </Pressable>
         </View>
       )}
 
       {distanceToPin !== null && (
-        <View style={styles(palette).distanceOverlay}>
-          <Text style={styles(palette).distanceText}>
+        <View style={S.distanceOverlay}>
+          <Text style={S.distanceText}>
             Distance to Pin: {(distanceToPin / 1).toFixed(0)} m
           </Text>
         </View>
@@ -1051,47 +1050,97 @@ export default function CourseViewScreen() {
 
       {selectedHole && (
         <>
-          <Pressable
-            style={[styles(palette).pinButton, { left: 20 }]} // existing Drop Pin
-            onPress={handleDropPin}
-          >
-            <Text style={styles(palette).pinButtonText}>Drop Pin</Text>
+          {/* existing Drop Pin */}
+          <Pressable style={[S.pinButton, { left: 20 }]} onPress={handleDropPin}>
+            <Text style={S.pinButtonText}>Drop Pin</Text>
           </Pressable>
 
-          <Pressable
-            style={[
-              styles(palette).fab,
-              {
-                right: 5,
-                bottom: SCORE_BOTTOM + scoreH + 5 + insets.bottom, // sits just above the score box
-              },
-            ]}
-            android_ripple={{ color: palette.secondary }}
-            hitSlop={8}
-            onPress={() => {
-              if (location && mapRef.current) {
-                mapRef.current.animateToRegion(
-                  {
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  },
-                  500
-                );
-              }
-            }}
-          >
-            {/* simple glyph—swap for an icon/image if you prefer */}
-            <Text style={styles(palette).fabLabel}>⌖</Text>
-          </Pressable>
+          {/* Speed-dial FAB */}
+          <View pointerEvents="box-none" style={S.fabContainer}>
+            {/* Action: Scores */}
+            <Animated.View
+              style={[
+                S.fabActionWrap,
+                {
+                  bottom: 16 + insets.bottom + LABEL_CLEARANCE,
+                  right: 16,
+                  transform: [{ translateY: actionScoreY }],
+                  opacity: fabAnim,
+                },
+              ]}
+            >
+              <Pressable
+                style={S.fabAction}
+                android_ripple={{ color: palette.secondary }}
+                hitSlop={8}
+                onPress={() => {
+                  setScoreVisible(v => !v);
+                  toggleFab();
+                }}
+              >
+                <Text style={S.fabActionIcon}>🧮</Text>
+              </Pressable>
+              <Animated.Text style={[S.fabActionLabel, { opacity: fabAnim }]}>
+                Scores
+              </Animated.Text>
+            </Animated.View>
+
+            {/* Action: My Location */}
+            <Animated.View
+              style={[
+                S.fabActionWrap,
+                {
+                  bottom: 32 + insets.bottom + LABEL_CLEARANCE,
+                  right: 16,
+                  transform: [{ translateY: actionLocY }],
+                  opacity: fabAnim,
+                },
+              ]}
+            >
+              <Pressable
+                style={S.fabAction}
+                android_ripple={{ color: palette.secondary }}
+                hitSlop={8}
+                onPress={() => {
+                  if (location && mapRef.current) {
+                    mapRef.current.animateToRegion(
+                      {
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                        latitudeDelta: 0.005,
+                        longitudeDelta: 0.005,
+                      },
+                      500
+                    );
+                  }
+                  toggleFab();
+                }}
+              >
+                <Text style={S.fabActionIcon}>⌖</Text>
+              </Pressable>
+              <Animated.Text style={[S.fabActionLabel, { opacity: fabAnim }]}>
+                My location
+              </Animated.Text>
+            </Animated.View>
+
+            {/* Main FAB */}
+            <Pressable
+              style={[S.fabMain, { bottom: 16 + insets.bottom, right: 16 }]}
+              android_ripple={{ color: palette.secondary }}
+              onPress={toggleFab}
+            >
+              <Animated.Text style={[S.fabMainIcon, { transform: [{ rotate: rotateZ }] }]}>
+                ＋
+              </Animated.Text>
+            </Pressable>
+          </View>
         </>
       )}
 
       {/* Action Buttons for New Holes */}
       {selectedHole && (
         <View
-          style={styles(palette).actionButtonsContainer}
+          style={S.actionButtonsContainer}
           // NOTE: measure action stack to compute bottom map padding
           onLayout={(e) => setActionsH(e.nativeEvent.layout.height)}
         >
@@ -1103,11 +1152,11 @@ export default function CourseViewScreen() {
                 android_ripple={{ color: palette.secondary }}
                 hitSlop={8}
                 style={({ pressed }) => [
-                  styles(palette).actionButton,
-                  pressed && styles(palette).actionButtonPressed,
+                  S.actionButton,
+                  pressed && S.actionButtonPressed,
                 ]}
               >
-                <Text style={styles(palette).actionButtonText}>Add Tee Box</Text>
+                <Text style={S.actionButtonText}>Add Tee Box</Text>
               </Pressable>
             )}
 
@@ -1119,13 +1168,11 @@ export default function CourseViewScreen() {
                 android_ripple={{ color: palette.secondary }}
                 hitSlop={8}
                 style={({ pressed }) => [
-                  styles(palette).actionButton,
-                  pressed && styles(palette).actionButtonPressed,
+                  S.actionButton,
+                  pressed && S.actionButtonPressed,
                 ]}
               >
-                <Text style={styles(palette).actionButtonText}>
-                  Add Fairway Target
-                </Text>
+                <Text style={S.actionButtonText}>Add Fairway Target</Text>
               </Pressable>
             )}
 
@@ -1137,11 +1184,11 @@ export default function CourseViewScreen() {
                 android_ripple={{ color: palette.secondary }}
                 hitSlop={8}
                 style={({ pressed }) => [
-                  styles(palette).actionButton,
-                  pressed && styles(palette).actionButtonPressed,
+                  S.actionButton,
+                  pressed && S.actionButtonPressed,
                 ]}
               >
-                <Text style={styles(palette).actionButtonText}>Add Green</Text>
+                <Text style={S.actionButtonText}>Add Green</Text>
               </Pressable>
             )}
         </View>
@@ -1256,7 +1303,7 @@ const styles = (palette: any) =>
     scoreOverlay: {
       position: "absolute",
       bottom: 75, // NOTE: used in dynamic padding calc
-      right: 5,
+      right: 75,
       backgroundColor: palette.secondary,
       padding: 12,
       borderRadius: 12,
@@ -1340,7 +1387,7 @@ const styles = (palette: any) =>
       pointerEvents: "box-none",
     },
     actionButton: {
-      backgroundColor: palette.primary, 
+      backgroundColor: palette.primary,
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderRadius: 8,
@@ -1356,29 +1403,89 @@ const styles = (palette: any) =>
       textAlign: "center",
     },
 
-    //----new my location button ------
+    // ---- new my location button (legacy FAB, kept if needed) ------
     fab: {
-  position: "absolute",
-  width: 48,
-  height: 48,
-  borderRadius: 24,
-  backgroundColor: palette.primary,
-  alignItems: "center",
-  justifyContent: "center",
-  // raise above score overlay
-  zIndex: 2500,
-  // shadow (iOS)
-  shadowColor: "#000",
-  shadowOpacity: 0.25,
-  shadowRadius: 6,
-  shadowOffset: { width: 0, height: 4 },
-  // shadow (Android)
-  elevation: 6,
-},
-fabLabel: {
-  color: palette.white,
-  fontSize: 20,
-  fontWeight: "700",
-},
-    
+      position: "absolute",
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: palette.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 2500,
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+    fabLabel: {
+      color: palette.white,
+      fontSize: 20,
+      fontWeight: "700",
+    },
+
+    //---------UI CHANGES FOR BOTTOM RIGHT CONTROL PANEL------
+    fabContainer: {
+      position: "absolute",
+      right: 0,
+      bottom: 50,
+      zIndex: 3000,
+      width: "100%",
+      height: "100%",
+      pointerEvents: "box-none",
+    },
+    fabMain: {
+      position: "absolute",
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: palette.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      elevation: 8,
+      shadowColor: "#000",
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+    },
+    fabMainIcon: {
+      color: palette.white,
+      fontSize: 28,
+      fontWeight: "800",
+      lineHeight: 28,
+    },
+    fabActionWrap: {
+      position: "absolute",
+      right: 16,
+      bottom: 16, // both actions start at the main FAB position
+      alignItems: "center",
+    },
+    fabAction: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: palette.third,
+      alignItems: "center",
+      justifyContent: "center",
+      elevation: 20,
+      shadowColor: "#000",
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    fabActionIcon: {
+      color: palette.white,
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    fabActionLabel: {
+      marginTop: 6,
+      backgroundColor: palette.secondary,
+      color: palette.white,
+      paddingHorizontal: 8,
+      paddingVertical: 10,
+      borderRadius: 6,
+      fontSize: 12,
+    },
   });

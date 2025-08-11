@@ -1059,7 +1059,15 @@ export default function CourseViewScreen() {
           </Pressable>
 
           <Pressable
-            style={[styles(palette).pinButton, { left: 140 }]} // new My Location button
+            style={[
+              styles(palette).fab,
+              {
+                right: 5,
+                bottom: SCORE_BOTTOM + scoreH + 5 + insets.bottom, // sits just above the score box
+              },
+            ]}
+            android_ripple={{ color: palette.secondary }}
+            hitSlop={8}
             onPress={() => {
               if (location && mapRef.current) {
                 mapRef.current.animateToRegion(
@@ -1074,7 +1082,8 @@ export default function CourseViewScreen() {
               }
             }}
           >
-            <Text style={styles(palette).pinButtonText}>My Location</Text>
+            {/* simple glyph—swap for an icon/image if you prefer */}
+            <Text style={styles(palette).fabLabel}>⌖</Text>
           </Pressable>
         </>
       )}
@@ -1247,7 +1256,7 @@ const styles = (palette: any) =>
     scoreOverlay: {
       position: "absolute",
       bottom: 75, // NOTE: used in dynamic padding calc
-      right: 16,
+      right: 5,
       backgroundColor: palette.secondary,
       padding: 12,
       borderRadius: 12,
@@ -1322,7 +1331,7 @@ const styles = (palette: any) =>
       justifyContent: "space-between",
       borderRadius: 8,
       position: "absolute",
-      bottom: 120, // NOTE: used in dynamic padding calc
+      bottom: 200,
       left: 10,
       width: "30%",
       alignSelf: "center",
@@ -1331,7 +1340,7 @@ const styles = (palette: any) =>
       pointerEvents: "box-none",
     },
     actionButton: {
-      backgroundColor: palette.primary, // now you can control this
+      backgroundColor: palette.primary, 
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderRadius: 8,
@@ -1347,14 +1356,29 @@ const styles = (palette: any) =>
       textAlign: "center",
     },
 
-    getLocationButton: {
-      position: "absolute",
-      bottom: 80,
-      left: 140,
-      backgroundColor: palette.primary,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 8,
-      elevation: 3,
-    },
+    //----new my location button ------
+    fab: {
+  position: "absolute",
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  backgroundColor: palette.primary,
+  alignItems: "center",
+  justifyContent: "center",
+  // raise above score overlay
+  zIndex: 2500,
+  // shadow (iOS)
+  shadowColor: "#000",
+  shadowOpacity: 0.25,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 4 },
+  // shadow (Android)
+  elevation: 6,
+},
+fabLabel: {
+  color: palette.white,
+  fontSize: 20,
+  fontWeight: "700",
+},
+    
   });

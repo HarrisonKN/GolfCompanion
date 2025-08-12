@@ -8,21 +8,28 @@ import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-c
 import { AuthProvider } from "@/components/AuthContext";
 import { ThemeProvider } from "@/components/ThemeContext";
 
+import { VoiceProvider } from '@/components/VoiceContext';
+import { GlobalVoiceBar } from '@/components/GlobalVoiceBar';
+
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
           <AuthProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="login" />
-              <Stack.Screen name="signup" />
-              <Stack.Screen name="hubRoom" />
-              <Stack.Screen name="friendProfile" />
-              <Stack.Screen name="+not-found" options={{ headerShown: true, title: "Not Found" }} />
-            </Stack>
-            <StatusBar style="auto" />
+            <VoiceProvider>
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="login" options={{ headerShown: false }} />
+                <Stack.Screen name="signup" options={{ headerShown: false }} />
+                <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
+                <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+              <GlobalVoiceBar />
+              <StatusBar style="auto" />
+            </VoiceProvider>
           </AuthProvider>
         </ThemeProvider>
       </SafeAreaProvider>

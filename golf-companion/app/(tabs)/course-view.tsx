@@ -802,7 +802,6 @@ export default function CourseViewScreen() {
           </View>
         </View>
       </Modal>
-
       {/* Top overlay (course + hole dropdowns). We measure its height to set map top padding */}
       <View
         style={S.overlayContainer}
@@ -960,7 +959,6 @@ export default function CourseViewScreen() {
               />
             </Marker>
           )}
-
         {/* Tee→(Fairway)→Green polyline */}
         {selectedHole?.tee_latitude != null &&
           selectedHole?.tee_longitude != null &&

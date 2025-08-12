@@ -47,7 +47,9 @@ export const PALETTES = {
     white: "#FFFFFF",
     black: "#000000",
     grey: "#9CA3AF",
-    yellow: "#FFFF00"
+    yellow: "#FFFF00",
+    success: "#22C55E",
+    warning: "#F59E42"
   },
   dark: {
     primary: "#10B981",  
@@ -60,5 +62,7 @@ export const PALETTES = {
     white: "#23272F",
     black: "#FFFFFF",
     grey: "#374151",
+    success: "#22C55E",
+    warning: "#F59E42"
   },
 };

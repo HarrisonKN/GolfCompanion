@@ -64,7 +64,11 @@
     "react-native-vector-icons": "^10.3.0",
     "react-native-view-shot": "4.0.3",
     "react-native-web": "~0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "expo-device": "~7.1.4",
+    "expo-application": "~6.1.5",
+    "expo-updates": "~0.28.17",
+    "expo": "~53.0.20"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

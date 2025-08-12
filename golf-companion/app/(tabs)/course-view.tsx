@@ -30,6 +30,7 @@ import MapView, {
 } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InteractionManager, Easing, Dimensions } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 
 // …
 
@@ -88,6 +89,8 @@ function nudgeAlongHeading(
       (180 / Math.PI);
   return { latitude: newLat, longitude: newLon };
 }
+//---------------------------------------------------------------
+const COMPACT_H = 36;
 
 // ------------------- COURSEVIEW LOGIC -------------------------
 export default function CourseViewScreen() {
@@ -216,6 +219,20 @@ export default function CourseViewScreen() {
       Alert.alert(msg);
     }
   };
+  const ArrowDown = ({ style }: { style: StyleProp<ViewStyle> }) => (
+    <View style={[style, S.iconCompact]}>
+      <Text style={S.iconText}>▾</Text>
+    </View>
+  );
+
+  const ArrowUp = ({ style }: { style: StyleProp<ViewStyle> }) => (
+    <View style={[style, S.iconCompact]}>
+      <Text style={S.iconText}>▴</Text>
+    </View>
+  );
+
+
+
 
   // ---------- animated cover helper (our addition) ---------- no longer used
   function runHoleTransition(
@@ -795,82 +812,88 @@ export default function CourseViewScreen() {
           setTopPadPx(Math.max(0, y + height + 8));
         }}
       >
-        <DropDownPicker
-          placeholder="Select a course..."
-          open={courseOpen}
-          value={selectedCourse}
-          items={courseItems}
-          setOpen={setCourseOpen}
-          setValue={(cb) => {
-            const v = cb(selectedCourse);
-            // closes drop down before modal pop up for text input
-            if (v === "add_course") {
-              setCourseOpen(false);
-              setShowAddCourseModal(true);
-            } else {
-              // bring the cover up immediately and mark we're switching courses
-              switchingCourseRef.current = true;
-              transitionOpacity.stopAnimation?.();
-              transitionOpacity.setValue(1); // opaque cover now
+        {/* COURSE PICKER */}
+      <DropDownPicker
+        placeholder="Select a course..."
+        open={courseOpen}
+        value={selectedCourse}
+        items={courseItems}
+        setOpen={setCourseOpen}
+        setValue={(cb) => {
+          const v = cb(selectedCourse);
+          if (v === "add_course") {
+            setCourseOpen(false);
+            setShowAddCourseModal(true);
+          } else {
+            // bring the cover up immediately and mark we're switching courses
+            switchingCourseRef.current = true;
+            transitionOpacity.stopAnimation?.();
+            transitionOpacity.setValue(1); // opaque cover now
 
-              setSelectedCourse(v);
-              setCourseOpen(false);
-              setSelectedHoleNumber(null);
-            }
-          }}
-          setItems={setCourseItems}
-          style={S.dropdown}
-          listMode="MODAL"
-          modalProps={{
-            animationType: "slide",
-            transparent: true,
-          }}
-          modalContentContainerStyle={{
-            backgroundColor: palette.secondary,
-            maxHeight: 300,
-            marginHorizontal: 20,
-            borderRadius: 8,
-          }}
-          dropDownContainerStyle={S.dropdownContainer}
-          placeholderStyle={S.placeholder}
-          textStyle={S.text}
-          listItemLabelStyle={S.listItemLabel}
-          zIndex={2000}
-        />
+            setSelectedCourse(v);
+            setCourseOpen(false);
+            setSelectedHoleNumber(null);
+          }
+        }}
+        setItems={setCourseItems}
 
-        {selectedCourse && (
-          <DropDownPicker
-            placeholder="Select a hole..."
-            open={holeOpen}
-            value={selectedHoleNumber}
-            items={holeItems}
-            setOpen={setHoleOpen}
-            setValue={(cb) => {
-              const v = cb(selectedHoleNumber);
-              setSelectedHoleNumber(v);
-            }}
-            setItems={setHoleItems}
-            style={S.dropdown}
-            // FLATLIST is more reliable in release builds…
-            listMode="MODAL"
-            modalProps={{
-              animationType: "slide",
-              transparent: true,
-            }}
-            modalContentContainerStyle={{
-              backgroundColor: palette.secondary,
-              maxHeight: 300,
-              marginVertical: 75,
-              marginHorizontal: 20,
-              borderRadius: 8,
-            }}
-            dropDownContainerStyle={[S.dropdownContainer, { maxHeight: 300 }]}
-            placeholderStyle={S.placeholder}
-            textStyle={S.text}
-            listItemLabelStyle={S.listItemLabel}
-            zIndex={1000}
-          />
-        )}
+        /* ↓ make the closed control thinner */
+        containerStyle={[S.containerCompact, { width: 220, alignSelf: "center" }]}
+        style={[S.dropdown, S.dropdownCompact]}
+        textStyle={S.textCompact}
+        placeholderStyle={S.placeholderCompact}
+        arrowIconContainerStyle={S.iconCompact} 
+        ArrowDownIconComponent={ArrowDown}
+        ArrowUpIconComponent={ArrowUp}
+        /* modal list + animation unchanged */
+        listMode="MODAL"
+        modalProps={{ animationType: "slide", transparent: true }}
+        modalContentContainerStyle={{
+          backgroundColor: palette.secondary,
+          maxHeight: 300,
+          marginHorizontal: 20,
+          borderRadius: 8,
+        }}
+        dropDownContainerStyle={S.dropdownContainer}
+        listItemLabelStyle={S.listItemLabel}
+        zIndex={2000}
+      />
+
+      {/* HOLE PICKER */}
+      <DropDownPicker
+        placeholder="Select a hole..."
+        open={holeOpen}
+        value={selectedHoleNumber}
+        items={holeItems}
+        setOpen={setHoleOpen}
+        setValue={(cb) => {
+          const v = cb(selectedHoleNumber);
+          setSelectedHoleNumber(v);
+        }}
+        setItems={setHoleItems}
+
+        containerStyle={[S.containerCompact, { width: 220, alignSelf: "center" }]}
+        style={[S.dropdown, S.dropdownCompact]}
+        textStyle={S.textCompact}
+        placeholderStyle={S.placeholderCompact}
+        arrowIconContainerStyle={S.iconCompact} 
+        ArrowDownIconComponent={ArrowDown}
+        ArrowUpIconComponent={ArrowUp}
+        
+
+        listMode="MODAL"
+        modalProps={{ animationType: "slide", transparent: true }}
+        modalContentContainerStyle={{
+          backgroundColor: palette.secondary,
+          maxHeight: 300,
+          marginVertical: 75,
+          marginHorizontal: 20,
+          borderRadius: 8,
+        }}
+        dropDownContainerStyle={[S.dropdownContainer, { maxHeight: 300 }]}
+        listItemLabelStyle={S.listItemLabel}
+        zIndex={2000}
+      />
       </View>
 
       <MapView
@@ -887,6 +910,7 @@ export default function CourseViewScreen() {
         }
         showsUserLocation={!!location}
         showsMyLocationButton={false}
+        showsCompass={false}
         mapType="hybrid"
         onMapReady={() => setMapReady(true)}
         onMapLoaded={() => setMapLoaded(true)}
@@ -1244,13 +1268,15 @@ const styles = (palette: any) =>
       fontWeight: "700",
     },
     overlayContainer: {
-      paddingTop: 20,
       position: "absolute",
-      top: 20,
-      alignSelf: "center",
-      width: "90%",
+      top: 60,
+      left: 0,
+      right: 0,
+      width: "100%",       
+      alignItems: "center",
       zIndex: 10,
     },
+
     dropdown: {
       backgroundColor: palette.third,
       borderColor: palette.primary,
@@ -1488,4 +1514,33 @@ const styles = (palette: any) =>
       borderRadius: 6,
       fontSize: 12,
     },
+
+    //---------Making Smaller Dropdown bars at the top  --------
+    dropdownCompact: {
+  height: COMPACT_H,
+  minHeight: COMPACT_H,
+  paddingVertical: 0,
+  borderRadius: 8,
+  width:200,
+},
+containerCompact: {
+  height: COMPACT_H,     // ensures the wrapper measures smaller too
+},
+textCompact: {
+  fontSize: 14,
+  lineHeight: 18,
+  color: palette.textDark,
+},
+placeholderCompact: {
+  fontSize: 14,
+  lineHeight: 18,
+  color: palette.textLight,
+},
+iconCompact: {           // keeps the caret vertically centered in shorter height
+  height: COMPACT_H,
+  justifyContent: "center",
+},
+iconText: { 
+  fontSize: 12, 
+  color: palette.textLight },
   });

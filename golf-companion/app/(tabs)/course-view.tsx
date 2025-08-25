@@ -38,6 +38,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 type Course = {
   id: string;
   name: string;
+  par_values: number[] | null;
 };
 
 type Hole = {
@@ -395,6 +396,8 @@ export default function CourseViewScreen() {
       const idx = holes.findIndex((h) => h.hole_number === selectedHoleNumber);
       const next = holes[idx + 1];
       if (next) {
+        setScore(0);
+        setPutts(0);
         setSelectedHoleNumber(next.hole_number); // the effect above will just fly the camera, no flash
       } else {
         router.push({
@@ -1065,7 +1068,7 @@ export default function CourseViewScreen() {
       {distanceToPin !== null && (
         <View style={S.distanceOverlay}>
           <Text style={S.distanceText}>
-            Distance to Pin: {(distanceToPin / 1).toFixed(0)} m
+            Distance to Pin: {distanceToPin?.toFixed(0)} m
           </Text>
         </View>
       )}
@@ -1167,8 +1170,8 @@ export default function CourseViewScreen() {
           onLayout={(e) => setActionsH(e.nativeEvent.layout.height)}
         >
           {/* <-- Show only if tee coords are null */}
-          {selectedHole.tee_latitude == null &&
-            selectedHole.tee_longitude == null && (
+          {selectedHole.tee_latitude == null ||
+            selectedHole.tee_longitude == null ? (
               <Pressable
                 onPress={handleAddTeeBox}
                 android_ripple={{ color: palette.secondary }}
@@ -1180,7 +1183,7 @@ export default function CourseViewScreen() {
               >
                 <Text style={S.actionButtonText}>Add Tee Box</Text>
               </Pressable>
-            )}
+            ): null}
 
           {/* <-- Show only if fairway coords are null */}
           {selectedHole.fairway_latitude == null &&

@@ -31,7 +31,7 @@ const CELL_WIDTH = 60; // You can adjust this value for your needs
 type Course = {
   id: string;
   name: string;
-  par_values: number[];
+  par_values: number[] | null; // allow null from DB
 };
 
 type CourseDropdownItem = {
@@ -114,8 +114,18 @@ export default function ScorecardScreen() {
   useEffect(() => {
     if (!selectedCourse) return;
     const course = courses.find(c => c.id === selectedCourse);
-    if (course) setParValues(course.par_values);
-    else      setParValues(Array(holeCount).fill(4));
+
+    // Fallback to 18x par-4 if null/invalid
+    const fallback = Array(holeCount).fill(4);
+    const values = Array.isArray(course?.par_values) ? course!.par_values! : fallback;
+
+    // Normalize to exactly 18 entries
+    const normalized =
+      values.length >= holeCount
+        ? values.slice(0, holeCount)
+        : values.concat(Array(holeCount - values.length).fill(4));
+
+    setParValues(normalized);
   }, [selectedCourse, courses]);
 
   //----------------Sync & Clear pending “scores” rows---------------

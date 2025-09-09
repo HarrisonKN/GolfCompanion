@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 type ScoreEntryModalProps = {
@@ -6,9 +6,9 @@ type ScoreEntryModalProps = {
   onClose: () => void;
   score: number;
   putts: number;
-  onScoreChange: (score: number) => void;
-  onPuttsChange: (putts: number) => void;
   onSave: (score: number, putts: number) => void;
+  playerIndex?: number | null;
+  holeIndex?: number | null;
 };
 
 const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
@@ -16,16 +16,17 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
   onClose,
   score,
   putts,
-  onScoreChange,
-  onPuttsChange,
   onSave,
 }) => {
-  const increment = (
-    value: number,
-    setter: (value: number) => void
-  ) => () => {
-    setter(Math.max(0, value));
-  };
+  const [localScore, setLocalScore] = useState(score);
+  const [localPutts, setLocalPutts] = useState(putts);
+
+  useEffect(() => {
+    if (visible) {
+      setLocalScore(score ?? 0);
+      setLocalPutts(putts ?? 0);
+    }
+  }, [visible, score, putts]);
 
   return (
     <Modal transparent visible={visible} animationType="slide">
@@ -37,14 +38,14 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <Text style={styles.label}>Score</Text>
             <View style={styles.counter}>
               <TouchableOpacity
-                onPress={increment(score - 1, onScoreChange)}
+                onPress={() => setLocalScore(Math.max(0, localScore - 1))}
                 style={styles.button}
               >
                 <Text style={styles.buttonText}>-</Text>
               </TouchableOpacity>
-              <Text style={styles.value}>{score}</Text>
+              <Text style={styles.value}>{localScore}</Text>
               <TouchableOpacity
-                onPress={increment(score + 1, onScoreChange)}
+                onPress={() => setLocalScore(localScore + 1)}
                 style={styles.button}
               >
                 <Text style={styles.buttonText}>+</Text>
@@ -56,14 +57,14 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             <Text style={styles.label}>Putts</Text>
             <View style={styles.counter}>
               <TouchableOpacity
-                onPress={increment(putts - 1, onPuttsChange)}
+                onPress={() => setLocalPutts(Math.max(0, localPutts - 1))}
                 style={styles.button}
               >
                 <Text style={styles.buttonText}>-</Text>
               </TouchableOpacity>
-              <Text style={styles.value}>{putts}</Text>
+              <Text style={styles.value}>{localPutts}</Text>
               <TouchableOpacity
-                onPress={increment(putts + 1, onPuttsChange)}
+                onPress={() => setLocalPutts(localPutts + 1)}
                 style={styles.button}
               >
                 <Text style={styles.buttonText}>+</Text>
@@ -77,7 +78,7 @@ const ScoreEntryModal: React.FC<ScoreEntryModalProps> = ({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => {
-                onSave(score, putts);
+                onSave(localScore, localPutts);
                 onClose();
               }}
               style={styles.save}

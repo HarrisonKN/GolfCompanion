@@ -6,9 +6,11 @@ import ScoreEntryModal from '@/components/ScoreEntryModal';
 import { supabase } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as MediaLibrary from 'expo-media-library';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
-import React, { useEffect, useState } from 'react';
+import * as FileSystem from 'expo-file-system';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Alert,
   Button,
@@ -19,14 +21,17 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Animated,
+  Easing,
 } from 'react-native';
-import DropDownPicker from "react-native-dropdown-picker";
-import { captureRef } from 'react-native-view-shot';
+import DropDownPicker from 'react-native-dropdown-picker';
 
 // ------------------- CONSTANTS & TYPES -------------------------
-const ACCENT = '#2979FF';
-const CELL_WIDTH = 60; // You can adjust this value for your needs
+
+// You can adjust this value for your needs
+const holeCount = 18;
+const CELL_WIDTH = 54;
 
 type Course = {
   id: string;
@@ -34,22 +39,28 @@ type Course = {
   par_values: number[] | null; // allow null from DB
 };
 
-type CourseDropdownItem = {
-  label: string;
-  value: string;
-};
+
+type CourseDropdownItem = { label: string; value: string } | { label: string; value: 'add_course' };
 
 // ------------------- SCORECARD LOGIC -------------------------
-export default function ScorecardScreen() {
-  const holeCount = 18;
 
-  const { user } = useAuth();
-  const displayName =
-    user?.user_metadata?.full_name
-    || user?.email
-    || "You";
+function classifyScore(score: string, par: number | null): 'birdie' | 'par' | 'bogey' | undefined {
+  if (par === null || par === undefined) return undefined;
+  const [scoreStr] = score.split('/');
+  const parsedScore = parseInt(scoreStr);
+  if (!Number.isFinite(parsedScore) || !Number.isFinite(par)) return undefined;
 
+  if (parsedScore < par) return 'birdie';
+  if (parsedScore === par) return 'par';
+  if (parsedScore > par) return 'bogey';
+  return undefined;
+}
+
+// ------------------- SCORECARD LOGIC -------------------------
+
+export default function Scorecard() {
   const { palette } = useTheme();
+  const { user } = useAuth();
 
   // Dropdown state
   const [courses, setCourses] = useState<Course[]>([]);
@@ -62,7 +73,7 @@ export default function ScorecardScreen() {
   // 📣 pull in the shared course‐ID state instead of a local one
   const { selectedCourse, setSelectedCourse } = useCourse();
 
-  const [parValues, setParValues] = useState<number[]>(Array(holeCount).fill(0));
+  const [parValues, setParValues] = useState<(number | null)[]>(Array(holeCount).fill(null));
 
   const [players, setPlayers] = useState<any[]>([]);
 
@@ -73,51 +84,97 @@ export default function ScorecardScreen() {
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ playerIndex: number; holeIndex: number } | null>(null);
 
-  const [modalScore, setModalScore] = useState(0);
-  const [modalPutts, setModalPutts] = useState(0);
-
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
-  const scorecardRef = React.useRef<View>(null);
-  const [fullName, setFullName] = useState<string | null>(null);
+  // Birdie animation state
+  const [showBirdieAnimation, setShowBirdieAnimation] = useState(false);
+  // Animation refs for birdie emoji
+  const birdieAnim = useRef(new Animated.Value(0)).current;
+  const birdieLeft = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
 
   // grab courseId layerId from the URL
-  const { courseId, playerId } = useLocalSearchParams<{
-    courseId?: string;
-    playerId?: string;
-  }>();
-
+  const { courseId } = useLocalSearchParams();
 
   //---------------HOOKS---------------------------------
+  // Birdie detection effect
+  useEffect(() => {
+    if (!selectedCell) return;
+    const latestScore = players[selectedCell.playerIndex]?.scores[selectedCell.holeIndex];
+    const cls = classifyScore(latestScore, parValues[selectedCell.holeIndex]);
+    if (cls === 'birdie') {
+      setShowBirdieAnimation(true);
+      birdieAnim.setValue(0);
+      birdieLeft.setValue(Math.random() * 200 - 100);
+      Animated.timing(birdieAnim, {
+        toValue: -200,
+        duration: 2000 + Math.random() * 1000,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.quad),
+      }).start(() => setShowBirdieAnimation(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players]);
+
+  useEffect(() => {
+    // If we navigated in with a courseId param, set it on mount
+    if (courseId && typeof courseId === 'string') {
+      setSelectedCourse(courseId);
+    }
+  }, [courseId]);
+
+  // Ensure a default player for the logged-in user from Supabase profile
+  useEffect(() => {
+    const fetchAndSetPlayer = async () => {
+      if (!user || !selectedCourse || players.length > 0) return;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      const fullName = data?.full_name || '';
+      const firstName = fullName.trim().split(' ')[0] || user.email?.split('@')[0] || 'You';
+
+      setPlayers([{ name: firstName, scores: Array(holeCount).fill('') }]);
+    };
+
+    fetchAndSetPlayer();
+  }, [user, selectedCourse, players.length]);
+
   // Fetch courses from Supabase
   useEffect(() => {
     const fetchCourses = async () => {
-      const { data, error } = await supabase
-        .from("GolfCourses")
-        .select("id, name, total_par, par_values")
-        .order("name", { ascending: true });
-      console.log("Courses data:", data, "Error:", error);
-      if (!error && data) {
-        setCourses(data);
-        setCourseItems(
-          data.map((course) => ({
-            label: course.name,
-            value: course.id,
-          }))
-        );
+      try {
+        const { data, error } = await supabase
+          .from('GolfCourses')
+          .select('id, name, par_values')
+          .order('name');
+
+        if (error) throw error;
+
+        const mapped = (data || []).map((c: Course) => ({ label: c.name, value: c.id }));
+        setCourses(data || []);
+        setCourseItems([
+          ...mapped,
+          { label: '+ Add new course…', value: 'add_course' as const },
+        ] as CourseDropdownItem[]);
+      } catch (err: any) {
+        console.error('Error fetching courses', err);
+        Alert.alert('Error', 'Unable to load courses');
       }
     };
     fetchCourses();
   }, []);
 
-  // Update par values when course changes
   useEffect(() => {
     if (!selectedCourse) return;
+
     const course = courses.find(c => c.id === selectedCourse);
 
     // Fallback to 18x par-4 if null/invalid
     const fallback = Array(holeCount).fill(4);
-    const values = Array.isArray(course?.par_values) ? course!.par_values! : fallback;
+    const values = Array.isArray(course?.par_values) ? course.par_values : fallback;
 
     // Normalize to exactly 18 entries
     const normalized =
@@ -127,6 +184,18 @@ export default function ScorecardScreen() {
 
     setParValues(normalized);
   }, [selectedCourse, courses]);
+
+    // Reset player scores when the selected course changes
+  useEffect(() => {
+    if (players.length > 0) {
+      setPlayers(prev =>
+        prev.map(p => ({
+          ...p,
+          scores: Array(holeCount).fill(''),
+        }))
+      );
+    }
+  }, [selectedCourse]);
 
   //----------------Sync & Clear pending “scores” rows---------------
   // Whenever this screen is focused, grab any recently-entered hole scores,
@@ -145,85 +214,39 @@ useFocusEffect(
         .order('hole_number');
 
       if (fetchError) {
-        console.error('Error loading scores:', fetchError.message);
+        console.error('Error fetching scores', fetchError);
         return;
       }
 
       // 2️⃣ if nothing new, do not overwrite UI
-      if (!scoreData || scoreData.length === 0) {
-        return;
-      }
+      if (!scoreData || scoreData.length === 0) return;
 
       // 3️⃣ merge into existing players[0].scores
-      setPlayers(old => {
+      setPlayers(prev => {
+        const existing = prev[0] || { name: user?.email || 'You', scores: Array(holeCount).fill('') };
         // copy the current first player's scores (or default blanks)
-        const base = old[0]?.scores?.slice() ?? Array(holeCount).fill('');
-        // overlay each fetched hole_number
-        for (let rec of scoreData) {
-          base[rec.hole_number - 1] = `${rec.score} / ${rec.putts}`;
+        const merged = [...existing.scores];
+
+        for (const row of scoreData) {
+          const idx = (row.hole_number ?? 1) - 1;
+          if (idx >= 0 && idx < holeCount) {
+            // overlay each fetched hole_number
+            const scoreStr = `${row.score ?? ''}/${row.putts ?? ''}`;
+            merged[idx] = scoreStr.trim();
+          }
         }
-        return [{ name: old[0]?.name || displayName, scores: base }];
+
+        return [{ ...existing, scores: merged }, ...prev.slice(1)];
       });
 
-      // 4️⃣ delete only what we just merged
-      const holeNumbers = scoreData.map(r => r.hole_number);
-      const { error: deleteError, data: deleted } = await supabase
-        .from('scores')
-        .delete()
-        .eq('player_id', user.id)
-        .eq('course_id', selectedCourse)
-        .in('hole_number', holeNumbers);
-
-      if (deleteError) {
-        console.error('Error clearing fetched scores:', deleteError.message);
-      } 
+      // NOTE: We are NOT deleting here anymore; you can purge rows elsewhere after saving round
     })();
   }, [user, selectedCourse])
 );
 
-
-  useEffect(() => {
-    if (courseId && courseId !== selectedCourse) {
-      setSelectedCourse(courseId);
-    }
-  }, [courseId]);
-
-  useEffect(() => {
-    if (user && fullName !== null && players.length === 0) {
-      //use this section to display only first name of user
-      const first =
-        fullName.split(' ')[0] ||
-        user.email!.split('@')[0] ||
-        'You';
-      setPlayers([{ name: first, scores: Array(holeCount).fill('') }]);
-    }
-  }, [user, fullName]);
-
-  // 2) fetch their real full_name out of your profiles table
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-      if (error) {
-        console.error('failed to load profile', error.message);
-        // mark as “done” but empty
-        setFullName('');
-      } else {
-        // either their full_name or empty string
-        setFullName(data.full_name || '');
-      }
-    })();
-  }, [user]);
-
-  // Add/remove player logic
   const addPlayer = () => {
     if (!newPlayerName.trim()) return;
-    const newPlayer = { name: newPlayerName, scores: Array(holeCount).fill('') };
-    setPlayers([...players, newPlayer]);
+    setPlayers([...players, { name: newPlayerName.trim(), scores: Array(holeCount).fill('') }]);
     setNewPlayerName('');
     setAddPlayerModalVisible(false);
   };
@@ -234,49 +257,79 @@ useFocusEffect(
     setPlayers(updatedPlayers);
   };
 
-  const uploadScorecard = async () => {
-    if (!user) {
-      Alert.alert(
-        'Login Required',
-        'You must be logged in to upload your scorecard.',
-        [
-          {
-            text: 'Go to Login',
-            onPress: () => router.replace('/login'),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]
-      );
-      return;
-    }
+  const openScoreModal = (playerIndex: number, holeIndex: number) => {
+    setSelectedCell({ playerIndex, holeIndex });
+    setScoreModalVisible(true);
+  };
 
-    // Prepare round data
-    const roundData = {
-      user_id: user.id,
-      course_name: courses.find(c => c.id === selectedCourse
-      )?.name || 'Unknown Course',
-      date: new Date().toISOString().slice(0, 10),
-      score: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
-        const score = parseInt(val.split('/')[0]?.trim()) || 0;
-        return sum + score;
-      }, 0) : null,
-      fairways_hit: null, // You can add logic to calculate these if you track them
-      greens_in_reg: null,
-      putts: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
-        const putts = parseInt(val.split('/')[1]?.trim()) || 0;
-        return sum + putts;
-      }, 0) : null,
-      scorecard: JSON.stringify(players), // Save the full scorecard for later retrieval
-      course_id: selectedCourse,
+  const updateScore = (playerIndex: number, holeIndex: number, value: string) => {
+    const updatedPlayers = [...players];
+    updatedPlayers[playerIndex].scores[holeIndex] = value;
+    setPlayers(updatedPlayers);
+  };
+
+  const calculateInOutTotals = (scores: string[]) => {
+    const parseScore = (s: string) => {
+      const [scoreStr, puttsStr] = s.split('/').map(v => v?.trim());
+      return {
+        score: Number.isFinite(parseInt(scoreStr)) ? parseInt(scoreStr) : 0,
+        putts: Number.isFinite(parseInt(puttsStr)) ? parseInt(puttsStr) : 0
+      };
     };
 
-    const { error } = await supabase.from('golf_rounds').insert(roundData);
+    const firstNine = scores.slice(0, 9).map(parseScore);
+    const backNine  = scores.slice(9, 18).map(parseScore);
 
-    if (error) {
-      Alert.alert('Upload Failed', error.message);
-    } else {
-      Alert.alert('Success', 'Scorecard uploaded to your account!');
-      setSaveModalVisible(false);
+    const inScore   = firstNine.reduce((a, b) => a + b.score, 0);
+    const outScore  = backNine.reduce((a, b) => a + b.score, 0);
+    const totalScore = inScore + outScore;
+
+    return { inScore, outScore, totalScore };
+  };
+
+  const saveScorecardToSupabase = async () => {
+    try {
+      // Build round payload
+      const roundData = {
+        user_id: user?.id,
+        course_name: courses.find(c => c.id === selectedCourse
+        )?.name || 'Unknown Course',
+        date: new Date().toISOString().slice(0, 10),
+        score: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
+          const score = parseInt(val.split('/')[0]?.trim()) || 0;
+          return sum + score;
+        }, 0) : null,
+        fairways_hit: null, // You can add logic to calculate these if you track them
+        greens_in_reg: null,
+        putts: players[0] ? players[0].scores.reduce((sum: number, val: string) => {
+          const putts = parseInt(val.split('/')[1]?.trim()) || 0;
+          return sum + putts;
+        }, 0) : null,
+        scorecard: JSON.stringify(players), // Save the full scorecard for later retrieval
+        course_id: selectedCourse,
+      };
+
+      const { error } = await supabase.from('golf_rounds').insert(roundData);
+
+      if (error) {
+        Alert.alert('Upload Failed', error.message);
+      } else {
+        Alert.alert('Success', 'Scorecard uploaded to your account!');
+        setSaveModalVisible(false);
+        // Clear scores for all players after successful save
+        setPlayers(prev =>
+          prev.map(p => ({
+            ...p,
+            scores: Array(holeCount).fill(''),
+          }))
+        );
+      }
+    } catch (e: any) {
+      let message = 'Unknown error';
+      if (e instanceof Error) {
+        message = e.message;
+      }
+      Alert.alert('Error', 'Failed to save scorecard: ' + message);
     }
   };
 
@@ -285,64 +338,94 @@ useFocusEffect(
       // Request permissions
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow media library access to save images.');
+        Alert.alert('Permission needed', 'We need access to your photos to save the scorecard.');
         return;
       }
 
-      // Capture the view as an image
-      const uri = await captureRef(scorecardRef, {
-        format: 'png',
-        quality: 1,
-      });
+      // For now, we’ll save a text representation of the scorecard (placeholder for an image)
+      const scorecardText = JSON.stringify(players, null, 2);
+      const fileUri = FileSystem.documentDirectory + `scorecard-${Date.now()}.txt`;
+      await FileSystem.writeAsStringAsync(fileUri, scorecardText);
 
-      // Save to gallery
-      const asset = await MediaLibrary.createAssetAsync(uri);
-      await MediaLibrary.createAlbumAsync('Golf Scorecards', asset, false);
+      const asset = await MediaLibrary.createAssetAsync(fileUri);
+      await MediaLibrary.createAlbumAsync('Scorecards', asset, false);
 
-      // Optionally, share the image
+      await MediaLibrary.saveToLibraryAsync(asset.uri);
+      Alert.alert('Saved', 'Scorecard saved to your Photos.');
+
+      // Optional: share
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri);
+        await Sharing.shareAsync(asset.uri);
       }
-
-      Alert.alert('Success', 'Scorecard saved to your gallery!');
     } catch (err) {
-      let message = 'Unknown error';
-      if (err instanceof Error) {
-        message = err.message;
-      }
-      Alert.alert('Error', 'Failed to save scorecard: ' + message);
+      console.error('Error saving image', err);
+      Alert.alert('Error', 'Failed to save the scorecard image.');
     }
   };
+
+  const onSave = async () => {
+    // Decide whether to save to Supabase or as Image
+    setSaveModalVisible(true);
+  };
+
+  const onConfirmSave = async () => {
+    // Example: Save to Supabase first, then optionally as image
+    await saveScorecardToSupabase();
+  };
+
+  const scorecardRef = React.useRef<View>(null);
 
   // ------------------- SCORECARD UI -------------------------
   return (
     <View style={[styles(palette).gradientBg, { paddingBottom: 80 }]}>
+      {/* Birdie Emoji Animation */}
+      {showBirdieAnimation && (
+        <Animated.View style={{
+          position: 'absolute',
+          bottom: 100,
+          left: '50%',
+          transform: [
+            { translateX: birdieLeft },
+            { translateY: birdieAnim },
+          ],
+          zIndex: 9999,
+        }}>
+          <Text style={{
+            fontSize: 40,
+            opacity: 0.9,
+          }}>
+            🐦‍⬛
+          </Text>
+        </Animated.View>
+      )}
       {/* Scorecard Title */}
       <View style={styles(palette).topHeader}>
-        <Text style={styles(palette).scorecardTitle}>Scorecard</Text>
-        <View style={styles(palette).titleUnderline} />
+        <View style={styles(palette).scorecardTitleWrap}>
+          <Text style={styles(palette).scorecardTitle}>Scorecard</Text>
+        </View>
       </View>
 
       {/* Course Dropdown */}
-      <View style={{ marginBottom: 16 }}>
+      <View style={styles(palette).dropdownCard}>
         <DropDownPicker
           placeholder="Select a course…"
           open={courseOpen}
-          value={selectedCourse}                            
-          items={courseItems}
+          value={selectedCourse as any}
+          items={courseItems as any}
           setOpen={setCourseOpen}
-          setValue={(cb) => {
-            const v = cb(selectedCourse);
+          setValue={setSelectedCourse as any}
+          setItems={setCourseItems as any}
+          onChangeValue={(v) => {
             if (v === 'add_course') {
+              // Open the create-course flow instead of selecting this pseudo item
               setCourseOpen(false);
+              // Clear selection so the field doesn't show 'add_course'
+              setSelectedCourse(null as any);
               setShowAddCourseModal(true);
-            } else {
-              setSelectedCourse(v);                       
             }
           }}
-          setItems={setCourseItems}
           style={styles(palette).dropdown}
-          dropDownContainerStyle={styles(palette).dropdownContainer}
+          dropDownContainerStyle={[styles(palette).dropdownContainer, {zIndex: 3000}]}
           placeholderStyle={styles(palette).placeholder}
           textStyle={styles(palette).text}
           listItemLabelStyle={styles(palette).listItemLabel}
@@ -368,135 +451,149 @@ useFocusEffect(
                 </View>
                 {Array.from({ length: 9 }).map((_, i) => (
                   <View key={i} style={styles(palette).headerHoleCell}>
-                    <Text style={styles(palette).cellText}>{i + 1}</Text>
+                    <Text style={styles(palette).headerText}>{i + 1}</Text>
                   </View>
                 ))}
-                <View style={styles(palette).headerInOutCell}><Text style={styles(palette).cellText}>IN</Text></View>
+                <View style={styles(palette).headerInOutCell}>
+                  <Text style={styles(palette).headerText}>IN</Text>
+                </View>
                 {Array.from({ length: 9 }).map((_, i) => (
                   <View key={i + 9} style={styles(palette).headerHoleCell}>
-                    <Text style={styles(palette).cellText}>{i + 10}</Text>
+                    <Text style={styles(palette).headerText}>{i + 10}</Text>
                   </View>
                 ))}
-                <View style={styles(palette).headerInOutCell}><Text style={styles(palette).cellText}>OUT</Text></View>
-                <View style={styles(palette).headerInOutCell}><Text style={styles(palette).cellText}>Total</Text></View>
+                <View style={styles(palette).headerInOutCell}>
+                  <Text style={styles(palette).headerText}>OUT</Text>
+                </View>
+                <View style={styles(palette).headerInOutCell}>
+                  <Text style={styles(palette).headerText}>TOTAL</Text>
+                </View>
                 <View style={styles(palette).headerEmptyCell} />
               </View>
-              {/* Divider between Hole and Par */}
+
+              {/* Divider */}
               <View style={styles(palette).headerSubDivider} />
-              {/* Par Row */}
+
+              {/* Header Row: Par Values */}
               <View style={styles(palette).headerRow}>
                 <View style={styles(palette).headerNameCell}>
                   <Text style={styles(palette).headerText}>Par</Text>
                 </View>
-                {/* Holes 1-9 */}
                 {parValues.slice(0, 9).map((par, i) => (
                   <View key={i} style={styles(palette).headerCell}>
-                    <Text style={styles(palette).cellText}>{par}</Text>
+                    <Text style={styles(palette).headerText}>{par !== null && par !== undefined ? par : '-'}</Text>
                   </View>
                 ))}
-                {/* IN */}
                 <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).cellText}>
-                    {parValues.slice(0, 9).reduce((sum, val) => sum + val, 0)}
+                  <Text style={styles(palette).headerText}>
+                    {parValues.slice(0, 9).reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
                   </Text>
                 </View>
-                {/* Holes 10-18 */}
                 {parValues.slice(9, 18).map((par, i) => (
                   <View key={i + 9} style={styles(palette).headerCell}>
-                    <Text style={styles(palette).cellText}>{par}</Text>
+                    <Text style={styles(palette).headerText}>{par !== null && par !== undefined ? par : '-'}</Text>
                   </View>
                 ))}
-                {/* OUT */}
                 <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).cellText}>
-                    {parValues.slice(9, 18).reduce((sum, val) => sum + val, 0)}
+                  <Text style={styles(palette).headerText}>
+                    {parValues.slice(9, 18).reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
                   </Text>
                 </View>
-                {/* TOTAL */}
                 <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).cellText}>
-                    {parValues.reduce((sum, val) => sum + val, 0)}
+                  <Text style={styles(palette).headerText}>
+                    {parValues.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
                   </Text>
                 </View>
                 <View style={styles(palette).headerEmptyCell} />
               </View>
             </View>
-            {/* --- End Combined Header Section --- */}
 
-            {/* Divider between header and player rows */}
-            <View style={styles(palette).headerDivider} />
-
-            {/* Player Rows */}
+            {/* --- Players Section --- */}
             {players.map((player, playerIndex) => {
-              const parseScore = (text: string) =>
-                parseInt(text.split('/')[0]?.trim()) || 0;
-
-              const inScore = player.scores.slice(0, 9).reduce((sum: number, val: string) => sum + parseScore(val), 0);
-              const outScore = player.scores.slice(9, 18).reduce((sum: number, val: string) => sum + parseScore(val), 0);
-              const totalScore = inScore + outScore;
-
+              const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
               return (
                 <View key={playerIndex} style={styles(palette).playerCard}>
                   <View style={styles(palette).row}>
+                    {/* Name */}
                     <View style={styles(palette).nameCell}>
                       <Text style={styles(palette).playerNameText}>{player.name}</Text>
                     </View>
+
                     {/* Holes 1-9 */}
-                    {player.scores.slice(0, 9).map((score: string, holeIndex: number) => (
-                      <TouchableOpacity
-                        key={holeIndex}
-                        style={styles(palette).cellTouchable}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          setSelectedCell({ playerIndex, holeIndex });
-                          setScoreModalVisible(true);
-                        }}
-                      >
-                        <View style={styles(palette).cell}>
-                          <Text
-                            style={styles(palette).cellText}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                          >
-                            {score || 'Tap'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
+                    {player.scores.slice(0, 9).map((score: string, holeIndex: number) => {
+                      const cls = classifyScore(score, parValues[holeIndex]);
+                      const [scoreStr, puttsStr] = score.split('/');
+                      return (
+                        <TouchableOpacity
+                          key={holeIndex}
+                          style={styles(palette).cellTouchable}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setSelectedCell({ playerIndex, holeIndex });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View style={[
+                            styles(palette).cell,
+                            (holeIndex % 2 === 1) && styles(palette).cellAlt,
+                            cls === 'birdie' && styles(palette).birdieCell,
+                            cls === 'par' && styles(palette).parCell,
+                            cls === 'bogey' && styles(palette).bogeyCell
+                          ]}>
+                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                            {puttsStr !== undefined && (
+                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
                     {/* IN column */}
                     <View style={styles(palette).inOutCell}>
                       <Text style={styles(palette).cellText}>{inScore}</Text>
                     </View>
+
                     {/* Holes 10-18 */}
-                    {player.scores.slice(9, 18).map((score: string, holeIndex: number) => (
-                      <TouchableOpacity
-                        key={holeIndex + 9}
-                        style={styles(palette).cellTouchable}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
-                          setScoreModalVisible(true);
-                        }}
-                      >
-                        <View style={styles(palette).cell}>
-                          <Text
-                            style={styles(palette).cellText}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                          >
-                            {score || 'Tap'}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
+                    {player.scores.slice(9, 18).map((score: string, holeIndex: number) => {
+                      const cls = classifyScore(score, parValues[holeIndex + 9]);
+                      const [scoreStr, puttsStr] = score.split('/');
+                      return (
+                        <TouchableOpacity
+                          key={holeIndex + 9}
+                          style={styles(palette).cellTouchable}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View style={[
+                            styles(palette).cell,
+                            (holeIndex % 2 === 1) && styles(palette).cellAlt,
+                            cls === 'birdie' && styles(palette).birdieCell,
+                            cls === 'par' && styles(palette).parCell,
+                            cls === 'bogey' && styles(palette).bogeyCell
+                          ]}>
+                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                            {puttsStr !== undefined && (
+                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
                     {/* OUT column */}
                     <View style={styles(palette).inOutCell}>
                       <Text style={styles(palette).cellText}>{outScore}</Text>
                     </View>
+
                     {/* TOTAL column */}
                     <View style={styles(palette).inOutCell}>
                       <Text style={styles(palette).cellText}>{totalScore}</Text>
                     </View>
+
                     {/* Remove player button */}
                     <TouchableOpacity
                       style={styles(palette).removeCell}
@@ -544,91 +641,84 @@ useFocusEffect(
               onChangeText={setNewPlayerName}
               style={styles(palette).modalInput}
             />
-            <Button title="Add" onPress={addPlayer} color={palette.secondary} />
-            <Button title="Cancel" onPress={() => setAddPlayerModalVisible(false)} color={palette.third} />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Remove Player Modal */}
-      <Modal
-        visible={confirmRemoveIndex !== null}
-        transparent
-        animationType="slide"
-      >
-        <View style={styles(palette).modalBackdrop}>
-          <View style={styles(palette).modalView}>
-            <Text style={styles(palette).modalText}>
-              Are you sure you want to remove this player?
-            </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <TouchableOpacity
-                style={[styles(palette).confirmButton, { backgroundColor: '#e53935' }]}
-                onPress={() => {
-                  if (confirmRemoveIndex !== null) {
-                    removePlayer(confirmRemoveIndex);
-                  }
-                  setConfirmRemoveIndex(null);
-                }}
-              >
-                <Text style={styles(palette).confirmButtonText}>Yes</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles(palette).confirmButton, { backgroundColor: '#555' }]}
-                onPress={() => setConfirmRemoveIndex(null)}
-              >
-                <Text style={styles(palette).confirmButtonText}>No</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-      
-      {/* Save Scorecard Modal */}
-      <Modal visible={saveModalVisible} transparent animationType="slide">
-        <View style={styles(palette).modalBackdrop}>
-          <View style={styles(palette).modalView}>
-            <Text style={styles(palette).modalText}>Save Scorecard</Text>
-            <TouchableOpacity
-              style={[styles(palette).confirmButton, styles(palette).smallButton, { marginBottom: 12 }]}
-              onPress={uploadScorecard}
-            >
-              <Text style={styles(palette).confirmButtonText}>Upload to Account</Text>
+            <TouchableOpacity style={styles(palette).confirmButton} onPress={addPlayer}>
+              <Text style={styles(palette).confirmButtonText}>Add</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles(palette).confirmButton, styles(palette).smallButton]}
-              onPress={saveScorecardAsImage}
-            >
-              <Text style={styles(palette).confirmButtonText}>Save as Image</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles(palette).confirmButton, styles(palette).smallButton, { backgroundColor: '#555', marginTop: 12 }]}
-              onPress={() => setSaveModalVisible(false)}
-            >
+            <TouchableOpacity style={styles(palette).cancelButton} onPress={() => setAddPlayerModalVisible(false)}>
               <Text style={styles(palette).confirmButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* Score Entry Modal */}
+      {/* Confirm Remove Player Modal */}
+      <Modal visible={confirmRemoveIndex !== null} transparent animationType="fade">
+        <View style={styles(palette).modalBackdrop}>
+          <View style={styles(palette).modalView}>
+            <Text style={styles(palette).modalText}>Remove this player?</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Button
+                title="Remove"
+                color={palette.error}
+                onPress={() => {
+                  if (confirmRemoveIndex !== null) {
+                    removePlayer(confirmRemoveIndex);
+                    setConfirmRemoveIndex(null);
+                  }
+                }}
+              />
+              <Button title="Cancel" onPress={() => setConfirmRemoveIndex(null)} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Save Modal */}
+      <Modal visible={saveModalVisible} transparent animationType="slide">
+        <View style={styles(palette).modalBackdrop}>
+          <View style={styles(palette).modalView}>
+            <Text style={styles(palette).modalText}>Save Options:</Text>
+            <TouchableOpacity style={styles(palette).confirmButton} onPress={onConfirmSave}>
+              <Text style={styles(palette).confirmButtonText}>Save to Account</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles(palette).cancelButton} onPress={saveScorecardAsImage}>
+              <Text style={styles(palette).confirmButtonText}>Save as Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles(palette).cancelButton} onPress={() => setSaveModalVisible(false)}>
+              <Text style={styles(palette).confirmButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Course Modal */}
+      <Modal visible={showAddCourseModal} transparent animationType="fade" onRequestClose={() => setShowAddCourseModal(false)}>
+        <View style={styles(palette).modalBackdrop}>
+          <View style={styles(palette).modalView}>
+            <Text style={styles(palette).modalText}>Add Course</Text>
+            <Text style={{ color: palette.white, opacity: 0.7, marginBottom: 8 }}>Coming soon</Text>
+            <Button title="Close" onPress={() => setShowAddCourseModal(false)} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Score Entry Modal Component */}
       <ScoreEntryModal
         visible={scoreModalVisible}
         onClose={() => setScoreModalVisible(false)}
-        score={modalScore}
-        putts={modalPutts}
-        onScoreChange={setModalScore}
-        onPuttsChange={setModalPutts}
+        score={
+          selectedCell && players[selectedCell.playerIndex]
+            ? parseScoreString(players[selectedCell.playerIndex].scores[selectedCell.holeIndex]).score
+            : 0
+        }
+        putts={
+          selectedCell && players[selectedCell.playerIndex]
+            ? parseScoreString(players[selectedCell.playerIndex].scores[selectedCell.holeIndex]).putts
+            : 0
+        }
         onSave={(score, putts) => {
-          if (selectedCell) {
-            const { playerIndex, holeIndex } = selectedCell;
-            const newPlayers = [...players];
-            newPlayers[playerIndex].scores[holeIndex] = `${score} / ${putts}`;
-            setPlayers(newPlayers);
-            setSelectedCell(null);
-            setModalScore(0);
-            setModalPutts(0);
-          }
+          if (!selectedCell) return;
+          updateScore(selectedCell.playerIndex, selectedCell.holeIndex, `${score}/${putts}`);
           setScoreModalVisible(false);
         }}
       />
@@ -636,11 +726,20 @@ useFocusEffect(
   );
 }
 
+// ------------------- SCORECARD UTILS -------------------------
+
+function parseScoreString(s: string): { score: number; putts: number } {
+  const [scoreStr, puttsStr] = s.split('/');
+  const score = Number.isFinite(Number(scoreStr)) ? parseInt(scoreStr) || 0 : 0;
+  const putts = Number.isFinite(Number(puttsStr)) ? parseInt(puttsStr) || 0 : 0;
+  return { score, putts };
+}
+
 // ------------------- SCORECARD STYLING -------------------------
 const styles = (palette: any) => StyleSheet.create({
   gradientBg: {
     flex: 1,
-    backgroundColor: palette.scorecardBackground,
+    backgroundColor: palette.background,
     padding: 16,
   },
   topHeader: {
@@ -649,28 +748,37 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
+  scorecardTitleWrap: {
+    backgroundColor: palette.primary,
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
   scorecardTitle: {
-    color: palette.white,
-    fontSize: 32,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textShadowColor: palette.primary,
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+  color: palette.white,
+  fontSize: 28,
+  fontWeight: '800',
+  letterSpacing: 0.5,
+  textAlign: 'center',
+  textShadowColor: 'transparent',
   },
   titleUnderline: {
     width: 120,
-    height: 4,
-    backgroundColor: palette.primary,
+    height: 3,
+    backgroundColor: 'transparent',
     borderRadius: 2,
     marginTop: 6,
-    marginBottom: 2,
-    opacity: 0.8,
   },
   cardWrapper: {
-    marginHorizontal: 0,
-    marginBottom: 0,
-    marginTop: 12,
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
   },
   horizontalScroll: {
     flexGrow: 0,
@@ -679,27 +787,26 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: 0,
   },
   tableContainer: {
-    backgroundColor: palette.secondary,
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    marginVertical: 12,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: palette.primary,
-    minWidth: 900,
+  backgroundColor: palette.white,
+  borderRadius: 16,
+  padding: 12,
+  marginVertical: 12,
+  borderWidth: 1,
+  borderColor: '#00000012',
+  shadowColor: '#000',
+  shadowOpacity: 0.06,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 4,
+  overflow: 'hidden',
+  minWidth: 900,
   },
   headerUnified: {
-    backgroundColor: palette.primary,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: palette.primary,
-    marginBottom: 12,
-    overflow: 'hidden',
+  backgroundColor: palette.primary,
+  borderRadius: 12,
+  borderWidth: 0,
+  marginBottom: 12,
+  overflow: 'hidden',
   },
   headerDivider: {
     height: 1,
@@ -708,72 +815,105 @@ const styles = (palette: any) => StyleSheet.create({
   },
   headerSubDivider: {
     height: 2,
-    backgroundColor: palette.primary,
-    opacity: 0.7,
+    backgroundColor: '#FFFFFF33',
+    opacity: 1,
     marginVertical: 0,
     borderRadius: 1,
   },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  flexDirection: 'row', alignItems: 'center',
   },
   headerCell: {
-    backgroundColor: palette.primary,
-    minWidth: CELL_WIDTH,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderColor: palette.third,
-    flex: 1,
+  backgroundColor: 'transparent',
+  minWidth: CELL_WIDTH,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRightWidth: 1,
+  borderColor: '#FFFFFF33',
+  flex: 1,
   },
   headerHoleCell: {
-    backgroundColor: palette.third,
-    minWidth: CELL_WIDTH,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderColor: palette.primary,
-    flex: 1,
+  backgroundColor: 'transparent',
+  minWidth: CELL_WIDTH,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRightWidth: 1,
+  borderColor: '#FFFFFF33',
+  flex: 1,
   },
   headerNameCell: {
-    backgroundColor: palette.primary,
-    width: 120,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderColor: palette.primary,
+  backgroundColor: 'transparent',
+  width: 120,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRightWidth: 1,
+  borderColor: '#FFFFFF33',
   },
   headerInOutCell: {
-    backgroundColor: palette.third,
-    minWidth: CELL_WIDTH,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderColor: palette.primary,
-    flex: 1,
+  backgroundColor: 'transparent',
+  minWidth: CELL_WIDTH,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRightWidth: 1,
+  borderColor: '#FFFFFF33',
+  flex: 1,
   },
   headerEmptyCell: {
     width: 40,
     height: 40,
     backgroundColor: 'transparent',
   },
+  row: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: palette.white,
+  borderBottomWidth: 1,
+  borderBottomColor: '#0000000D',
+  },
+  nameCell: {
+  backgroundColor: palette.primary,
+  width: 120,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderTopLeftRadius: 12,
+  borderBottomLeftRadius: 12,
+  borderTopRightRadius: 0,
+  borderBottomRightRadius: 0,
+  marginHorizontal: 0,
+  borderWidth: 0,
+  },
+  cell: {
+  backgroundColor: 'transparent',
+  minWidth: CELL_WIDTH,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRightWidth: 1,
+  borderColor: '#00000012',
+  flex: 1,
+  position: 'relative', // <-- this enables the absolute child
+  },
   cellTouchable: {
+    minWidth: CELL_WIDTH,
+    height: 40,
+    flex: 1,
     borderRadius: 10,
     overflow: 'hidden',
   },
   cellText: {
-    color: palette.white,
-    fontSize: 15,
-    textAlign: 'center',
-    fontWeight: '500',
-    letterSpacing: 0.2,
+  color: palette.textDark,
+  fontSize: 15,
+  textAlign: 'center',
+  fontWeight: '500',
+  letterSpacing: 0.2,
   },
   playerCard: {
-    backgroundColor: palette.background,
+    backgroundColor: 'transparent',
     borderRadius: 18,
     marginVertical: 8,
     shadowColor: palette.primary,
@@ -781,22 +921,6 @@ const styles = (palette: any) => StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 1,
-    borderWidth: 1,
-    borderColor: palette.primary,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: palette.secondary
-  },
-  nameCell: {
-    backgroundColor: palette.primary,
-    width: 120,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
-    marginHorizontal: 1,
     borderWidth: 1,
     borderColor: palette.primary,
   },
@@ -813,15 +937,14 @@ const styles = (palette: any) => StyleSheet.create({
     letterSpacing: 1,
   },
   inOutCell: {
-    backgroundColor: palette.third,
-    width: 54,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 10,
-    marginHorizontal: 1,
-    borderWidth: 1,
-    borderColor: palette.third,
+  backgroundColor: 'transparent',
+  minWidth: CELL_WIDTH,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderRightWidth: 1,
+  borderColor: '#00000012',
+  flex: 1,
   },
   emptyCell: {
     width: 40,
@@ -860,41 +983,39 @@ const styles = (palette: any) => StyleSheet.create({
     borderRadius: 28,
     shadowColor: palette.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: palette.third,
   },
   addPlayerButtonText: {
     color: palette.white,
-    textAlign: 'center',
     fontWeight: '800',
-    fontSize: 20,
-    letterSpacing: 1,
+    letterSpacing: 0.6,
   },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(22,33,62,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 24,
   },
   modalView: {
-    backgroundColor: palette.primary,
-    padding: 32,
-    borderRadius: 20,
-    elevation: 12,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    minWidth: 280,
-    borderWidth: 1,
-    borderColor: palette.primary,
+    backgroundColor: palette.grey,
+    borderRadius: 18,
+    padding: 20,
+    width: '85%',
+    maxWidth: 460,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 5,
   },
   modalInput: {
-    borderWidth: 1,
-    borderColor: palette.primary,
-    backgroundColor: palette.third,
-    color: palette.white,
+    backgroundColor: palette.background,
+    color: palette.black,
     padding: 16,
     marginVertical: 14,
     borderRadius: 10,
@@ -908,47 +1029,62 @@ const styles = (palette: any) => StyleSheet.create({
     textAlign: 'center',
   },
   confirmButton: {
-    flex: 1,
-    paddingVertical: 16,
-    marginHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: palette.secondary,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius:999,
+    alignItems: 'center',
+    marginVertical: 6,
+  },
+  cancelButton: {
+    backgroundColor: '#555',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    alignItems: 'center',
+    marginVertical: 6,
   },
   confirmButtonText: {
-    color: palette.white,
-    textAlign: 'center',
+    color: '#fff',
     fontWeight: '700',
-    fontSize: 17,
+    letterSpacing: 0.3,
   },
-  cell: {
-    backgroundColor: palette.primary,
-    minWidth: CELL_WIDTH,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderColor: palette.third,
-    flex: 1,
-  },
+  dropdownCard: {
+  backgroundColor: palette.white,
+  borderRadius: 16,
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  marginTop: 12,
+  borderWidth: 1,
+  borderColor: '#0000001A',
+  shadowColor: '#000',
+  shadowOpacity: 0.06,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 3,
+  zIndex:3000,
+},
   dropdown: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
-    minHeight: 44,
-    marginTop: 8,
+  backgroundColor: 'transparent',
+  borderColor: 'transparent',
+  minHeight: 44,
+  marginTop: 0,
   },
   dropdownContainer: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
+  backgroundColor: palette.white,
+  borderColor: '#0000001A',
+  borderWidth: 1,
+  borderRadius: 12,
   },
   placeholder: {
-    color: palette.white,
-    fontWeight: '600',
+  color: palette.textLight,
+  fontWeight: '600',
   },
   text: {
-    color: palette.white,
+  color: palette.textDark,
   },
   listItemLabel: {
-    color: palette.white,
+  color: palette.textDark,
   },
   smallButton: {
     flex: 0,
@@ -957,4 +1093,26 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: 8,
     borderRadius: 10,
   },
+  puttText: {
+    position: 'absolute',
+    bottom: 2,
+    right: 4,
+    fontSize: 10,
+    color: palette.secondary,
+  },
+  cellAlt: {
+    backgroundColor: '#f7f7f7',
+  },
+  birdieCell: {
+    backgroundColor: '#d4fcd4', // light green
+  },
+  parCell: {
+    backgroundColor: '#e0e0e0', // neutral grey
+  },
+  bogeyCell: {
+    backgroundColor: '#fde0e0', // light red
+  },
 });
+
+  
+  

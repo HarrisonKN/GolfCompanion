@@ -6,11 +6,12 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useTheme } from "@/components/ThemeContext";
 import { router, useFocusEffect } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput, RefreshControl, StatusBar } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TouchableOpacity, View, Dimensions, Text, TextInput, RefreshControl, StatusBar, Image } from 'react-native';
 import { Colors } from 'react-native/Libraries/NewAppScreen';
 import { MaterialIcons } from '@expo/vector-icons';
 import { PALETTES } from '@/constants/theme';
 import { getAppVersion, getBuildInfo } from '@/utils/version';
+import * as ImagePicker from 'expo-image-picker';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -25,6 +26,7 @@ type UserProfile = {
   last_round_course_name: string | null;
   last_round_date: string | null;
   last_round_score: number | null;
+  avatar_url: string | null;
 };
 
 type RoundHistory = {
@@ -74,9 +76,16 @@ export default function AccountsScreen() {
     return (
       <View style={styles(palette).friendTile}>
         <View style={styles(palette).friendAvatarCircle}>
-          <ThemedText style={styles(palette).friendAvatarText}>
-            {friend.profiles?.full_name ? friend.profiles.full_name[0].toUpperCase() : '?'}
-          </ThemedText>
+          {friend.profiles?.avatar_url ? (
+            <Image
+              source={{ uri: friend.profiles.avatar_url }}
+              style={{ width: 32, height: 32, borderRadius: 16 }}
+            />
+          ) : (
+            <ThemedText style={styles(palette).friendAvatarText}>
+              {friend.profiles?.full_name ? friend.profiles.full_name[0].toUpperCase() : '?'}
+            </ThemedText>
+          )}
         </View>
         <View style={{ marginLeft: 12 }}>
           <ThemedText style={styles(palette).friendTileName}>{friend.profiles?.full_name ?? 'Unknown'}</ThemedText>
@@ -131,6 +140,65 @@ export default function AccountsScreen() {
     }
   };
 
+  const handleImageUpload = async () => {
+  const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permissionResult.granted) {
+    Alert.alert('Permission required', 'We need access to your camera roll to upload a profile picture.');
+    return;
+  }
+
+  const pickerResult = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [1, 1],
+    quality: 0.7,
+  });
+
+  if (pickerResult.canceled) return;
+
+  const image = pickerResult.assets[0];
+  const fileExt = image.uri.split('.').pop();
+  const filePath = `avatars/${user.id}.${fileExt}`;
+  const contentType = `image/${fileExt}`;
+
+  const response = await fetch(image.uri);
+  const blob = await response.blob();
+
+  const { error: uploadError } = await supabase
+    .storage
+    .from('avatars')
+    .upload(filePath, blob, {
+      upsert: true,
+      contentType,
+    });
+
+  if (uploadError) {
+    console.error('Upload error:', uploadError);
+    Alert.alert('Upload failed', 'Could not upload image.');
+    return;
+  }
+
+  const { data: publicUrlData } = supabase
+    .storage
+    .from('avatars')
+    .getPublicUrl(filePath);
+
+  const publicUrl = publicUrlData?.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ avatar_url: publicUrl })
+    .eq('id', user.id);
+
+  if (updateError) {
+    console.error('Profile update error:', updateError);
+    Alert.alert('Error updating profile', 'Avatar URL could not be saved.');
+    return;
+  }
+
+  fetchProfile(); // Refresh profile with new image
+};
+
   const fetchProfile = async () => {
     if (!user || !isMounted) return;
 
@@ -158,7 +226,8 @@ export default function AccountsScreen() {
           average_score,
           last_round_course_name,
           last_round_date,
-          last_round_score
+          last_round_score,
+          avatar_url
         `)
         .eq('id', user.id)
         .single();
@@ -754,11 +823,19 @@ const inviteChannel = supabase
 
       {/* Condensed Account Info */}
       <View style={styles(palette).accountDescContainer}>
-        <View style={styles(palette).avatarCircle}>
-          <ThemedText style={styles(palette).avatarText}>
-            {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
-          </ThemedText>
-        </View>
+        <Pressable onPress={handleImageUpload} style={styles(palette).avatarCircle}>
+          {profile.avatar_url ? (
+            <Image
+              source={{ uri: profile.avatar_url }}
+              style={{ width: '100%', height: '100%', borderRadius: 999 }}
+              resizeMode="cover"
+            />
+          ) : (
+            <ThemedText style={styles(palette).avatarText}>
+              {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
+            </ThemedText>
+          )}
+        </Pressable>
         <View style={{ marginLeft: 12, flex: 1 }}>
           <ThemedText style={styles(palette).accountName}>{profile.full_name ?? 'Unknown User'}</ThemedText>
           <ThemedText style={styles(palette).accountEmail}>{profile.email ?? ''}</ThemedText>
@@ -1218,7 +1295,7 @@ const inviteChannel = supabase
                   // Optionally refresh friends list immediately
                   const { data: updatedFriends } = await supabase
                     .from('friends')
-                    .select('friend_id, profiles:friend_id(full_name, email)')
+                    .select('friend_id, profiles:friend_id(full_name, email, avatar_url)')
                     .eq('user_id', user.id);
                   setFriends(updatedFriends || []);
                   

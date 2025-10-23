@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, Dimensions, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from "@/components/ThemeContext";
@@ -10,12 +10,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 type FriendProfile = {
   full_name: string | null;
   email: string | null;
+  avatar_url: string | null;
   handicap: number | null;
   rounds_played: number | null;
   average_score: number | null;
-  //best_score: number | null;
-  //fairways_hit: number | null;
-  //putts_per_round: number | null;
+  best_score: number | null;
+  fairways_hit: number | null;
+  putts_per_round: number | null;
   last_round_course_name: string | null;
   last_round_date: string | null;
   last_round_score: number | null;
@@ -54,6 +55,7 @@ export default function FriendProfileScreen() {
         .select(`
           full_name,
           email,
+          avatar_url,
           handicap,
           rounds_played,
           average_score,
@@ -150,9 +152,17 @@ export default function FriendProfileScreen() {
       {/* Friend Info */}
       <View style={styles(palette).profileContainer}>
         <View style={styles(palette).avatarCircle}>
-          <ThemedText style={styles(palette).avatarText}>
-            {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
-          </ThemedText>
+          {profile.avatar_url ? (
+            <Image
+              source={{ uri: `${profile.avatar_url}?t=${Date.now()}` }}
+              style={{ width: 60, height: 60, borderRadius: 30 }}
+              resizeMode="cover"
+            />
+          ) : (
+            <ThemedText style={styles(palette).avatarText}>
+              {profile.full_name ? profile.full_name[0].toUpperCase() : '?'}
+            </ThemedText>
+          )}
         </View>
         <View style={{ marginLeft: 16 }}>
           <ThemedText style={styles(palette).profileName}>

@@ -387,7 +387,7 @@ export default function AccountsScreen() {
     const fetchFriends = async () => {
       const { data, error } = await supabase
         .from('friends')
-        .select('friend_id, profiles:friend_id(full_name, email)')
+        .select('friend_id, profiles:friend_id(full_name, email, avatar_url)')
         .eq('user_id', user.id);
       setFriends(data || []);
     };
@@ -492,7 +492,7 @@ export default function AccountsScreen() {
     // Friends
     const { data: friendsData } = await supabase
       .from('friends')
-      .select('friend_id, profiles:friend_id(full_name)')
+      .select('friend_id, profiles:friend_id(full_name, email, avatar_url)')
       .eq('user_id', user.id);
     setFriends(friendsData || []);
   
@@ -1165,9 +1165,17 @@ const inviteChannel = supabase
                   }}
                 >
                   <View style={styles(palette).friendAvatarCircle}>
-                    <ThemedText style={styles(palette).friendAvatarText}>
-                      {f.profiles?.full_name ? f.profiles.full_name[0].toUpperCase() : '?'}
-                    </ThemedText>
+                    {f.profiles?.avatar_url ? (
+                      <Image
+                        source={{ uri: f.profiles.avatar_url }}
+                        style={{ width: 32, height: 32, borderRadius: 16 }}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <ThemedText style={styles(palette).friendAvatarText}>
+                        {f.profiles?.full_name ? f.profiles.full_name[0].toUpperCase() : '?'}
+                      </ThemedText>
+                    )}
                   </View>
                   <ThemedText style={styles(palette).friendTileName} numberOfLines={1}>
                     {f.profiles?.full_name ?? 'Unknown'}

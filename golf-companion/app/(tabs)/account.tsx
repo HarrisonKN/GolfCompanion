@@ -211,8 +211,8 @@ export default function AccountsScreen() {
         .from('avatars')
         .getPublicUrl(filePath);
 
-      const publicUrl = publicUrlData?.publicUrl;
-      console.log("Public URL:", publicUrl);
+      const publicUrl = publicUrlData?.publicUrl ? `${publicUrlData.publicUrl}?v=${Date.now()}` : null;
+      console.log("New public URL (with cache-bust):", publicUrl);
 
       if (!publicUrl) {
         Alert.alert("Error", "Could not retrieve uploaded image URL");
@@ -866,7 +866,8 @@ const inviteChannel = supabase
         <Pressable onPress={handleImageUpload} style={styles(palette).avatarCircle}>
           {profile.avatar_url ? (
             <Image
-              source={{ uri: profile.avatar_url }}
+              key={`${profile.avatar_url}-${Date.now()}`} // force re-render
+              source={{ uri: `${profile.avatar_url}?t=${Date.now()}` }}
               style={{ width: '100%', height: '100%', borderRadius: 999 }}
               resizeMode="cover"
             />

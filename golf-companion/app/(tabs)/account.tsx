@@ -12,6 +12,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { PALETTES } from '@/constants/theme';
 import { getAppVersion, getBuildInfo } from '@/utils/version';
 import * as ImagePicker from 'expo-image-picker';
+import { decode as atob } from 'base-64';
+import * as FileSystem from 'expo-file-system';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -141,63 +143,101 @@ export default function AccountsScreen() {
   };
 
   const handleImageUpload = async () => {
-  const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permissionResult.granted) {
-    Alert.alert('Permission required', 'We need access to your camera roll to upload a profile picture.');
-    return;
-  }
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission required', 'We need access to your camera roll to upload a profile picture.');
+      return;
+    }
 
-  const pickerResult = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [1, 1],
-    quality: 0.7,
-  });
-
-  if (pickerResult.canceled) return;
-
-  const image = pickerResult.assets[0];
-  const fileExt = image.uri.split('.').pop();
-  const filePath = `avatars/${user.id}.${fileExt}`;
-  const contentType = `image/${fileExt}`;
-
-  const response = await fetch(image.uri);
-  const blob = await response.blob();
-
-  const { error: uploadError } = await supabase
-    .storage
-    .from('avatars')
-    .upload(filePath, blob, {
-      upsert: true,
-      contentType,
+    const pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
     });
 
-  if (uploadError) {
-    console.error('Upload error:', uploadError);
-    Alert.alert('Upload failed', 'Could not upload image.');
-    return;
-  }
+    if (pickerResult.canceled || !pickerResult.assets?.length) {
+      console.log("User cancelled or no assets returned");
+      return;
+    }
 
-  const { data: publicUrlData } = supabase
-    .storage
-    .from('avatars')
-    .getPublicUrl(filePath);
+    const image = pickerResult.assets[0];
+    console.log("Selected image:", image);
 
-  const publicUrl = publicUrlData?.publicUrl;
+    const fileExt = image.uri.split('.').pop();
+    const filePath = `${user.id}.${fileExt}`;
 
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({ avatar_url: publicUrl })
-    .eq('id', user.id);
+    try {
+      // Debug logging before upload call
+      console.log("User ID:", user?.id);
+      const session = await supabase.auth.getSession();
+      console.log("Supabase session:", session);
+      // --- Connectivity test before Supabase upload ---
+      try {
+        const ping = await fetch("https://emgqdjhbmkjepbjdpnmh.supabase.co");
+        console.log("✅ Supabase ping response:", ping.status);
+      } catch (err) {
+        console.error("❌ Supabase ping failed:", err.message || err);
+      }
 
-  if (updateError) {
-    console.error('Profile update error:', updateError);
-    Alert.alert('Error updating profile', 'Avatar URL could not be saved.');
-    return;
-  }
+      // Direct file upload using file URI
+      const contentType = image.mimeType ?? `image/${fileExt}`;
+      const fileUri = image.uri;
 
-  fetchProfile(); // Refresh profile with new image
-};
+      console.log("Uploading file to Supabase from URI:", fileUri);
+
+      const result = await supabase.storage
+        .from("avatars")
+        .upload(filePath, {
+          uri: fileUri,
+          type: contentType,
+          name: filePath,
+        } as any, {
+          upsert: true,
+          contentType,
+        });
+
+      if (result.error) {
+        console.error("Supabase upload failed:", result.error);
+        Alert.alert("Upload failed", result.error.message ?? "Unknown error");
+        return;
+      } else {
+        console.log("Upload succeeded:", result.data);
+      }
+
+      const { data: publicUrlData } = supabase
+        .storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData?.publicUrl;
+      console.log("Public URL:", publicUrl);
+
+      if (!publicUrl) {
+        Alert.alert("Error", "Could not retrieve uploaded image URL");
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Profile update error:', updateError);
+        Alert.alert('Error updating profile', updateError.message);
+        return;
+      }
+
+      showToast("Profile picture updated!");
+      await fetchProfile(); // refresh profile UI
+
+    } catch (err: any) {
+      console.error("Unexpected upload error:", err);
+      Alert.alert("Unexpected error", err.message || "Something went wrong");
+    }
+  };
 
   const fetchProfile = async () => {
     if (!user || !isMounted) return;

@@ -10,6 +10,7 @@ export const COLORS = {
   white: "#FFFFFF",
   black: "#000000",
   grey: "#9CA3AF",
+  main: '#111',
 };
 
 export const SIZES = {
@@ -49,7 +50,8 @@ export const PALETTES = {
     grey: "#9CA3AF",
     yellow: "#FFFF00",
     success: "#22C55E",
-    warning: "#F59E42"
+    warning: "#F59E42",
+    main: '#111'
   },
   dark: {
     primary: "#10B981",  

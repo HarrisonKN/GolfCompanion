@@ -880,95 +880,80 @@ export default function CourseViewScreen() {
       </Modal>
       {/* Top overlay (course + hole dropdowns). We measure its height to set map top padding */}
       <View
-        style={S.overlayContainer}
+        style={[S.overlayContainer, { paddingTop: insets.top }]}
         onLayout={(e) => {
           const { y, height } = e.nativeEvent.layout;
-          // y is already relative to the screen; no need to add insets.top
           setTopPadPx(Math.max(0, y + height + 8));
         }}
       >
-        {/* COURSE PICKER */}
-      <DropDownPicker
-        placeholder="Select a course..."
-        open={courseOpen}
-        value={selectedCourse}
-        items={courseItems}
-        setOpen={setCourseOpen}
-        setValue={(cb) => {
-          const v = cb(selectedCourse);
-          if (v === "add_course") {
-            setCourseOpen(false);
-            setShowAddCourseModal(true);
-          } else {
-            // bring the cover up immediately and mark we're switching courses
-            switchingCourseRef.current = true;
-            transitionOpacity.stopAnimation?.();
-            transitionOpacity.setValue(1); // opaque cover now
+        <View style={{ alignItems: "center", justifyContent: "center", width: "100%" }}>
+          <View style={S.bannerContainer}>
+            <Pressable
+              onPress={() => {
+                const currentIdx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
+                const prev = holes[currentIdx - 1];
+                if (prev) setSelectedHoleNumber(prev.hole_number);
+              }}
+              style={({ pressed }) => [S.arrowButton, pressed && S.arrowButtonPressed]}
+              disabled={holes.findIndex(h => h.hole_number === selectedHoleNumber) <= 0}
+            >
+              {holes.findIndex(h => h.hole_number === selectedHoleNumber) > 0 ? (
+                <Text style={S.arrowText}>‹</Text>
+              ) : (
+                <Text style={[S.arrowText, { opacity: 0.2 }]}>‹</Text>
+              )}
+            </Pressable>
 
-            setSelectedCourse(v);
-            setCourseOpen(false);
-            setSelectedHoleNumber(null);
-          }
-        }}
-        setItems={setCourseItems}
+            <View style={S.bannerTextContainer}>
+              <Text style={S.bannerCourse}>
+                {courses.find(c => c.id === selectedCourse)?.name ?? ""}
+              </Text>
+              {!!selectedHole && (
+                <Text style={S.bannerInfo}>
+                  Hole {selectedHole.hole_number}  •  Par {selectedHole.par ?? "--"}  •{" "}
+                  {selectedHole.tee_latitude != null &&
+                  selectedHole.tee_longitude != null &&
+                  selectedHole.green_latitude != null &&
+                  selectedHole.green_longitude != null
+                    ? `${Math.round(
+                        haversine(
+                          {
+                            lat: selectedHole.tee_latitude,
+                            lon: selectedHole.tee_longitude,
+                          },
+                          {
+                            lat: selectedHole.green_latitude,
+                            lon: selectedHole.green_longitude,
+                          }
+                        )
+                      )} m`
+                    : "-- m"}
+                </Text>
+              )}
+              {distanceToPin !== null && (
+                <Text style={S.bannerInfo}>
+                  Distance to Pin: {distanceToPin?.toFixed(0)} m
+                </Text>
+              )}
+            </View>
 
-        /* ↓ make the closed control thinner */
-        containerStyle={[S.containerCompact, { width: 220, alignSelf: "center" }]}
-        style={[S.dropdown, S.dropdownCompact]}
-        textStyle={S.textCompact}
-        placeholderStyle={S.placeholderCompact}
-        arrowIconContainerStyle={S.iconCompact} 
-        ArrowDownIconComponent={ArrowDown}
-        ArrowUpIconComponent={ArrowUp}
-        /* modal list + animation unchanged */
-        listMode="MODAL"
-        modalProps={{ animationType: "slide", transparent: true }}
-        modalContentContainerStyle={{
-          backgroundColor: palette.secondary,
-          maxHeight: 300,
-          marginHorizontal: 20,
-          borderRadius: 8,
-        }}
-        dropDownContainerStyle={S.dropdownContainer}
-        listItemLabelStyle={S.listItemLabel}
-        zIndex={2000}
-      />
-
-      {/* HOLE PICKER */}
-      <DropDownPicker
-        placeholder="Select a hole..."
-        open={holeOpen}
-        value={selectedHoleNumber}
-        items={holeItems}
-        setOpen={setHoleOpen}
-        setValue={(cb) => {
-          const v = cb(selectedHoleNumber);
-          setSelectedHoleNumber(v);
-        }}
-        setItems={setHoleItems}
-
-        containerStyle={[S.containerCompact, { width: 220, alignSelf: "center" }]}
-        style={[S.dropdown, S.dropdownCompact]}
-        textStyle={S.textCompact}
-        placeholderStyle={S.placeholderCompact}
-        arrowIconContainerStyle={S.iconCompact} 
-        ArrowDownIconComponent={ArrowDown}
-        ArrowUpIconComponent={ArrowUp}
-        
-
-        listMode="MODAL"
-        modalProps={{ animationType: "slide", transparent: true }}
-        modalContentContainerStyle={{
-          backgroundColor: palette.secondary,
-          maxHeight: 300,
-          marginVertical: 75,
-          marginHorizontal: 20,
-          borderRadius: 8,
-        }}
-        dropDownContainerStyle={[S.dropdownContainer, { maxHeight: 300 }]}
-        listItemLabelStyle={S.listItemLabel}
-        zIndex={2000}
-      />
+            <Pressable
+              onPress={() => {
+                const currentIdx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
+                const next = holes[currentIdx + 1];
+                if (next) setSelectedHoleNumber(next.hole_number);
+              }}
+              style={({ pressed }) => [S.arrowButton, pressed && S.arrowButtonPressed]}
+              disabled={holes.findIndex(h => h.hole_number === selectedHoleNumber) === holes.length - 1 || holes.length === 0}
+            >
+              {holes.findIndex(h => h.hole_number === selectedHoleNumber) < holes.length - 1 ? (
+                <Text style={S.arrowText}>›</Text>
+              ) : (
+                <Text style={[S.arrowText, { opacity: 0.2 }]}>›</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
       </View>
 
       <MapView
@@ -1345,13 +1330,6 @@ export default function CourseViewScreen() {
         </View>
       )}
 
-      {distanceToPin !== null && (
-        <View style={S.distanceOverlay}>
-          <Text style={S.distanceText}>
-            Distance to Pin: {distanceToPin?.toFixed(0)} m
-          </Text>
-        </View>
-      )}
 
       {selectedHole && (
         <>
@@ -1368,7 +1346,7 @@ export default function CourseViewScreen() {
                 S.fabActionWrap,
                 {
                   bottom: 16 + insets.bottom + LABEL_CLEARANCE,
-                  right: 16,
+                  //right: 16,
                   transform: [{ translateY: actionScoreY }],
                   opacity: fabAnim,
                 },
@@ -1396,7 +1374,7 @@ export default function CourseViewScreen() {
                 S.fabActionWrap,
                 {
                   bottom: 32 + insets.bottom + LABEL_CLEARANCE,
-                  right: 16,
+                  //right: 16,
                   transform: [{ translateY: actionLocY }],
                   opacity: fabAnim,
                 },
@@ -1424,13 +1402,13 @@ export default function CourseViewScreen() {
                 <Text style={S.fabActionIcon}>⌖</Text>
               </Pressable>
               <Animated.Text style={[S.fabActionLabel, { opacity: fabAnim }]}>
-                My location
+                Location
               </Animated.Text>
             </Animated.View>
 
             {/* Main FAB */}
             <Pressable
-              style={[S.fabMain, { bottom: 16 + insets.bottom, right: 16 }]}
+              style={[S.fabMain, { bottom: 48 + insets.bottom, right: 16 }]}
               android_ripple={{ color: palette.secondary }}
               onPress={toggleFab}
             >
@@ -1548,12 +1526,13 @@ const styles = (palette: any) =>
       color: palette.white,
       fontWeight: "700",
     },
+
     overlayContainer: {
       position: "absolute",
-      top: 60,
+      top: 0,
       left: 0,
       right: 0,
-      width: "100%",       
+      width: "100%",  
       alignItems: "center",
       zIndex: 10,
     },
@@ -1576,12 +1555,16 @@ const styles = (palette: any) =>
       position: "absolute",
       bottom: 80,
       left: 20,
-      backgroundColor: palette.primary,
+      backgroundColor: "#111",
       paddingVertical: 10,
       paddingHorizontal: 16,
-      borderRadius: 8,
+      borderRadius: 20,
       zIndex: 1000,
-      elevation: 3,
+      elevation: 5,
+      shadowColor: "#000",
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
     },
     pinButtonText: {
       color: palette.white,
@@ -1611,10 +1594,16 @@ const styles = (palette: any) =>
       position: "absolute",
       bottom: 75, // NOTE: used in dynamic padding calc
       right: 75,
-      backgroundColor: palette.secondary,
-      padding: 12,
-      borderRadius: 12,
+      //backgroundColor: palette.secondary,
+      backgroundColor: "#111",
+      padding: 16,
+      borderRadius: 20,
       alignItems: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 6,
     },
     statControl: {
       flexDirection: "row",
@@ -1624,36 +1613,36 @@ const styles = (palette: any) =>
     statLabel: {
       width: 50,
       fontWeight: "600",
-      color: palette.textDark,
+      color: palette.white,
     },
     button: {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: palette.primary,
+      backgroundColor: palette.white,
       justifyContent: "center",
       alignItems: "center",
       marginHorizontal: 4,
     },
     buttonText: {
-      color: palette.white,
+      color: palette.black,
       fontSize: 18,
       lineHeight: 18,
     },
     statValue: {
       width: 24,
       textAlign: "center",
-      color: palette.textDark,
+      color: palette.white,
     },
     enterButton: {
       marginTop: 4,
-      backgroundColor: palette.primary,
+      backgroundColor: palette.white,
       paddingVertical: 6,
       paddingHorizontal: 16,
       borderRadius: 8,
     },
     enterText: {
-      color: palette.white,
+      color: palette.black,
       fontWeight: "700",
     },
 
@@ -1694,7 +1683,8 @@ const styles = (palette: any) =>
       pointerEvents: "box-none",
     },
     actionButton: {
-      backgroundColor: palette.primary,
+      //backgroundColor: palette.primary,
+      backgroundColor: '#111',
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderRadius: 8,
@@ -1735,8 +1725,9 @@ const styles = (palette: any) =>
     //---------UI CHANGES FOR BOTTOM RIGHT CONTROL PANEL------
     fabContainer: {
       position: "absolute",
+      left: 0,
       right: 0,
-      bottom: 50,
+      bottom: 0,
       zIndex: 3000,
       width: "100%",
       height: "100%",
@@ -1747,14 +1738,16 @@ const styles = (palette: any) =>
       width: 56,
       height: 56,
       borderRadius: 28,
-      backgroundColor: palette.primary,
+      backgroundColor: "#111",
       alignItems: "center",
       justifyContent: "center",
       elevation: 8,
       shadowColor: "#000",
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+      right: 16,
+      bottom: 16,
     },
     fabMainIcon: {
       color: palette.white,
@@ -1764,18 +1757,17 @@ const styles = (palette: any) =>
     },
     fabActionWrap: {
       position: "absolute",
-      right: 16,
-      bottom: 16, // both actions start at the main FAB position
       alignItems: "center",
+      right: 16,
     },
     fabAction: {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: palette.third,
+      backgroundColor: "#111",
       alignItems: "center",
       justifyContent: "center",
-      elevation: 20,
+      elevation: 5,
       shadowColor: "#000",
       shadowOpacity: 0.2,
       shadowRadius: 6,
@@ -1788,7 +1780,8 @@ const styles = (palette: any) =>
     },
     fabActionLabel: {
       marginTop: 6,
-      backgroundColor: palette.secondary,
+      //backgroundColor: palette.secondary,
+      backgroundColor: '#111',
       color: palette.white,
       paddingHorizontal: 8,
       paddingVertical: 10,
@@ -1844,6 +1837,48 @@ iconText: {
     fontWeight: "bold",
     fontSize: 18,
   },
+    // Banner styles
+    bannerContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      backgroundColor: "#111",
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      elevation: 5,
+      shadowColor: "#000",
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+      marginHorizontal: 16,
+    },
+    bannerTextContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    bannerCourse: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: palette.white,
+    },
+    bannerInfo: {
+      fontSize: 14,
+      color: palette.white,
+      marginTop: 2,
+    },
+    arrowButton: {
+      padding: 12,
+    },
+    arrowButtonPressed: {
+      opacity: 0.6,
+    },
+    arrowText: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: palette.white,
+    },
   });
      
   

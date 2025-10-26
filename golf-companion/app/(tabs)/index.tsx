@@ -133,6 +133,22 @@ export default function HomeScreen() {
               <ThemedText style={styles(palette).welcomeText}>
                 Ready for another round? Check out your scores and course views.
               </ThemedText>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles(palette).startGameButton,
+                  pressed && styles(palette).startGameButtonPressed,
+                ]}
+                onPress={() => {
+                  // Animate button press, then navigate
+                  router.push('../startGame');
+                }}
+              >
+                <ThemedText style={styles(palette).startGameButtonText}>
+                  Press to Start a Game
+                </ThemedText>
+              </Pressable>
+
               <Pressable
                 style={styles(palette).authButton}
                 onPress={() => router.push('/course-view')}
@@ -315,6 +331,35 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 8,
     elevation: 3,
+  },
+  startGameButton: {
+    backgroundColor: palette.primary,
+    borderRadius: 12,
+    marginVertical: 20,
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    transform: [{ scale: 1 }],
+    transitionDuration: '200ms',
+  },
+  startGameButtonPressed: {
+    backgroundColor: palette.third,
+    elevation: 2,
+    shadowOpacity: 0.1,
+    transform: [{ scale: 0.96 }],
+  },
+  startGameButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 18,
+    textShadowColor: '#222',
+    textShadowOffset: { width: 1, height: 2 },
+    textShadowRadius: 4,
   },
   authButtonText: {
     color: palette.white,

@@ -25,6 +25,7 @@ export default function RootLayout() {
                 <Stack.Screen name="signup" options={{ headerShown: false }} />
                 <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
                 <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
+                <Stack.Screen name="startGame" options={{ headerShown: false }} />
                 <Stack.Screen name="+not-found" />
               </Stack>
               <GlobalVoiceBar />

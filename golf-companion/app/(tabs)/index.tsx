@@ -24,6 +24,9 @@ export default function HomeScreen() {
   const { palette } = useTheme();
   const { displayVersion } = getAppVersion(); // Add this line
   const insets = useSafeAreaInsets();
+
+ 
+
 //----------------------------------------------------------------
 // Adding to make it so there is only 1 feature card at a time on the home screen
   const featureCards = [

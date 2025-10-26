@@ -112,6 +112,11 @@ export default function CourseViewScreen() {
   const [distanceToPin, setDistanceToPin] = useState<number | null>(null);
   const [showAddCourseModal, setShowAddCourseModal] = useState(false);
   const [newCourseName, setNewCourseName] = useState("");
+  // Add missing states for floating distance banners
+  const [teeFairwayY, setTeeFairwayY] = useState<number | null>(null);
+  const [fairwayGreenY, setFairwayGreenY] = useState<number | null>(null);
+  // Trigger banner update when camera flight completes
+  const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
 
   const { user } = useAuth();
   const { palette } = useTheme();
@@ -722,6 +727,13 @@ export default function CourseViewScreen() {
     if (!hasTee || !hasGreen) return; // wait until pins are there
 
     orientedFlyToHole(mapRef, selectedHole, 900);
+    Animated.timing(new Animated.Value(0), {
+      toValue: 1,
+      duration: 900,
+      useNativeDriver: true,
+    }).start(() => {
+      setTriggerBannerUpdate((v) => v + 1);
+    });
   }, [
     mapReady,
     selectedHole?.id,
@@ -735,6 +747,67 @@ export default function CourseViewScreen() {
   useEffect(() => {
     setDroppedPins([]);
   }, [selectedHoleNumber]);
+
+  // Calculate and set teeFairwayY and fairwayGreenY based on screen midpoints
+  useEffect(() => {
+    const updateYPositions = async () => {
+      if (!mapRef.current || !selectedHole) {
+        console.log("🧭 Map or selected hole not ready");
+        return;
+      }
+
+      console.log("🗺️ MapLoaded:", MapLoaded);
+      console.log("📍 Tee → Fairway lat/lon:", selectedHole?.tee_latitude, selectedHole?.fairway_latitude);
+      console.log("📍 Fairway → Green lat/lon:", selectedHole?.fairway_latitude, selectedHole?.green_latitude);
+
+      if (
+        selectedHole.tee_latitude != null &&
+        selectedHole.tee_longitude != null &&
+        selectedHole.fairway_latitude != null &&
+        selectedHole.fairway_longitude != null
+      ) {
+        const mid = {
+          latitude: (selectedHole.tee_latitude + selectedHole.fairway_latitude) / 2,
+          longitude: (selectedHole.tee_longitude + selectedHole.fairway_longitude) / 2,
+        };
+
+        setTimeout(async () => {
+          const point = await mapRef.current!.pointForCoordinate(mid);
+          console.log("🎯 Tee→Fairway screen point:", point);
+          setTeeFairwayY(point.y - 20);
+        }, 300);
+      }
+
+      if (
+        selectedHole.green_latitude != null &&
+        selectedHole.green_longitude != null &&
+        selectedHole.fairway_latitude != null &&
+        selectedHole.fairway_longitude != null
+      ) {
+        const mid = {
+          latitude: (selectedHole.green_latitude + selectedHole.fairway_latitude) / 2,
+          longitude: (selectedHole.green_longitude + selectedHole.fairway_longitude) / 2,
+        };
+
+        setTimeout(async () => {
+          const point = await mapRef.current!.pointForCoordinate(mid);
+          console.log("🎯 Fairway→Green screen point:", point);
+          setFairwayGreenY(point.y - 20);
+        }, 300);
+      }
+    };
+
+    updateYPositions();
+  }, [
+    selectedHole?.tee_latitude,
+    selectedHole?.tee_longitude,
+    selectedHole?.fairway_latitude,
+    selectedHole?.fairway_longitude,
+    selectedHole?.green_latitude,
+    selectedHole?.green_longitude,
+    MapLoaded,
+    triggerBannerUpdate, // ← ensure banners update after hole is loaded
+  ]);
 
   // Dropping pins around course function to show shots according to players position
   const handleDropPin = async () => {
@@ -933,12 +1006,12 @@ export default function CourseViewScreen() {
                 latitude: selectedHole.tee_latitude,
                 longitude: selectedHole.tee_longitude,
               }}
-              anchor={{ x: 0.6, y: 1 }}
+              anchor={{ x: 0.5, y: 0.5 }}
               title={`Hole ${selectedHole.hole_number} Tee`}
             >
               <Image
-                source={require("@/assets/images/golf-logo.png")}
-                style={{ width: 50, height: 50, tintColor: palette.yellow }}
+                source={require("@/assets/images/TeePng.png")}
+                style={{ width: 30, height: 30}}
                 resizeMode="contain"
               />
             </Marker>
@@ -952,15 +1025,115 @@ export default function CourseViewScreen() {
                 latitude: selectedHole.green_latitude,
                 longitude: selectedHole.green_longitude,
               }}
-              anchor={{ x: 0.6, y: 1 }}
+              anchor={{ x: 0.5, y: 0.5 }}
               title={`Hole ${selectedHole.hole_number} Green`}
             >
-              <Image
-                source={require("@/assets/images/flag.png")}
-                style={{ width: 50, height: 50 }}
+              <Image  
+                source={require("@/assets/images/FlagPng.png")}
+                style={{ width: 30, height: 30 }}
                 resizeMode="contain"
               />
             </Marker>
+          )}
+
+        {/* Fairway marker (draggable) */}
+        {selectedHole?.tee_latitude != null &&
+          selectedHole?.tee_longitude != null &&
+          selectedHole?.green_latitude != null &&
+          selectedHole?.green_longitude != null && (
+            <Marker
+              coordinate={{
+                latitude:
+                  selectedHole?.fairway_latitude ??
+                  (selectedHole?.tee_latitude + selectedHole?.green_latitude) / 2,
+                longitude:
+                  selectedHole?.fairway_longitude ??
+                  (selectedHole?.tee_longitude + selectedHole?.green_longitude) / 2,
+              }}
+              draggable
+              onDragEnd={(e) => {
+                const { latitude, longitude } = e.nativeEvent.coordinate;
+                const updated = holes.map((h) =>
+                  h.id === selectedHole?.id
+                    ? { ...h, fairway_latitude: latitude, fairway_longitude: longitude }
+                    : h
+                );
+                setHoles(updated);
+              }}
+              onDrag={(e) => {
+                const { latitude, longitude } = e.nativeEvent.coordinate;
+                const updated = holes.map((h) =>
+                  h.id === selectedHole?.id
+                    ? { ...h, fairway_latitude: latitude, fairway_longitude: longitude }
+                    : h
+                );
+                setHoles(updated);
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              title={`Hole ${selectedHole?.hole_number} Fairway`}
+            >
+              <Image
+                source={require("@/assets/images/FTPng.png")}
+                style={{ width: 30, height: 30 }}
+                resizeMode="contain"
+              />
+            </Marker>
+          )}
+
+        {/* Tee → Fairway polyline */}
+        {selectedHole?.tee_latitude != null &&
+          selectedHole?.tee_longitude != null &&
+          selectedHole?.fairway_latitude != null &&
+          selectedHole?.fairway_longitude != null && (
+            <Polyline
+              coordinates={[
+                {
+                  latitude: selectedHole.tee_latitude,
+                  longitude: selectedHole.tee_longitude,
+                },
+                {
+                  ...nudgeAlongHeading(
+                    { latitude: selectedHole.fairway_latitude, longitude: selectedHole.fairway_longitude },
+                    bearingDeg(
+                      { latitude: selectedHole.tee_latitude, longitude: selectedHole.tee_longitude },
+                      { latitude: selectedHole.fairway_latitude, longitude: selectedHole.fairway_longitude }
+                    ),
+                    15
+                  )
+                },
+              ]}
+              strokeColor="#FFFFFF"
+              strokeWidth={2}
+              lineDashPattern={[6, 4]}
+            />
+          )}
+
+        {/* Fairway → Green polyline */}
+        {selectedHole?.fairway_latitude != null &&
+          selectedHole?.fairway_longitude != null &&
+          selectedHole?.green_latitude != null &&
+          selectedHole?.green_longitude != null && (
+            <Polyline
+              coordinates={[
+                {
+                  ...nudgeAlongHeading(
+                    { latitude: selectedHole.fairway_latitude, longitude: selectedHole.fairway_longitude },
+                    bearingDeg(
+                      { latitude: selectedHole.green_latitude, longitude: selectedHole.green_longitude },
+                      { latitude: selectedHole.fairway_latitude, longitude: selectedHole.fairway_longitude }
+                    ),
+                    15
+                  )
+                },
+                {
+                  latitude: selectedHole.green_latitude,
+                  longitude: selectedHole.green_longitude,
+                },
+              ]}
+              strokeColor="#FFFFFF"
+              strokeWidth={2}
+              lineDashPattern={[6, 4]}
+            />
           )}
         {/* Tee→(Fairway)→Green polyline */}
         {selectedHole?.tee_latitude != null &&
@@ -987,7 +1160,7 @@ export default function CourseViewScreen() {
                   longitude: selectedHole.green_longitude,
                 },
               ]}
-              strokeColor="#00BFFF"
+              strokeColor="#FFFFFF"
               strokeWidth={2}
             />
           )}
@@ -1029,6 +1202,113 @@ export default function CourseViewScreen() {
             />
           ))}
       </MapView>
+
+      {/* Distance banners for Tee→Fairway and Fairway→Green, anchored by screen Y of midpoint */}
+      {/* {teeFairwayY != null && (
+        <View style={[S.distanceBannerContainer, { top: teeFairwayY }]}>
+          <View style={S.distanceBanner}>
+            <Text style={S.distanceBannerText}>
+              {selectedHole?.tee_latitude != null &&
+              selectedHole?.tee_longitude != null &&
+              selectedHole?.fairway_latitude != null &&
+              selectedHole?.fairway_longitude != null
+                ? Math.round(
+                    haversine(
+                      {
+                        lat: selectedHole.tee_latitude,
+                        lon: selectedHole.tee_longitude,
+                      },
+                      {
+                        lat: selectedHole.fairway_latitude,
+                        lon: selectedHole.fairway_longitude,
+                      }
+                    )
+                  )
+                : "--"}{" "}
+              m
+            </Text>
+          </View>
+        </View>
+      )}
+      {fairwayGreenY != null && (
+        <View style={[S.distanceBannerContainer, { top: fairwayGreenY }]}>
+          <View style={S.distanceBanner}>
+            <Text style={S.distanceBannerText}>
+              {selectedHole?.fairway_latitude != null &&
+              selectedHole?.fairway_longitude != null &&
+              selectedHole?.green_latitude != null &&
+              selectedHole?.green_longitude != null
+                ? Math.round(
+                    haversine(
+                      {
+                        lat: selectedHole.fairway_latitude,
+                        lon: selectedHole.fairway_longitude,
+                      },
+                      {
+                        lat: selectedHole.green_latitude,
+                        lon: selectedHole.green_longitude,
+                      }
+                    )
+                  )
+                : "--"}{" "}
+              m
+            </Text>
+          </View>
+        </View>
+      )} */}
+
+      {/* Distance banners for Tee→Fairway and Fairway→Green, positioned by map screen coords */}
+      {teeFairwayY != null && (
+        <View style={[S.distanceBannerContainer, { top: teeFairwayY, left: 10 }]}>
+          <View style={S.distanceBanner}>
+            <Text style={S.distanceBannerText}>
+              {selectedHole?.tee_latitude != null &&
+              selectedHole?.tee_longitude != null &&
+              selectedHole?.fairway_latitude != null &&
+              selectedHole?.fairway_longitude != null
+                ? `${Math.round(
+                    haversine(
+                      {
+                        lat: selectedHole.tee_latitude,
+                        lon: selectedHole.tee_longitude,
+                      },
+                      {
+                        lat: selectedHole.fairway_latitude,
+                        lon: selectedHole.fairway_longitude,
+                      }
+                    )
+                  )} m`
+                : "--"}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {fairwayGreenY != null && (
+        <View style={[S.distanceBannerContainer, { top: fairwayGreenY, left: 10 }]}>
+          <View style={S.distanceBanner}>
+            <Text style={S.distanceBannerText}>
+              {selectedHole?.fairway_latitude != null &&
+              selectedHole?.fairway_longitude != null &&
+              selectedHole?.green_latitude != null &&
+              selectedHole?.green_longitude != null
+                ? `${Math.round(
+                    haversine(
+                      {
+                        lat: selectedHole.fairway_latitude,
+                        lon: selectedHole.fairway_longitude,
+                      },
+                      {
+                        lat: selectedHole.green_latitude,
+                        lon: selectedHole.green_longitude,
+                      }
+                    )
+                  )} m`
+                : "--"}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Score overlay (hidden until opened from FAB) */}
       {!!selectedHole && scoreVisible && (
@@ -1544,4 +1824,26 @@ iconCompact: {           // keeps the caret vertically centered in shorter heigh
 iconText: { 
   fontSize: 12, 
   color: palette.textLight },
+
+  distanceBannerContainer: {
+    position: "absolute",
+    top: 100,
+    left: 10,
+    backgroundColor: "transparent",
+    zIndex: 1000,
+  },
+  distanceBanner: {
+    backgroundColor: "#111",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    elevation: 5,
+  },
+  distanceBannerText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
+  },
   });
+     
+  

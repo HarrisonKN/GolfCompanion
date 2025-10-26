@@ -16,12 +16,17 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, ScrollView } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { getAppVersion } from '@/utils/version';
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const { palette } = useTheme();
-  const { displayVersion } = getAppVersion();
+  const { displayVersion } = getAppVersion(); // Add this line
+  const insets = useSafeAreaInsets();
+
+ 
+
 //----------------------------------------------------------------
 // Adding to make it so there is only 1 feature card at a time on the home screen
   const featureCards = [
@@ -73,7 +78,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles(palette).scrollContent}
           headerBackgroundColor={{ light: palette.background, dark: palette.background }}
           headerImage={
-            <ThemedView style={styles(palette).headerRow}>
+            <ThemedView style={[styles(palette).headerRow, { paddingTop: insets.top }]}>
               <View style={styles(palette).logoContainer}>
                 <Image
                   source={require('@/assets/images/golf-logo.png')}
@@ -107,7 +112,7 @@ export default function HomeScreen() {
         contentContainerStyle={styles(palette).scrollContent}
         headerBackgroundColor={{ light: palette.background, dark: palette.background }}
         headerImage={
-          <ThemedView style={styles(palette).headerRow}>
+          <ThemedView style={[styles(palette).headerRow, { paddingTop: insets.top }]}>
             <View style={styles(palette).logoContainer}>
               <Image
                 source={require('@/assets/images/golf-logo.png')}
@@ -224,7 +229,7 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     paddingBottom: 20,
   },
   headerRow: {
-    backgroundColor: palette.third,
+    backgroundColor: palette.main,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

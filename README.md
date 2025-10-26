@@ -1,23 +1,25 @@
 # GolfCompanion
 
-GolfCompanion is a project designed to enhance your golfing experience by providing helpful tools, stats tracking, and insights—all powered primarily by TypeScript.
+GolfCompanion is a modern Expo-powered app designed to enhance your golfing experience with score tracking, course management, and performance analytics—all built with TypeScript and React Native.
 
 ---
 
 ## Features
 
-- **Score Tracking:** Easily keep track of your scores and progress across multiple rounds.
-- **Course Management:** Add and manage your favorite courses, including custom details.
-- **Statistics:** Analyze your performance with detailed stats and visualizations.
-- **User-Friendly Interface:** Clean and responsive UI built with modern web technologies.
-- **Customizable Settings:** Personalize the app to match your playing style and preferences.
+- **Score Tracking:** Track scores and progress across rounds.
+- **Course Management:** Add/manage favorite courses with custom details.
+- **Statistics:** Analyze performance with detailed stats and visualizations.
+- **Customizable Settings:** Personalize the app to your playing style.
+- **User-Friendly Interface:** Clean, responsive UI.
 
 ---
 
 ## Tech Stack
 
-- **TypeScript** (98.7%) — Main application logic, types, and UI.
-- **JavaScript** (1.3%) — Supplementary scripts and legacy support.
+- **Expo** — App runtime & build tools
+- **React Native** — Mobile app framework
+- **TypeScript** — Main application logic & UI
+- **JavaScript** — Supplementary scripts
 
 ---
 
@@ -25,8 +27,9 @@ GolfCompanion is a project designed to enhance your golfing experience by provid
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (version 14 or higher recommended)
+- [Node.js](https://nodejs.org/) (v14+)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
+- [Expo CLI](https://docs.expo.dev/get-started/installation/) (`npm install -g expo-cli`)
 
 ### Installation
 
@@ -36,34 +39,95 @@ cd GolfCompanion
 npm install
 ```
 
-### Running the App
+### Running the App (Development)
 
 ```bash
 npm start
+# or
+npx expo start
 ```
 
-### Building for Production
+You can open the app in:
+- [Expo Go](https://expo.dev/go)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Development build](https://docs.expo.dev/develop/development-builds/introduction/)
+
+Edit files in the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+
+---
+
+## Building & Publishing
+
+### Build for Production
 
 ```bash
 npm run build
+# or for Expo:
+expo build:android
+expo build:ios
+
+#or for my method
+npx expo run:android
+
+cd .\android\
+.\gradlew.bat assembleRelease
+
 ```
+
 ---
 
-## Contributing
+## Versioning & Updates
 
-Contributions are welcome! Feel free to open issues or submit pull requests to help improve GolfCompanion.
+GolfCompanion uses semantic versioning (major.minor.patch).
+
+**To update the version:**
+
+You can update the version manually or use the automated scripts:
+
+- **Manual:**  
+  1. Edit `expo.version` in `golf-companion/app.json`.
+  2. Commit and push your changes:
+     ```bash
+     git add .
+     git commit -m "chore: bump version"
+     git push
+     ```
+
+- **Automated:**  
+  Use one of the following npm scripts to bump the version:
+  ```bash
+  npm run version:patch   # For a patch update (bugfixes, small changes)
+  npm run version:minor   # For a minor update (new features, backwards compatible)
+  npm run version:major   # For a major update (breaking changes)
+
+---
+
+## Learn More
+
+- [Expo documentation](https://docs.expo.dev/)
+- [Expo guides](https://docs.expo.dev/guides)
+- [Expo tutorial](https://docs.expo.dev/tutorial/introduction/)
+
+---
+
+## Community & Contributing
+
+- [Expo on GitHub](https://github.com/expo/expo)
+- [Expo Discord](https://chat.expo.dev)
+- Open issues or submit pull requests to help improve GolfCompanion.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE).
 
 ---
 
 ## Contact
 
-For questions or feedback, reach out to [@HarrisonKN](https://github.com/HarrisonKN).
+Questions or feedback? [@HarrisonKN](https://github.com/HarrisonKN)
 
 ---
 

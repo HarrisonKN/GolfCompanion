@@ -9,9 +9,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "version:patch": "npm version patch",
-    "version:minor": "npm version minor",
-    "version:major": "npm version major",
+    "version:patch": "node scripts/updateBuildNumber.js patch",
+    "version:minor": "node scripts/updateBuildNumber.js minor",
+    "version:major": "node scripts/updateBuildNumber.js major",
     "build:version": "node scripts/updateBuildNumber.js"
   },
   "dependencies": {

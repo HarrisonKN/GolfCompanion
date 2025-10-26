@@ -21,7 +21,7 @@ import { getAppVersion } from '@/utils/version';
 export default function HomeScreen() {
   const { user, loading } = useAuth();
   const { palette } = useTheme();
-  const { displayVersion } = getAppVersion(); // Add this line
+  const { displayVersion } = getAppVersion();
 //----------------------------------------------------------------
 // Adding to make it so there is only 1 feature card at a time on the home screen
   const featureCards = [

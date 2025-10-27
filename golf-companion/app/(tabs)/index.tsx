@@ -213,6 +213,7 @@ type PaletteType = {
   white: string;
   textDark: string;
   textLight: string;
+  main: string;
 };
 const styles = (palette: PaletteType) => StyleSheet.create({
   container: {

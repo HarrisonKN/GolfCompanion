@@ -65,6 +65,7 @@ export const PALETTES = {
     black: "#FFFFFF",
     grey: "#374151",
     success: "#22C55E",
-    warning: "#F59E42"
+    warning: "#F59E42",
+    main: "#111"
   },
 };

@@ -183,6 +183,30 @@ export default function CourseViewScreen() {
   const [fairwayGreenY, setFairwayGreenY] = useState<number | null>(null);
   // Trigger banner update when camera flight completes
   const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
+  const [scoreboard, setScoreboard] = useState<ScoreboardItem[]>([]);
+
+  // --- Hole entry modal state (NEW) ---
+  const [holeEntryStep, setHoleEntryStep] = useState(0);
+  const [holeEntryData, setHoleEntryData] = useState<{
+    par: number | null;
+    yardage: number | null;
+    green: LatLng | null;
+    fairway: LatLng | null;
+    tee: LatLng | null;
+  }>({
+    par: null,
+    yardage: null,
+    green: null,
+    fairway: null,
+    tee: null,
+  });
+  const [entryPromptVisible, setEntryPromptVisible] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  // New: step prompt overlay for hole entry flow
+  const [stepPromptMessage, setStepPromptMessage] = useState<string | null>(null);
+  const [stepPromptConfirm, setStepPromptConfirm] = useState<null | (() => void)>(null);
+  const [stepPromptCancel, setStepPromptCancel] = useState<null | (() => void)>(null);
+  const [showStepConfirm, setShowStepConfirm] = useState<boolean>(false);
 
   const { user } = useAuth();
   const { palette } = useTheme();
@@ -913,6 +937,189 @@ export default function CourseViewScreen() {
 
     setDistanceToPin(calculatedDistance);
   }, [location, selectedHole, droppedPins]);
+
+  // Build a map for quick par lookup
+  const parByHole = React.useMemo(() => {
+    const m = new Map<number, number>();
+    for (const h of holes) {
+      if (h.par != null) m.set(h.hole_number, h.par);
+    }
+    return m;
+  }, [holes]);
+
+  // Fetch and compute scoreboard (today, for selected course)
+  const refreshScoreboard = React.useCallback(async () => {
+    if (!selectedCourse || holes.length === 0) return;
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Optional: limit to selected players if playerIds param is provided
+    let ids: string[] = [];
+    try {
+      if (playerIds) {
+        const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
+        const parsed = JSON.parse(String(raw));
+        if (Array.isArray(parsed)) ids = parsed.filter(Boolean);
+      }
+    } catch {}
+
+    let query = supabase
+      .from("scores")
+      .select("player_id, hole_number, score, created_at")
+      .eq("course_id", selectedCourse)
+      .gte("created_at", startOfToday.toISOString());
+
+    if (ids.length > 0) {
+      query = query.in("player_id", ids);
+    }
+
+    const { data: rows, error } = await query;
+
+    if (error) {
+      console.warn("Scoreboard fetch error:", error);
+      return;
+    }
+
+    const byPlayer = new Map<
+      string,
+      { strokes: number; toPar: number; holes: Set<number> }
+    >();
+
+    (rows || []).forEach((r) => {
+      const par = parByHole.get(r.hole_number ?? 0);
+      if (r.score == null || par == null) return;
+
+      const entry =
+        byPlayer.get(r.player_id) ||
+        { strokes: 0, toPar: 0, holes: new Set<number>() };
+
+      entry.strokes += r.score;
+      entry.toPar += r.score - par;
+      entry.holes.add(r.hole_number);
+      byPlayer.set(r.player_id, entry);
+    });
+
+    const playerIdList = Array.from(byPlayer.keys());
+    if (playerIdList.length === 0) {
+      setScoreboard([]);
+      return;
+    }
+
+    // Pull names + avatars
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .in("id", playerIdList);
+
+    const profById = new Map<string, { name: string; avatar_url?: string | null }>(
+      (profiles || []).map((p: any) => [p.id, { name: p.full_name ?? "Unknown", avatar_url: p.avatar_url }])
+    );
+
+    const items: ScoreboardItem[] = playerIdList.map((pid) => {
+      const e = byPlayer.get(pid)!;
+      const p = profById.get(pid);
+      return {
+        player_id: pid,
+        name: p?.name || "Unknown",
+        avatar_url: p?.avatar_url ?? null,
+        strokes: e.strokes,
+        toPar: e.toPar,
+        holesPlayed: e.holes.size,
+      };
+    });
+
+    items.sort((a, b) => a.toPar - b.toPar || b.holesPlayed - a.holesPlayed);
+    setScoreboard(items);
+  }, [selectedCourse, holes, parByHole, playerIds]);
+
+  // Initial + when course/holes change
+  useEffect(() => {
+    refreshScoreboard();
+  }, [refreshScoreboard]);
+
+  // Realtime updates when scores change for this course
+  useEffect(() => {
+    if (!selectedCourse) return;
+    const channel = supabase
+      .channel(`scores_live_${selectedCourse}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "scores", filter: `course_id=eq.${selectedCourse}` },
+        () => refreshScoreboard()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedCourse, refreshScoreboard]);
+  // ------------------- Save hole data to Supabase (helper for modal flow) -------------------------
+  const saveHoleDataToSupabase = async (data = holeEntryData) => {
+    const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
+    if (!selectedHole) return;
+
+    const { par, yardage, tee, fairway, green } = data as {
+      par: number | null;
+      yardage: number | null;
+      tee: LatLng | null;
+      fairway: LatLng | null;
+      green: LatLng | null;
+    };
+    // Log tee data before update
+    console.log("🟡 Saving tee data:", tee);
+    // Ensure all keys match exact lowercase column names in Supabase
+    const { error } = await supabase
+      .from("holes")
+      .update({
+        par: par,
+        yardage: yardage,
+        tee_latitude: tee?.latitude,
+        tee_longitude: tee?.longitude,
+        fairway_latitude: fairway?.latitude,
+        fairway_longitude: fairway?.longitude,
+        green_latitude: green?.latitude,
+        green_longitude: green?.longitude,
+      })
+      .eq("id", selectedHole.id);
+    if (error) {
+      setStepPromptMessage("Error: " + error.message);
+      setShowStepConfirm(false);
+      setTimeout(() => setStepPromptMessage(null), 2000);
+    } else {
+      setStepPromptMessage("Saved!\nHole data saved.");
+      setShowStepConfirm(false);
+      setTimeout(() => setStepPromptMessage(null), 1200);
+      await fetchHoles(); // refresh
+      // After fetching holes, zoom/refresh map to show the new hole if tee and green exist
+      if (mapRef.current && tee && green) {
+        const yardageVal = typeof yardage === "number" ? yardage : 0;
+        const heading = bearingDeg(tee, green);
+        const t = 0.5;
+        const mid = {
+          latitude: tee.latitude + (green.latitude - tee.latitude) * t,
+          longitude: tee.longitude + (green.longitude - tee.longitude) * t,
+        };
+        const center = nudgeAlongHeading(mid, heading, 20);
+        if (Platform.OS === "ios") {
+          let altitude = Math.max(200, Math.min(1000, yardageVal * 0.9 + 160));
+          mapRef.current.animateCamera(
+            { center, heading, pitch: 40, altitude },
+            { duration: 900 }
+          );
+        } else {
+          let zoom = 18.6 - Math.log2(Math.max(60, yardageVal) / 150);
+          zoom = Math.max(16.2, Math.min(19, zoom));
+          mapRef.current.animateCamera(
+            { center, heading, pitch: 40, zoom },
+            { duration: 900 }
+          );
+        }
+      }
+    }
+    setHoleEntryStep(0);
+    setEntryPromptVisible(false);
+  };
 
   // ------------------- COURSE VIEW UI -------------------------
   return (
@@ -2121,5 +2328,5 @@ iconText: {
     sbBadgeOver: { backgroundColor: "#ef4444" },  // over par = red
     sbBadgeEven: { backgroundColor: "#4b5563" },  // even = gray
   });
+
      
-  

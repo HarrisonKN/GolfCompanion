@@ -275,6 +275,29 @@ export default function StartGameScreen() {
     fetchCourses();
   }, []);
 
+  // Save new course handler //AI ADDED THIS BECAUSE I NEEDED IT TO FIX IT TO MERGE 
+  async function saveNewCourse() {
+    if (!courseName.trim()) return;
+    setSavingCourse(true);
+    const { data, error } = await supabase
+      .from("GolfCourses")
+      .insert([{ name: courseName.trim() }])
+      .select();
+    setSavingCourse(false);
+    if (!error && data && data.length > 0) {
+      const newCourse = data[0];
+      setCourseItems((prev) => [
+        { label: "➕ Add a course", value: "add_course" },
+        ...prev.filter(item => item.value !== "add_course"),
+        { label: newCourse.name, value: newCourse.id }
+      ]);
+      setCourse(newCourse.id);
+      setAddingCourse(false);
+      setCourseName('');
+    }
+    // Optionally handle error (e.g., show a message)
+  }
+
   // Fetch tees when course changes (stub: replace with real fetch)
   useEffect(() => {
     if (!course) return;

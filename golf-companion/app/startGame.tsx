@@ -234,8 +234,13 @@ export default function StartGameScreen() {
 
   // Course dropdown state
   const [courseOpen, setCourseOpen] = useState(false);
-  const [course, setCourse] = useState(null);
+  const [course, setCourse] = useState<any | null>(null);
   const [courseItems, setCourseItems] = useState<any[]>([]);
+
+  // Add-course flow
+  const [addingCourse, setAddingCourse] = useState(false);
+  const [courseName, setCourseName] = useState('');
+  const [savingCourse, setSavingCourse] = useState(false);
 
   // Tee dropdown state
   const [teeOpen, setTeeOpen] = useState(false);
@@ -260,10 +265,11 @@ export default function StartGameScreen() {
         .select("*")
         .order("name");
       if (!error && data) {
-        setCourseItems(data.map((course) => ({
+        const mapped = data.map((course) => ({
           label: course.name,
           value: course.id,
-        })));
+        }));
+        setCourseItems([{ label: "➕ Add a course", value: "add_course" }, ...mapped]);
       }
     }
     fetchCourses();
@@ -278,34 +284,6 @@ export default function StartGameScreen() {
       { label: "Red Tees", value: "red" },
     ]);
   }, [course]);
-
-  // Fetch user's friends from Supabase (profiles full_name), and include "You"
-  useEffect(() => {
-    const fetchFriends = async () => {
-      if (!user?.id) return;
-      const { data, error } = await supabase
-        .from('friends')
-        .select('friend_id, profiles:friend_id(full_name)')
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Error fetching friends:', error);
-        return;
-      }
-
-      const friends = (data || []).map((f: any) => ({
-        id: f.friend_id,
-        name: f.profiles?.full_name || 'Unknown',
-      }));
-
-      const you = { id: user.id, name: 'You' };
-      // Ensure no dup if your id appears in friends
-      const unique = [you, ...friends.filter((f: any) => f.id !== user.id)];
-
-      setAllFriends(unique);
-    };
-    fetchFriends();
-  }, [user?.id]);
 
   // Search for other users (stub: replace with real backend search)
   useEffect(() => {
@@ -387,6 +365,34 @@ export default function StartGameScreen() {
           listItemLabelStyle={styles.textCompact}
           zIndex={2000}
         />
+        {/* Add-course inline UI (appears when "➕ Add a course" is selected) */}
+        {addingCourse && (
+          <View style={{ marginTop: 12, marginBottom: 12 }}>
+            <Text style={{ fontWeight: '700', color: '#2563eb', marginBottom: 8 }}>New course name</Text>
+            <TextInput
+              value={courseName}
+              onChangeText={setCourseName}
+              placeholder="Enter course name"
+              placeholderTextColor="#888"
+              style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#d1d5db' }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 }}>
+              <Pressable
+                onPress={() => { setAddingCourse(false); setCourseName(''); }}
+                style={{ paddingHorizontal: 12, paddingVertical: 8, marginRight: 8 }}
+              >
+                <Text style={{ color: '#2563eb', fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveNewCourse}
+                disabled={savingCourse}
+                style={{ backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{savingCourse ? 'Saving...' : 'Save Course'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
         {/* Tee Picker */}
         <DropDownPicker
           placeholder="Select Tee"

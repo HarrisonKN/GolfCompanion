@@ -16,7 +16,10 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View, ScrollView } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { getAppVersion } from '@/utils/version';
+import { registerForPushNotificationsAsync } from '@/lib/PushNotifications';
+import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { supabase } from '@/lib/supabaseClient';
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
@@ -159,6 +162,46 @@ export default function HomeScreen() {
                 onPress={() => router.push('/course-view')}
               >
                 <ThemedText style={styles(palette).authButtonText}>Go to Course View</ThemedText>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles(palette).startGameButton,
+                  pressed && styles(palette).startGameButtonPressed,
+                ]}
+                onPress={async () => {
+                  try {
+                    const { data: fcmToken } = await Notifications.getDevicePushTokenAsync();
+                    console.log('✅ FCM Token:', fcmToken);
+
+                    const supabaseUser = user?.id;
+                    console.log("👤 Supabase user:", supabaseUser);
+                    if (!fcmToken || !supabaseUser) throw new Error("Missing token or user ID");
+
+                    const { error } = await supabase
+                      .from("profiles")
+                      .update({ fcm_token: fcmToken })
+                      .eq("id", supabaseUser);
+
+                    if (error) throw error;
+
+                    Toast.show({
+                      type: 'success',
+                      text1: 'Push token saved!',
+                      text2: fcmToken,
+                    });
+                  } catch (err: any) {
+                    Toast.show({
+                      type: 'error',
+                      text1: 'Error saving token',
+                      text2: err.message,
+                    });
+                  }
+                }}
+              >
+                <ThemedText style={styles(palette).startGameButtonText}>
+                  Test Push Notifications
+                </ThemedText>
               </Pressable>
             </>
           ) : (

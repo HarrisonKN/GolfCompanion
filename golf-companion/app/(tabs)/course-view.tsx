@@ -21,6 +21,62 @@ import {
   ToastAndroid,
   View
 } from "react-native";
+// ------------------- STEP OVERLAY COMPONENT -------------------------
+function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: {
+  visible: boolean;
+  message: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+  confirmButtons?: boolean;
+}) {
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={{
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 3000,
+      }}>
+        <View style={{
+          minWidth: 220,
+          backgroundColor: "#111",
+          borderRadius: 20,
+          paddingVertical: 24,
+          paddingHorizontal: 32,
+          alignItems: "center",
+          elevation: 10,
+        }}>
+          <Text style={{
+            color: "#fff",
+            fontWeight: "bold",
+            fontSize: 18,
+            textAlign: "center"
+          }}>
+            {message}
+          </Text>
+          {confirmButtons && (
+            <View style={{ flexDirection: "row", marginTop: 24, gap: 18 }}>
+              <Pressable
+                onPress={onCancel}
+                style={({ pressed }) => [{ backgroundColor: "#444", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20, marginRight: 8, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>No</Text>
+              </Pressable>
+              <Pressable
+                onPress={onConfirm}
+                style={({ pressed }) => [{ backgroundColor: "#fff", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20, opacity: pressed ? 0.7 : 1 }]}
+              >
+                <Text style={{ color: "#111", fontWeight: "bold", fontSize: 16 }}>Yes</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
 import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
   Marker,
@@ -28,6 +84,7 @@ import MapView, {
   PROVIDER_GOOGLE,
   Region,
 } from "react-native-maps";
+import type { LatLng } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InteractionManager, Easing, Dimensions } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
@@ -126,7 +183,6 @@ export default function CourseViewScreen() {
   const [fairwayGreenY, setFairwayGreenY] = useState<number | null>(null);
   // Trigger banner update when camera flight completes
   const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
-  const [scoreboard, setScoreboard] = useState<ScoreboardItem[]>([]);
 
   const { user } = useAuth();
   const { palette } = useTheme();
@@ -858,123 +914,6 @@ export default function CourseViewScreen() {
     setDistanceToPin(calculatedDistance);
   }, [location, selectedHole, droppedPins]);
 
-  // Build a map for quick par lookup
-  const parByHole = React.useMemo(() => {
-    const m = new Map<number, number>();
-    for (const h of holes) {
-      if (h.par != null) m.set(h.hole_number, h.par);
-    }
-    return m;
-  }, [holes]);
-
-  // Fetch and compute scoreboard (today, for selected course)
-  const refreshScoreboard = React.useCallback(async () => {
-    if (!selectedCourse || holes.length === 0) return;
-
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    // Optional: limit to selected players if playerIds param is provided
-    let ids: string[] = [];
-    try {
-      if (playerIds) {
-        const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
-        const parsed = JSON.parse(String(raw));
-        if (Array.isArray(parsed)) ids = parsed.filter(Boolean);
-      }
-    } catch {}
-
-    let query = supabase
-      .from("scores")
-      .select("player_id, hole_number, score, created_at")
-      .eq("course_id", selectedCourse)
-      .gte("created_at", startOfToday.toISOString());
-
-    if (ids.length > 0) {
-      query = query.in("player_id", ids);
-    }
-
-    const { data: rows, error } = await query;
-
-    if (error) {
-      console.warn("Scoreboard fetch error:", error);
-      return;
-    }
-
-    const byPlayer = new Map<
-      string,
-      { strokes: number; toPar: number; holes: Set<number> }
-    >();
-
-    (rows || []).forEach((r) => {
-      const par = parByHole.get(r.hole_number ?? 0);
-      if (r.score == null || par == null) return;
-
-      const entry =
-        byPlayer.get(r.player_id) ||
-        { strokes: 0, toPar: 0, holes: new Set<number>() };
-
-      entry.strokes += r.score;
-      entry.toPar += r.score - par;
-      entry.holes.add(r.hole_number);
-      byPlayer.set(r.player_id, entry);
-    });
-
-    const playerIdList = Array.from(byPlayer.keys());
-    if (playerIdList.length === 0) {
-      setScoreboard([]);
-      return;
-    }
-
-    // Pull names + avatars
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", playerIdList);
-
-    const profById = new Map<string, { name: string; avatar_url?: string | null }>(
-      (profiles || []).map((p: any) => [p.id, { name: p.full_name ?? "Unknown", avatar_url: p.avatar_url }])
-    );
-
-    const items: ScoreboardItem[] = playerIdList.map((pid) => {
-      const e = byPlayer.get(pid)!;
-      const p = profById.get(pid);
-      return {
-        player_id: pid,
-        name: p?.name || "Unknown",
-        avatar_url: p?.avatar_url ?? null,
-        strokes: e.strokes,
-        toPar: e.toPar,
-        holesPlayed: e.holes.size,
-      };
-    });
-
-    items.sort((a, b) => a.toPar - b.toPar || b.holesPlayed - a.holesPlayed);
-    setScoreboard(items);
-  }, [selectedCourse, holes, parByHole, playerIds]);
-
-  // Initial + when course/holes change
-  useEffect(() => {
-    refreshScoreboard();
-  }, [refreshScoreboard]);
-
-  // Realtime updates when scores change for this course
-  useEffect(() => {
-    if (!selectedCourse) return;
-    const channel = supabase
-      .channel(`scores_live_${selectedCourse}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "scores", filter: `course_id=eq.${selectedCourse}` },
-        () => refreshScoreboard()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedCourse, refreshScoreboard]);
-
   // ------------------- COURSE VIEW UI -------------------------
   return (
     <View style={S.container}>
@@ -1150,6 +1089,51 @@ export default function CourseViewScreen() {
           bottom: Math.max(bottomPadPx, 0),
           left: 16,
           right: 16,
+        }}
+        onDoublePress={(e) => {
+          const coord = e.nativeEvent.coordinate;
+          // Step 3: Place Tee Box
+          if (holeEntryStep === 3) {
+            setHoleEntryData(prev => ({ ...prev, tee: coord }));
+            setHoleEntryStep(4);
+            setStepPromptMessage("Place Fairway\nDouble-tap the fairway location on the map.");
+            setShowStepConfirm(false);
+            setTimeout(() => setStepPromptMessage(null), 1800);
+          }
+          // Step 4: Place Fairway
+          else if (holeEntryStep === 4) {
+            setHoleEntryData(prev => ({ ...prev, fairway: coord }));
+            setHoleEntryStep(5);
+            setStepPromptMessage("Place Green\nDouble-tap the green location on the map.");
+            setShowStepConfirm(false);
+            setTimeout(() => setStepPromptMessage(null), 1800);
+          }
+          // Step 5: Place Green
+          else if (holeEntryStep === 5) {
+            const latLng: LatLng = {
+              latitude: coord.latitude,
+              longitude: coord.longitude,
+            };
+            const updatedData = { ...holeEntryData, green: latLng };
+            setHoleEntryData(updatedData);
+            setHoleEntryStep(6);
+            setStepPromptMessage(`Green Marker Set\nLat: ${latLng.latitude}, Lon: ${latLng.longitude}`);
+            setShowStepConfirm(false);
+            setTimeout(() => {
+              setStepPromptMessage("Save this hole?");
+              setShowStepConfirm(true);
+              setStepPromptConfirm(() => () => {
+                setStepPromptMessage(null);
+                setShowStepConfirm(false);
+                saveHoleDataToSupabase(updatedData);
+              });
+              setStepPromptCancel(() => () => {
+                setStepPromptMessage(null);
+                setShowStepConfirm(false);
+                setHoleEntryStep(1);
+              });
+            }, 1200);
+          }
         }}
       >
         {/* Tee marker */}
@@ -1590,61 +1574,94 @@ export default function CourseViewScreen() {
       )}
 
       {/* Action Buttons for New Holes */}
-      {selectedHole && (
-        <View
-          style={S.actionButtonsContainer}
-          // NOTE: measure action stack to compute bottom map padding
-          onLayout={(e) => setActionsH(e.nativeEvent.layout.height)}
-        >
-          {/* <-- Show only if tee coords are null */}
-          {selectedHole.tee_latitude == null ||
-            selectedHole.tee_longitude == null ? (
-              <Pressable
-                onPress={handleAddTeeBox}
-                android_ripple={{ color: palette.secondary }}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  S.actionButton,
-                  pressed && S.actionButtonPressed,
-                ]}
-              >
-                <Text style={S.actionButtonText}>Add Tee Box</Text>
-              </Pressable>
-            ): null}
+      {selectedHole &&
+        !(
+          selectedHole.par &&
+          selectedHole.yardage &&
+          selectedHole.tee_latitude &&
+          selectedHole.tee_longitude &&
+          selectedHole.fairway_latitude &&
+          selectedHole.fairway_longitude &&
+          selectedHole.green_latitude &&
+          selectedHole.green_longitude
+        ) && (
+          <View
+            style={S.actionButtonsContainer}
+            // NOTE: measure action stack to compute bottom map padding
+            onLayout={(e) => setActionsH(e.nativeEvent.layout.height)}
+          >
+            <Pressable
+              onPress={() => {
+                setHoleEntryStep(1);
+                setInputValue("");
+                setEntryPromptVisible(true);
+              }}
+              android_ripple={{ color: palette.secondary }}
+              hitSlop={8}
+              style={({ pressed }) => [
+                S.actionButton,
+                pressed && S.actionButtonPressed,
+              ]}
+            >
+              <Text style={S.actionButtonText}>Enter Hole Info</Text>
+            </Pressable>
+          </View>
+        )}
 
-          {/* <-- Show only if fairway coords are null */}
-          {selectedHole.fairway_latitude == null &&
-            selectedHole.fairway_longitude == null && (
-              <Pressable
-                onPress={handleAddFairwayTarget}
-                android_ripple={{ color: palette.secondary }}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  S.actionButton,
-                  pressed && S.actionButtonPressed,
-                ]}
-              >
-                <Text style={S.actionButtonText}>Add Fairway Target</Text>
-              </Pressable>
-            )}
-
-          {/* <-- Show only if green coords are null */}
-          {selectedHole.green_latitude == null &&
-            selectedHole.green_longitude == null && (
-              <Pressable
-                onPress={handleAddGreen}
-                android_ripple={{ color: palette.secondary }}
-                hitSlop={8}
-                style={({ pressed }) => [
-                  S.actionButton,
-                  pressed && S.actionButtonPressed,
-                ]}
-              >
-                <Text style={S.actionButtonText}>Add Green</Text>
-              </Pressable>
-            )}
+      {/* Modal for hole info entry */}
+      <Modal visible={entryPromptVisible} transparent animationType="fade">
+        <View style={S.modalContainer}>
+          <View style={S.modalContent}>
+            <Text style={S.modalTitle}>
+              {holeEntryStep === 1 ? "Enter Par" : holeEntryStep === 2 ? "Enter Yardage" : ""}
+            </Text>
+            <TextInput
+              style={S.modalInput}
+              keyboardType="numeric"
+              value={inputValue}
+              onChangeText={setInputValue}
+              placeholder="e.g. 3"
+            />
+            <View style={S.modalButtons}>
+              <Button title="Cancel" onPress={() => {
+                setHoleEntryStep(0);
+                setEntryPromptVisible(false);
+                setHoleEntryData({ par: null, yardage: null, green: null, fairway: null, tee: null });
+              }} />
+              <Button title="Next" onPress={() => {
+                const val = parseInt(inputValue);
+                if (isNaN(val)) {
+                  setStepPromptMessage("Invalid number");
+                  setShowStepConfirm(false);
+                  setTimeout(() => setStepPromptMessage(null), 1200);
+                  return;
+                }
+                if (holeEntryStep === 1) {
+                  setHoleEntryData(prev => ({ ...prev, par: val }));
+                  setInputValue("");
+                  setHoleEntryStep(2);
+                } else if (holeEntryStep === 2) {
+                  setHoleEntryData(prev => ({ ...prev, yardage: val }));
+                  setEntryPromptVisible(false);
+                  setHoleEntryStep(3);
+                  setStepPromptMessage("Place Tee\nDouble-tap the tee location on the map.");
+                  setShowStepConfirm(false);
+                  setTimeout(() => setStepPromptMessage(null), 1800);
+                }
+              }} />
+            </View>
+          </View>
         </View>
-      )}
+      </Modal>
+
+      {/* Step overlay for hole entry steps */}
+      <StepOverlay
+        visible={!!stepPromptMessage}
+        message={stepPromptMessage || ""}
+        onConfirm={stepPromptConfirm || undefined}
+        onCancel={stepPromptCancel || undefined}
+        confirmButtons={showStepConfirm}
+      />
 
       {/* ---------- Fade overlay for hole transitions (our addition) ---------- */}
       <Animated.View
@@ -2104,4 +2121,5 @@ iconText: {
     sbBadgeOver: { backgroundColor: "#ef4444" },  // over par = red
     sbBadgeEven: { backgroundColor: "#4b5563" },  // even = gray
   });
-
+     
+  

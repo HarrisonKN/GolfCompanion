@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/components/supabase';
+import { useAuth } from '@/components/AuthContext';
 
 const COMPACT_H = 36;
 
@@ -229,6 +230,7 @@ function ArrowUp({ style }: { style?: any }) {
 
 export default function StartGameScreen() {
   const router = useRouter();
+  const { user } = useAuth();
 
   // Course dropdown state
   const [courseOpen, setCourseOpen] = useState(false);
@@ -241,11 +243,7 @@ export default function StartGameScreen() {
   const [teeItems, setTeeItems] = useState<any[]>([]);
 
   // Friends and player selection
-  const [allFriends, setAllFriends] = useState<any[]>([
-    { id: '1', name: 'You' },
-    { id: '2', name: 'Cuz' },
-    { id: '3', name: 'Guest' },
-  ]);
+  const [allFriends, setAllFriends] = useState<any[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<any[]>([]);
 
   // Invite other users
@@ -280,6 +278,34 @@ export default function StartGameScreen() {
       { label: "Red Tees", value: "red" },
     ]);
   }, [course]);
+
+  // Fetch user's friends from Supabase (profiles full_name), and include "You"
+  useEffect(() => {
+    const fetchFriends = async () => {
+      if (!user?.id) return;
+      const { data, error } = await supabase
+        .from('friends')
+        .select('friend_id, profiles:friend_id(full_name)')
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error fetching friends:', error);
+        return;
+      }
+
+      const friends = (data || []).map((f: any) => ({
+        id: f.friend_id,
+        name: f.profiles?.full_name || 'Unknown',
+      }));
+
+      const you = { id: user.id, name: 'You' };
+      // Ensure no dup if your id appears in friends
+      const unique = [you, ...friends.filter((f: any) => f.id !== user.id)];
+
+      setAllFriends(unique);
+    };
+    fetchFriends();
+  }, [user?.id]);
 
   // Search for other users (stub: replace with real backend search)
   useEffect(() => {
@@ -318,6 +344,13 @@ export default function StartGameScreen() {
   const availableFriends = allFriends.filter(
     friend => !selectedPlayers.find(p => p.id === friend.id)
   );
+
+  const handleBegin = () => {
+    const names = selectedPlayers.map((p: { name: string }) => p.name);
+    const params: any = { playerNames: JSON.stringify(names) };
+    if (course) params.courseId = String(course); // pass selected course
+    router.push({ pathname: '/(tabs)/scorecard', params });
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -443,24 +476,13 @@ export default function StartGameScreen() {
         </View>
 
         {/* BEGIN Button */}
-        <Pressable
-          style={({ pressed: isPressed }) => [
-            styles.beginButton,
-            isPressed && styles.beginButtonPressed,
-          ]}
-          onPress={() => {
-            router.push({
-              pathname: '/course-view',
-              params: {
-                courseId: course,
-                teeId: tee,
-                playerIds: JSON.stringify(selectedPlayers.map(p => p.id)),
-              },
-            });
-          }}
+        <TouchableOpacity
+          onPress={handleBegin}
+          style={[styles.beginButton /*, pressed && styles.beginButtonPressed */]}
+          activeOpacity={0.9}
         >
-          <Text style={styles.beginButtonText}>BEGIN</Text>
-        </Pressable>
+          <Text style={styles.beginButtonText}>Begin Game</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );

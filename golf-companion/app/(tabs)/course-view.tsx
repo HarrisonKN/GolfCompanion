@@ -55,6 +55,15 @@ type Hole = {
   green_longitude: number | null;
 };
 
+type ScoreboardItem = {
+  player_id: string;
+  name: string;
+  avatar_url?: string | null;
+  strokes: number;
+  toPar: number;
+  holesPlayed: number;
+};
+
 // ------------------- GEO HELPERS (pure; OK at module scope) -------------------------
 // Bearing in degrees from point A -> B (0..360)
 function bearingDeg(
@@ -117,11 +126,12 @@ export default function CourseViewScreen() {
   const [fairwayGreenY, setFairwayGreenY] = useState<number | null>(null);
   // Trigger banner update when camera flight completes
   const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
+  const [scoreboard, setScoreboard] = useState<ScoreboardItem[]>([]);
 
   const { user } = useAuth();
   const { palette } = useTheme();
   const S = React.useMemo(() => styles(palette), [palette]);
-  const { courseId } = useLocalSearchParams<{ courseId?: string }>();
+  const { courseId, playerIds } = useLocalSearchParams<{ courseId?: string; playerIds?: string }>();
   const router = useRouter();
   const { selectedCourse, setSelectedCourse } = useCourse();
 
@@ -848,6 +858,123 @@ export default function CourseViewScreen() {
     setDistanceToPin(calculatedDistance);
   }, [location, selectedHole, droppedPins]);
 
+  // Build a map for quick par lookup
+  const parByHole = React.useMemo(() => {
+    const m = new Map<number, number>();
+    for (const h of holes) {
+      if (h.par != null) m.set(h.hole_number, h.par);
+    }
+    return m;
+  }, [holes]);
+
+  // Fetch and compute scoreboard (today, for selected course)
+  const refreshScoreboard = React.useCallback(async () => {
+    if (!selectedCourse || holes.length === 0) return;
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    // Optional: limit to selected players if playerIds param is provided
+    let ids: string[] = [];
+    try {
+      if (playerIds) {
+        const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
+        const parsed = JSON.parse(String(raw));
+        if (Array.isArray(parsed)) ids = parsed.filter(Boolean);
+      }
+    } catch {}
+
+    let query = supabase
+      .from("scores")
+      .select("player_id, hole_number, score, created_at")
+      .eq("course_id", selectedCourse)
+      .gte("created_at", startOfToday.toISOString());
+
+    if (ids.length > 0) {
+      query = query.in("player_id", ids);
+    }
+
+    const { data: rows, error } = await query;
+
+    if (error) {
+      console.warn("Scoreboard fetch error:", error);
+      return;
+    }
+
+    const byPlayer = new Map<
+      string,
+      { strokes: number; toPar: number; holes: Set<number> }
+    >();
+
+    (rows || []).forEach((r) => {
+      const par = parByHole.get(r.hole_number ?? 0);
+      if (r.score == null || par == null) return;
+
+      const entry =
+        byPlayer.get(r.player_id) ||
+        { strokes: 0, toPar: 0, holes: new Set<number>() };
+
+      entry.strokes += r.score;
+      entry.toPar += r.score - par;
+      entry.holes.add(r.hole_number);
+      byPlayer.set(r.player_id, entry);
+    });
+
+    const playerIdList = Array.from(byPlayer.keys());
+    if (playerIdList.length === 0) {
+      setScoreboard([]);
+      return;
+    }
+
+    // Pull names + avatars
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .in("id", playerIdList);
+
+    const profById = new Map<string, { name: string; avatar_url?: string | null }>(
+      (profiles || []).map((p: any) => [p.id, { name: p.full_name ?? "Unknown", avatar_url: p.avatar_url }])
+    );
+
+    const items: ScoreboardItem[] = playerIdList.map((pid) => {
+      const e = byPlayer.get(pid)!;
+      const p = profById.get(pid);
+      return {
+        player_id: pid,
+        name: p?.name || "Unknown",
+        avatar_url: p?.avatar_url ?? null,
+        strokes: e.strokes,
+        toPar: e.toPar,
+        holesPlayed: e.holes.size,
+      };
+    });
+
+    items.sort((a, b) => a.toPar - b.toPar || b.holesPlayed - a.holesPlayed);
+    setScoreboard(items);
+  }, [selectedCourse, holes, parByHole, playerIds]);
+
+  // Initial + when course/holes change
+  useEffect(() => {
+    refreshScoreboard();
+  }, [refreshScoreboard]);
+
+  // Realtime updates when scores change for this course
+  useEffect(() => {
+    if (!selectedCourse) return;
+    const channel = supabase
+      .channel(`scores_live_${selectedCourse}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "scores", filter: `course_id=eq.${selectedCourse}` },
+        () => refreshScoreboard()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedCourse, refreshScoreboard]);
+
   // ------------------- COURSE VIEW UI -------------------------
   return (
     <View style={S.container}>
@@ -952,6 +1079,48 @@ export default function CourseViewScreen() {
                 <Text style={[S.arrowText, { opacity: 0.2 }]}>›</Text>
               )}
             </Pressable>
+          </View>
+
+          {/* New: live scoreboard for this course (today) */}
+          <View style={S.sbContainer}>
+            {scoreboard.length === 0 ? (
+              <Text style={S.sbEmpty}>No scores yet</Text>
+            ) : (
+              scoreboard.map((p) => {
+                const first = (p.name || "").trim().split(" ")[0] || "Player";
+                const initials = first.slice(0, 1).toUpperCase();
+                const toParStr = p.toPar === 0 ? "E" : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
+                const badgeStyle =
+                  p.toPar < 0 ? S.sbBadgeUnder : p.toPar > 0 ? S.sbBadgeOver : S.sbBadgeEven;
+
+                return (
+                  <View key={p.player_id} style={S.sbChip}>
+                    {p.avatar_url ? (
+                      <Image
+                        source={{ uri: p.avatar_url }}
+                        style={S.sbAvatarImg}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={S.sbAvatar}>
+                        <Text style={S.sbAvatarText}>{initials}</Text>
+                      </View>
+                    )}
+
+                    <View style={S.sbInfo}>
+                      <Text style={S.sbName}>{first}</Text>
+                      <Text style={S.sbHoles}>
+                        {p.strokes} strokes • Holes {p.holesPlayed}/{holes.length || 18}
+                      </Text>
+                    </View>
+
+                    <View style={[S.sbBadge, badgeStyle]}>
+                      <Text style={S.sbBadgeText}>{toParStr}</Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         </View>
       </View>
@@ -1879,6 +2048,60 @@ iconText: {
       fontWeight: "bold",
       color: palette.white,
     },
+    sbContainer: {
+      marginTop: 10,
+      backgroundColor: "#111",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 14,
+      width: "92%",
+      alignSelf: "center",
+    },
+    sbEmpty: {
+      color: palette.textLight,
+      textAlign: "center",
+      paddingVertical: 6,
+    },
+    sbChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 6,
+    },
+    sbAvatar: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: palette.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 10,
+      overflow: "hidden",
+    },
+    sbAvatarImg: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      marginRight: 10,
+      backgroundColor: "#222",
+    },
+    sbAvatarText: {
+      color: palette.white,
+      fontWeight: "700",
+      fontSize: 12,
+    },
+    sbInfo: { flex: 1 },
+    sbName: { color: palette.white, fontWeight: "600" },
+    sbHoles: { color: palette.textLight, fontSize: 12, marginTop: 2 },
+    sbBadge: {
+      minWidth: 36,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 10,
+      alignItems: "center",
+    },
+    sbBadgeText: { color: "#fff", fontWeight: "700" },
+    sbBadgeUnder: { backgroundColor: "#16a34a" }, // under par = green
+    sbBadgeOver: { backgroundColor: "#ef4444" },  // over par = red
+    sbBadgeEven: { backgroundColor: "#4b5563" },  // even = gray
   });
-     
-  
+

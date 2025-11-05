@@ -93,7 +93,47 @@ export default function Scorecard() {
   const birdieLeft = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
 
   // grab courseId layerId from the URL
-  const { courseId } = useLocalSearchParams();
+  const { courseId, playerNames } = useLocalSearchParams();
+
+  // Initialize players from Start Game route param
+  useEffect(() => {
+    if (!playerNames || players.length > 0) return;
+    try {
+      const raw = Array.isArray(playerNames) ? playerNames[0] : playerNames;
+      const names = JSON.parse(String(raw)) as string[];
+      if (Array.isArray(names) && names.length) {
+        setPlayers(names.map(n => ({ name: n, scores: Array(holeCount).fill('') })));
+      }
+    } catch (e) {
+      console.warn('Invalid playerNames param', e);
+    }
+  }, [playerNames, players.length]);
+
+  useEffect(() => {
+    // If we navigated in with a courseId param, set it on mount
+    if (courseId && typeof courseId === 'string') {
+      setSelectedCourse(courseId);
+    }
+  }, [courseId]);
+
+  // Ensure a default player only when none were passed/initialized
+  useEffect(() => {
+    const fetchAndSetPlayer = async () => {
+      if (!user || !selectedCourse || players.length > 0 || playerNames) return;
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      const fullName = data?.full_name || '';
+      const firstName = fullName.trim().split(' ')[0] || user.email?.split('@')[0] || 'You';
+      setPlayers([{ name: firstName, scores: Array(holeCount).fill('') }]);
+    };
+
+    fetchAndSetPlayer();
+  }, [user, selectedCourse, players.length, playerNames]);
 
   //---------------HOOKS---------------------------------
   // Birdie detection effect
@@ -1114,5 +1154,5 @@ const styles = (palette: any) => StyleSheet.create({
   },
 });
 
-  
-  
+
+

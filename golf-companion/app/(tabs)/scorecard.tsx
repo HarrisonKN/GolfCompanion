@@ -39,6 +39,7 @@ type Course = {
   par_values: number[] | null; // allow null from DB
 };
 
+type PlayerRow = { id?: string; name: string; scores: string[] };
 
 type CourseDropdownItem = { label: string; value: string } | { label: string; value: 'add_course' };
 
@@ -75,7 +76,7 @@ export default function Scorecard() {
 
   const [parValues, setParValues] = useState<(number | null)[]>(Array(holeCount).fill(null));
 
-  const [players, setPlayers] = useState<any[]>([]);
+  const [players, setPlayers] = useState<PlayerRow[]>([]);
 
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
@@ -93,47 +94,111 @@ export default function Scorecard() {
   const birdieLeft = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
 
   // grab courseId layerId from the URL
-  const { courseId, playerNames } = useLocalSearchParams();
+  const { courseId, playerNames, playerIds, newGame, gameId } = useLocalSearchParams();
 
-  // Initialize players from Start Game route param
+  const isNewGame = String(Array.isArray(newGame) ? newGame[0] : newGame || '') === '1';
+
+
+
+  // Initialize players from Start Game route param (names -> empty scores)
   useEffect(() => {
-    if (!playerNames || players.length > 0) return;
+    if (!playerNames) return;
     try {
-      const raw = Array.isArray(playerNames) ? playerNames[0] : playerNames;
-      const names = JSON.parse(String(raw)) as string[];
+      const rawNames = Array.isArray(playerNames) ? playerNames[0] : playerNames;
+      const names = JSON.parse(String(rawNames)) as string[];
+  
+      let ids: (string | undefined)[] = [];
+      try {
+        const rawIds = Array.isArray(playerIds) ? playerIds[0] : playerIds;
+        ids = rawIds ? (JSON.parse(String(rawIds)) as string[]) : [];
+      } catch {}
+  
       if (Array.isArray(names) && names.length) {
-        setPlayers(names.map(n => ({ name: n, scores: Array(holeCount).fill('') })));
+        setPlayers(
+          names.map((n, i) => ({
+            id: ids[i], // may be undefined for manual players
+            name: n,
+            scores: Array(holeCount).fill(''),
+          }))
+        );
       }
     } catch (e) {
-      console.warn('Invalid playerNames param', e);
+      console.warn('Invalid player params', e);
     }
-  }, [playerNames, players.length]);
+  }, [playerNames, playerIds]);
 
   useEffect(() => {
-    // If we navigated in with a courseId param, set it on mount
-    if (courseId && typeof courseId === 'string') {
-      setSelectedCourse(courseId);
-    }
+    if (courseId && typeof courseId === 'string') setSelectedCourse(courseId);
   }, [courseId]);
 
-  // Ensure a default player only when none were passed/initialized
+  // On new game: clear any previous pending scores for these players on this course and reset UI
+  useEffect(() => {
+    const wipePendingScores = async () => {
+      if (!isNewGame) return;
+      // reset UI rows to blanks (in case anything was there)
+      setPlayers(prev => prev.map(p => ({ ...p, scores: Array(holeCount).fill('') })));
+
+      try {
+        const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
+        const ids = raw ? (JSON.parse(String(raw)) as string[]) : (user?.id ? [user.id] : []);
+        if (!selectedCourse || !ids?.length) return;
+
+        // delete any per-hole rows for this course and these players
+        const { error } = await supabase
+          .from('scores')
+          .delete()
+          .eq('course_id', selectedCourse)
+          .in('player_id', ids);
+        if (error) console.warn('Delete old scores failed:', error.message);
+      } catch (e) {
+        console.warn('Reset scores parse error:', e);
+      }
+    };
+    wipePendingScores();
+  }, [isNewGame, playerIds, selectedCourse, user?.id]);
+
+  // Ensure a default player only when none were passed/initialized and not a new game
   useEffect(() => {
     const fetchAndSetPlayer = async () => {
-      if (!user || !selectedCourse || players.length > 0 || playerNames) return;
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', user.id)
-        .single();
-
+      if (!user || !selectedCourse || players.length > 0 || playerNames || isNewGame) return;
+      const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
       const fullName = data?.full_name || '';
       const firstName = fullName.trim().split(' ')[0] || user.email?.split('@')[0] || 'You';
       setPlayers([{ name: firstName, scores: Array(holeCount).fill('') }]);
     };
-
     fetchAndSetPlayer();
-  }, [user, selectedCourse, players.length, playerNames]);
+  }, [user, selectedCourse, players.length, playerNames, isNewGame]);
+
+  // Do not pull old per-hole rows on a new game
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!user || !selectedCourse || isNewGame) return;
+      (async () => {
+        const { data: scoreData, error: fetchError } = await supabase
+          .from('scores')
+          .select('hole_number, score, putts')
+          .eq('player_id', user.id)
+          .eq('course_id', selectedCourse)
+          .order('hole_number');
+
+        if (fetchError) {
+          console.error('Error fetching scores', fetchError);
+          return;
+        }
+        if (!scoreData || scoreData.length === 0) return;
+
+        setPlayers(prev => {
+          const existing = prev[0] || { name: user?.email || 'You', scores: Array(holeCount).fill('') };
+          const merged = [...existing.scores];
+          for (const row of scoreData) {
+            const idx = (row.hole_number ?? 1) - 1;
+            if (idx >= 0 && idx < holeCount) merged[idx] = `${row.score ?? ''}/${row.putts ?? ''}`.trim();
+          }
+          return [{ ...existing, scores: merged }, ...prev.slice(1)];
+        });
+      })();
+    }, [user, selectedCourse, isNewGame])
+  );
 
   //---------------HOOKS---------------------------------
   // Birdie detection effect
@@ -325,6 +390,32 @@ useFocusEffect(
     const totalScore = inScore + outScore;
 
     return { inScore, outScore, totalScore };
+  };
+
+  const persistHoleScore = async (playerId: string, holeIndex: number, value: string) => {
+    if (!selectedCourse) return;
+    const { score, putts } = parseScoreString(value);
+    const hole_number = holeIndex + 1;
+
+    // Prefer game_id uniqueness
+    if (gameId) {
+      const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+      const { error } = await supabase
+        .from('scores')
+        .upsert(
+          [{ game_id: gid, player_id: playerId, course_id: selectedCourse, hole_number, score, putts, created_by: user?.id }],
+          { onConflict: 'game_id,player_id,hole_number' }
+        );
+      if (error) console.warn('persistHoleScore (game) failed:', error);
+    } else {
+      const { error } = await supabase
+        .from('scores')
+        .upsert(
+          [{ player_id: playerId, course_id: selectedCourse, hole_number, score, putts, created_by: user?.id }],
+          { onConflict: 'player_id,course_id,hole_number' }
+        );
+      if (error) console.warn('persistHoleScore (course) failed:', error);
+    }
   };
 
   const saveScorecardToSupabase = async () => {
@@ -756,9 +847,16 @@ useFocusEffect(
             ? parseScoreString(players[selectedCell.playerIndex].scores[selectedCell.holeIndex]).putts
             : 0
         }
-        onSave={(score, putts) => {
+        onSave={async (score, putts) => {
           if (!selectedCell) return;
-          updateScore(selectedCell.playerIndex, selectedCell.holeIndex, `${score}/${putts}`);
+          const value = `${score}/${putts}`;
+          updateScore(selectedCell.playerIndex, selectedCell.holeIndex, value);
+
+          const pid = players[selectedCell.playerIndex]?.id;
+          if (pid) {
+            await persistHoleScore(pid, selectedCell.holeIndex, value);
+            // Course View listens to Realtime on 'scores' and will refresh automatically
+          }
           setScoreModalVisible(false);
         }}
       />

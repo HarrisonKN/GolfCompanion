@@ -193,9 +193,10 @@ export default function HomeScreen() {
                   } catch (err: any) {
                     Toast.show({
                       type: 'error',
-                      text1: 'Error saving token',
+                      text1: 'Error saving token, do something different bozo',
                       text2: err.message,
                     });
+                    console.log(err.message)
                   }
                 }}
               >

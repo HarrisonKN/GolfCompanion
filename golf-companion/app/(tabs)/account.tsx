@@ -178,7 +178,11 @@ export default function AccountsScreen() {
         const ping = await fetch("https://emgqdjhbmkjepbjdpnmh.supabase.co");
         console.log("✅ Supabase ping response:", ping.status);
       } catch (err) {
-        console.error("❌ Supabase ping failed:", err.message || err);
+        if (err instanceof Error) {
+          console.error("❌ Supabase ping failed:", err.message);
+        } else {
+          console.error("❌ Supabase ping failed:", String(err));
+        }
       }
 
       // Direct file upload using file URI

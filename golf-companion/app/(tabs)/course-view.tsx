@@ -4,7 +4,8 @@ import { useCourse } from "@/components/CourseContext";
 import { supabase, testSupabaseConnection } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as Location from "expo-location";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from "expo-router";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import haversine from "haversine-distance";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -21,6 +22,8 @@ import {
   ToastAndroid,
   View
 } from "react-native";
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // ------------------- STEP OVERLAY COMPONENT -------------------------
 function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: {
   visible: boolean;
@@ -159,8 +162,8 @@ function nudgeAlongHeading(
 //---------------------------------------------------------------
 const COMPACT_H = 36;
 
-// ------------------- COURSEVIEW LOGIC -------------------------
 export default function CourseViewScreen() {
+  const navigation = useNavigation<BottomTabNavigationProp<any>>();
   // Declare states first (always in the same order)
   const [location, setLocation] =
     useState<Location.LocationObject | null>(null);
@@ -184,6 +187,7 @@ export default function CourseViewScreen() {
   // Trigger banner update when camera flight completes
   const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
   const [scoreboard, setScoreboard] = useState<ScoreboardItem[]>([]);
+  const refreshScoreboardRef = useRef<null | (() => void)>(null);
 
   // --- Hole entry modal state (NEW) ---
   const [holeEntryStep, setHoleEntryStep] = useState(0);
@@ -211,8 +215,7 @@ export default function CourseViewScreen() {
   const { user } = useAuth();
   const { palette } = useTheme();
   const S = React.useMemo(() => styles(palette), [palette]);
-  const { courseId, playerIds } = useLocalSearchParams<{ courseId?: string; playerIds?: string }>();
-  const router = useRouter();
+  const { courseId, playerIds, gameId } = useLocalSearchParams<{ courseId?: string; playerIds?: string; gameId?: string }>();  const router = useRouter();
   const { selectedCourse, setSelectedCourse } = useCourse();
 
   const mountedRef = useRef(true);
@@ -459,9 +462,17 @@ export default function CourseViewScreen() {
       return;
     }
 
+    // Resolve gameId (route -> storage)
+    let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (!gid) {
+      const raw = await AsyncStorage.getItem('currentGamePlayers');
+      if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
+    }
+
     console.log("👉 Inserting score:", {
       player_id: user.id,
       course_id: selectedCourse,
+      game_id: gid ?? null,
       hole_number: selectedHole.hole_number,
       score,
       putts,
@@ -469,31 +480,49 @@ export default function CourseViewScreen() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("scores").insert([
-        {
-          player_id: user.id,
-          course_id: selectedCourse!,
-          hole_number: selectedHole.hole_number,
-          score,
-          putts,
-        },
-      ]);
+      // Use upsert so the same hole can be edited
+      const payload: any = {
+        player_id: user.id,
+        course_id: selectedCourse!,
+        hole_number: selectedHole.hole_number,
+        score,
+        putts,
+        created_by: user.id,
+      };
+      if (gid) payload.game_id = gid;
+
+      const { error } = await supabase
+      .from("scores")
+      .upsert([payload], {
+        onConflict: gid
+          ? "game_id,player_id,hole_number"
+          : "player_id,course_id,hole_number",
+      })
+      .select();
 
       if (error) {
-        console.error("❌ Supabase insert error:", error);
+        console.error("❌ Supabase upsert error:", error);
         showMessage(`Error saving score: ${error.message}`);
         return;
       }
 
-      console.log("✅ Insert result:", data);
+      // Optionally refresh immediately (Realtime also triggers it)
+      try {
+        // refreshScoreboard is defined below; if you move this handler below it,
+        // you can uncomment the next line:
+        // await refreshScoreboard();
 
-      // advance to next hole (with transition)
+        // Refresh scoreboard immediately so toPar/strokes update now
+        await refreshScoreboardRef.current?.();
+      } catch {}
+
+      // advance to next hole
       const idx = holes.findIndex((h) => h.hole_number === selectedHoleNumber);
       const next = holes[idx + 1];
       if (next) {
         setScore(0);
         setPutts(0);
-        setSelectedHoleNumber(next.hole_number); // the effect above will just fly the camera, no flash
+        setSelectedHoleNumber(next.hole_number);
       } else {
         router.push({
           pathname: "/scorecard",
@@ -580,6 +609,8 @@ export default function CourseViewScreen() {
           value: hole.hole_number,
         }))
       );
+      // Pars just loaded/changed -> recompute toPar
+      refreshScoreboardRef.current?.();
     } catch (error: any) {
       setConnectionError(`Hole fetch error: ${error.message}`);
     }
@@ -725,17 +756,6 @@ export default function CourseViewScreen() {
       setSelectedHoleNumber(null);
     }
   }, [courseId]);
-
-  // Ensure initialization on mount
-  useFocusEffect(
-    React.useCallback(() => {
-      mountedRef.current = true;
-      initializeApp();
-      return () => {
-        mountedRef.current = false;
-      };
-    }, [])
-  );
 
   // Fetch courses when the component is mounted and connection is good
   useEffect(() => {
@@ -938,104 +958,201 @@ export default function CourseViewScreen() {
     setDistanceToPin(calculatedDistance);
   }, [location, selectedHole, droppedPins]);
 
-  // Build a map for quick par lookup
+  // Build a map for quick par lookup (use holes first, then course.par_values)
+  const courseParArray = React.useMemo(
+    () => courses.find(c => c.id === selectedCourse)?.par_values ?? null,
+    [courses, selectedCourse]
+  );
+
   const parByHole = React.useMemo(() => {
     const m = new Map<number, number>();
     for (const h of holes) {
       if (h.par != null) m.set(h.hole_number, h.par);
     }
+    if (courseParArray && courseParArray.length) {
+      for (let i = 0; i < courseParArray.length; i++) {
+        const holeNo = i + 1;
+        const par = courseParArray[i];
+        if (!m.has(holeNo) && typeof par === 'number') m.set(holeNo, par);
+      }
+    }
     return m;
-  }, [holes]);
+  }, [holes, courseParArray]);
 
   // Fetch and compute scoreboard (today, for selected course)
   const refreshScoreboard = React.useCallback(async () => {
-    if (!selectedCourse || holes.length === 0) return;
+    if (!selectedCourse) return;
 
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    // Resolve gameId (route -> storage)
+    let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (!gid) {
+      const raw = await AsyncStorage.getItem('currentGamePlayers');
+      if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
+    }
 
-    // Optional: limit to selected players if playerIds param is provided
-    let ids: string[] = [];
+    // Resolve baseIds (participants if game, else selected/playerIds)
+    let baseIds: string[] = [];
+    if (gid) {
+      const { data: parts, error: perr } = await supabase
+        .from('game_participants')
+        .select('player_id')
+        .eq('game_id', gid);
+      if (!perr && parts) baseIds = parts.map(p => p.player_id);
+    } else {
+      try {
+        if (playerIds) {
+          const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
+          const parsed = JSON.parse(String(raw));
+          if (Array.isArray(parsed)) baseIds = parsed.filter(Boolean);
+        }
+      } catch {}
+      if (baseIds.length === 0 && user?.id) baseIds = [user.id];
+    }
+
+    // Fetch scores (game-first, fallback course)
+    let rows: { player_id: string; hole_number: number; score: number | null }[] = [];
     try {
-      if (playerIds) {
-        const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
-        const parsed = JSON.parse(String(raw));
-        if (Array.isArray(parsed)) ids = parsed.filter(Boolean);
+      let q = supabase.from('scores').select('player_id, hole_number, score');
+      q = gid ? q.eq('game_id', gid) : q.eq('course_id', selectedCourse);
+
+      // Limit to today when not in a game (prevents old scores inflating totals)
+      if (!gid) {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        // If your table uses a different timestamp column, change 'created_at' accordingly.
+        q = q.gte('created_at', start.toISOString());
       }
-    } catch {}
 
-    let query = supabase
-      .from("scores")
-      .select("player_id, hole_number, score, created_at")
-      .eq("course_id", selectedCourse)
-      .gte("created_at", startOfToday.toISOString());
-
-    if (ids.length > 0) {
-      query = query.in("player_id", ids);
+      if (baseIds.length) q = q.in('player_id', baseIds);
+      const { data, error } = await q;
+      if (error) throw error;
+      rows = data || [];
+    } catch (e) {
+      console.warn('Scoreboard fetch error:', e);
     }
 
-    const { data: rows, error } = await query;
+    // Include anyone who already has rows (e.g., you added a friend’s score)
+    const idsFromRows = Array.from(new Set((rows || []).map(r => r.player_id)));
+    baseIds = Array.from(new Set([...baseIds, ...idsFromRows]));
 
-    if (error) {
-      console.warn("Scoreboard fetch error:", error);
-      return;
+    // Build per-player per-hole map (latest score per hole assumed by upsert uniqueness)
+    const rowsByPlayer = new Map<string, Map<number, number>>(); // pid -> (hole -> score)
+    for (const r of rows) {
+      if (r.score == null) continue;
+      if (!rowsByPlayer.has(r.player_id)) rowsByPlayer.set(r.player_id, new Map());
+      // keep one score per hole
+      rowsByPlayer.get(r.player_id)!.set(r.hole_number, r.score);
     }
 
-    const byPlayer = new Map<
-      string,
-      { strokes: number; toPar: number; holes: Set<number> }
-    >();
+    const items = baseIds.map(pid => {
+      const holeMap = rowsByPlayer.get(pid) ?? new Map<number, number>();
 
-    (rows || []).forEach((r) => {
-      const par = parByHole.get(r.hole_number ?? 0);
-      if (r.score == null || par == null) return;
+      let strokesAll = 0;      // all strokes entered (not shown)
+      let strokes = 0;         // strokes for holes that have a valid par
+      let parSum = 0;          // sum of par for counted holes
+      let holesPlayed = 0;     // holes with both a score and a valid par
 
-      const entry =
-        byPlayer.get(r.player_id) ||
-        { strokes: 0, toPar: 0, holes: new Set<number>() };
+      for (const [holeNo, sc] of holeMap.entries()) {
+        strokesAll += sc;
+        const par = parByHole.get(holeNo);
+        if (Number.isFinite(par) && (par as number) > 0) {
+          parSum += par as number;
+          strokes += sc;
+          holesPlayed++;
+        }
+      }
 
-      entry.strokes += r.score;
-      entry.toPar += r.score - par;
-      entry.holes.add(r.hole_number);
-      byPlayer.set(r.player_id, entry);
-    });
-
-    const playerIdList = Array.from(byPlayer.keys());
-    if (playerIdList.length === 0) {
-      setScoreboard([]);
-      return;
-    }
-
-    // Pull names + avatars
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", playerIdList);
-
-    const profById = new Map<string, { name: string; avatar_url?: string | null }>(
-      (profiles || []).map((p: any) => [p.id, { name: p.full_name ?? "Unknown", avatar_url: p.avatar_url }])
-    );
-
-    const items: ScoreboardItem[] = playerIdList.map((pid) => {
-      const e = byPlayer.get(pid)!;
-      const p = profById.get(pid);
+      const toPar = holesPlayed ? (strokes - parSum) : 0;
       return {
         player_id: pid,
-        name: p?.name || "Unknown",
-        avatar_url: p?.avatar_url ?? null,
-        strokes: e.strokes,
-        toPar: e.toPar,
-        holesPlayed: e.holes.size,
+        name: 'Unknown',
+        avatar_url: null,
+        strokes,          // align displayed strokes with counted holes
+        toPar,
+        holesPlayed,
       };
     });
 
+    // Profiles
+    if (baseIds.length) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', baseIds);
+      const profMap = new Map((profiles || []).map((p: any) => [p.id, { name: p.full_name ?? 'Unknown', avatar_url: p.avatar_url }]));
+      for (const item of items) {
+        const p = profMap.get(item.player_id);
+        if (p) { item.name = p.name; item.avatar_url = p.avatar_url ?? null; }
+      }
+    }
+
     items.sort((a, b) => a.toPar - b.toPar || b.holesPlayed - a.holesPlayed);
     setScoreboard(items);
-  }, [selectedCourse, holes, parByHole, playerIds]);
+  }, [selectedCourse, parByHole, playerIds, gameId, user?.id]);
+
+  // Refresh on focus and tab press (already present)
+  useFocusEffect(React.useCallback(() => { refreshScoreboard(); }, [refreshScoreboard]));
+  useEffect(() => {
+    const unsub = navigation.addListener('tabPress', () => { refreshScoreboard(); });
+    return unsub;
+  }, [navigation, refreshScoreboard]);
+
+  // Realtime by game (fallback course)
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+      if (!gid) {
+        const raw = await AsyncStorage.getItem('currentGamePlayers');
+        if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
+      }
+      if (!active || !selectedCourse) return;
+      const channel = supabase
+        .channel(`scores_live_${gid ?? selectedCourse}`)
+        .on(
+          "postgres_changes",
+          gid
+            ? { event: "*", schema: "public", table: "scores", filter: `game_id=eq.${gid}` }
+            : { event: "*", schema: "public", table: "scores", filter: `course_id=eq.${selectedCourse}` },
+          () => refreshScoreboard()
+        )
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    })();
+    return () => { active = false; };
+  }, [selectedCourse, gameId, refreshScoreboard]);
+
+  // Ensure initialization on mount
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshScoreboard();
+    }, [refreshScoreboard])
+  );
+
+  // Keep the callable ref updated
+  useEffect(() => {
+    refreshScoreboardRef.current = () => { refreshScoreboard(); };
+  }, [refreshScoreboard]);
+
+  // If pars load/change later, recompute toPar
+  useEffect(() => {
+    refreshScoreboardRef.current?.();
+  }, [parByHole]);
+  useEffect(() => {
+    const unsub = navigation.addListener('tabPress', () => {
+      refreshScoreboard();
+    });
+    return unsub;
+  }, [navigation, refreshScoreboard]);
+
+  useEffect(() => {
+    refreshScoreboard();
+  }, [selectedCourse, playerIds, refreshScoreboard]);
 
   // Initial + when course/holes change
   useEffect(() => {
-    refreshScoreboard();
+    const id = setInterval(() => refreshScoreboard(), 5000);
+    return () => clearInterval(id);
   }, [refreshScoreboard]);
 
   // Realtime updates when scores change for this course
@@ -1049,7 +1166,7 @@ export default function CourseViewScreen() {
         () => refreshScoreboard()
       )
       .subscribe();
-
+  
     return () => {
       supabase.removeChannel(channel);
     };
@@ -1229,44 +1346,38 @@ export default function CourseViewScreen() {
 
           {/* New: live scoreboard for this course (today) */}
           <View style={S.sbContainer}>
-            {scoreboard.length === 0 ? (
-              <Text style={S.sbEmpty}>No scores yet</Text>
-            ) : (
-              scoreboard.map((p) => {
+            <View style={S.sbGrid}>
+              {scoreboard.map((p) => {
                 const first = (p.name || "").trim().split(" ")[0] || "Player";
                 const initials = first.slice(0, 1).toUpperCase();
-                const toParStr = p.toPar === 0 ? "E" : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
-                const badgeStyle =
-                  p.toPar < 0 ? S.sbBadgeUnder : p.toPar > 0 ? S.sbBadgeOver : S.sbBadgeEven;
-
+                //const toParStr = p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`; // 0 -> "0"
+                const toParStr =
+                  p.toPar === 0 ? 'E' :
+                  p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
+                //This section above either shows E for even par or numbers always
                 return (
-                  <View key={p.player_id} style={S.sbChip}>
+                  <View key={p.player_id} style={S.sbTile}>
                     {p.avatar_url ? (
-                      <Image
-                        source={{ uri: p.avatar_url }}
-                        style={S.sbAvatarImg}
-                        resizeMode="cover"
-                      />
+                      <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
                     ) : (
-                      <View style={S.sbAvatar}>
-                        <Text style={S.sbAvatarText}>{initials}</Text>
+                      <View style={S.sbAvatarCircle}>
+                        <Text style={S.sbAvatarCircleText}>{initials}</Text>
                       </View>
                     )}
-
-                    <View style={S.sbInfo}>
-                      <Text style={S.sbName}>{first}</Text>
-                      <Text style={S.sbHoles}>
-                        {p.strokes} strokes • Holes {p.holesPlayed}/{holes.length || 18}
-                      </Text>
-                    </View>
-
-                    <View style={[S.sbBadge, badgeStyle]}>
-                      <Text style={S.sbBadgeText}>{toParStr}</Text>
-                    </View>
+                    <Text
+                      style={S.sbPlayerName}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {first}
+                    </Text>
+                    <Text style={S.sbScoreText}>
+                      {p.strokes} ({toParStr})
+                    </Text>
                   </View>
                 );
-              })
-            )}
+              })}
+            </View>
           </View>
         </View>
       </View>
@@ -2290,6 +2401,50 @@ iconText: {
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: 6,
+    },
+    sbGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+    },
+    sbTile: {
+      width: 72,
+      alignItems: "center",
+      marginVertical: 6,
+    },
+    sbAvatarCircle: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: palette.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    sbAvatarCircleImg: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: "#222",
+    },
+    sbAvatarCircleText: {
+      color: palette.white,
+      fontWeight: "700",
+      fontSize: 12,
+    },
+    sbPlayerName: {
+      marginTop: 4,
+      color: palette.white,
+      fontWeight: "600",
+      fontSize: 11,
+      textAlign: "center",
+      maxWidth: 72,
+    },
+    sbScoreText: {
+      marginTop: 6,
+      color: palette.white,
+      fontWeight: "700",
+      fontSize: 12,
     },
     sbAvatar: {
       width: 28,

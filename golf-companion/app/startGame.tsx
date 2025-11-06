@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity, Image, Modal, Dimensions, FlatList } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/components/supabase';
 import { useAuth } from '@/components/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
 
 const COMPACT_H = 36;
 
@@ -53,6 +54,15 @@ export default function StartGameScreen() {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   // Used for users invited via search
   const [otherUsers, setOtherUsers] = useState<any[]>([]);
+
+  // Used to confirm removal of a selected player
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  // Make "invite other users" a modal-driven search like Accounts
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [inviteSearch, setInviteSearch] = useState('');
+  const [inviteResults, setInviteResults] = useState<any[]>([]);
+  const [inviteSearching, setInviteSearching] = useState(false);
 
   // Fetch courses from Supabase
   useEffect(() => {
@@ -140,7 +150,7 @@ export default function StartGameScreen() {
 
         const { data: profiles, error: pe } = await supabase
           .from('profiles')
-          .select('id, full_name')
+          .select('id, full_name, avatar_url') // include avatar_url if present in your schema
           .in('id', friendIds);
 
         if (pe) {
@@ -152,6 +162,7 @@ export default function StartGameScreen() {
         const friends = (profiles || []).map(p => ({
           id: p.id,
           name: p.full_name || 'Unknown',
+          avatar_url: (p as any).avatar_url || null,
         }));
 
         // Optional: include "You" at the top
@@ -178,6 +189,35 @@ export default function StartGameScreen() {
     ].filter(u => u.name.toLowerCase().includes(search.toLowerCase())));
   }, [search]);
 
+  useEffect(() => {
+    if (!inviteModalVisible) return;
+    const run = async () => {
+      const q = inviteSearch.trim();
+      if (!q) {
+        setInviteResults([]);
+        return;
+      }
+      setInviteSearching(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, avatar_url')
+          .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+          .order('full_name', { ascending: true })
+          .limit(50);
+        if (error) throw error;
+        setInviteResults(data || []);
+      } catch (e) {
+        console.warn('Invite search error:', e);
+        setInviteResults([]);
+      } finally {
+        setInviteSearching(false);
+      }
+    };
+    const t = setTimeout(run, 250);
+    return () => clearTimeout(t);
+  }, [inviteSearch, inviteModalVisible]);
+
   // Add friend to selected players
   function selectFriend(friend: any) {
     if (!selectedPlayers.find(p => p.id === friend.id)) {
@@ -186,12 +226,13 @@ export default function StartGameScreen() {
   }
 
   // Add other user to selected players
-  function inviteOther(id: string, name: string) {
+  function inviteOther(id: string, name: string, avatar_url?: string | null) {
     if (!selectedPlayers.find(p => p.id === id)) {
-      setSelectedPlayers([...selectedPlayers, { id, name }]);
+      setSelectedPlayers([...selectedPlayers, { id, name, avatar_url: avatar_url || null }]);
     }
-    setSearch('');
-    setSearchResults([]);
+    setInviteModalVisible(false);
+    setInviteSearch('');
+    setInviteResults([]);
   }
 
   // Remove player from selected
@@ -329,61 +370,203 @@ export default function StartGameScreen() {
         {/* Selected Players Section */}
         <Text style={styles.sectionLabel}>Selected Players</Text>
         <View style={styles.selectedPlayersSection}>
-          {selectedPlayers.length === 0 && (
+          {selectedPlayers.length === 0 ? (
             <Text style={{ color: '#888', textAlign: 'center' }}>No players selected yet.</Text>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.storyRow}
+              contentContainerStyle={styles.storyScroll}
+              onScrollBeginDrag={() => setConfirmRemoveId(null)}
+            >
+              {selectedPlayers.map(player => {
+                const isConfirm = confirmRemoveId === player.id;
+                return (
+                  <Pressable
+                    key={player.id}
+                    onPress={() => {
+                      if (isConfirm) {
+                        removePlayer(player.id);
+                        setConfirmRemoveId(null);
+                      } else {
+                        setConfirmRemoveId(player.id);
+                      }
+                    }}
+                    style={({ pressed, hovered }) => [
+                      styles.storyItem,
+                      (pressed || hovered) && styles.storyItemPressed,
+                      isConfirm && styles.storyItemConfirm,
+                    ]}
+                    accessibilityLabel={`Selected player ${player.name}`}
+                    accessibilityHint={isConfirm ? 'Tap to remove' : 'Tap to show remove option'}
+                  >
+                    <View style={[styles.storyAvatar, isConfirm && styles.storyAvatarConfirm]}>
+                      {player.avatar_url ? (
+                        <Image
+                          source={{ uri: player.avatar_url }}
+                          style={styles.storyAvatarImage}
+                        />
+                      ) : (
+                        <Text style={styles.storyInitial}>
+                          {(player.name?.[0] || '?').toUpperCase()}
+                        </Text>
+                      )}
+
+                      {isConfirm && (
+                        <View style={styles.confirmOverlay}>
+                          <Text style={styles.confirmText}>Remove</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text
+                      style={[styles.storyName, isConfirm && styles.storyNameConfirm]}
+                      numberOfLines={1}
+                    >
+                      {player.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           )}
-          <View style={styles.playerList}>
-            {selectedPlayers.map(player => (
-              <View key={player.id} style={styles.selectedPlayerChip}>
-                <Text style={styles.selectedPlayerText}>{player.name}</Text>
-                <Pressable
-                  style={styles.removePlayerButton}
-                  onPress={() => removePlayer(player.id)}
-                >
-                  <Text style={styles.removePlayerButtonText}>Remove</Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
         </View>
 
-        {/* Invite Section (Friends + Other Users) */}
+        {/* Invite Section (Friends + Invite Button) */}
         <View style={styles.inviteSection}>
           <Text style={styles.sectionLabel}>Invite Friends</Text>
-          <View style={styles.playerList}>
-            {availableFriends.length === 0 && (
-              <Text style={{ color: '#888', textAlign: 'center' }}>All friends selected.</Text>
-            )}
-            {availableFriends.map(friend => (
+
+          {availableFriends.length === 0 ? (
+            <Text style={{ color: '#888', textAlign: 'center' }}>All friends selected.</Text>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.storyRow}
+              contentContainerStyle={styles.storyScroll}
+            >
+              {/* Circular + button to open search modal */}
               <Pressable
-                key={friend.id}
-                style={styles.playerChip}
-                onPress={() => selectFriend(friend)}
+                key="invite-button"
+                style={styles.storyItem}
+                onPress={() => setInviteModalVisible(true)}
+                accessibilityLabel="Invite other users"
               >
-                <Text style={styles.playerChipText}>{friend.name}</Text>
+                <View style={[styles.storyAvatar, { borderColor: '#2563eb', backgroundColor: '#DBEAFE' }]}>
+                  <Text style={{ color: '#2563eb', fontSize: 28, fontWeight: '700' }}>+</Text>
+                </View>
+                <Text style={styles.storyName} numberOfLines={1}>
+                  Invite
+                </Text>
               </Pressable>
-            ))}
-          </View>
-          <Text style={styles.sectionLabel}>Invite Other Users</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search for users..."
-            value={search}
-            onChangeText={setSearch}
-            placeholderTextColor="#888"
-          />
-          {searchResults.map((user) => (
-            <View key={user.id} style={styles.searchResult}>
-              <Text style={styles.playerChipText}>{user.name}</Text>
-              <Pressable
-                style={styles.inviteButton}
-                onPress={() => inviteOther(user.id, user.name)}
-              >
-                <Text style={styles.inviteButtonText}>Invite</Text>
-              </Pressable>
-            </View>
-          ))}
+
+              {availableFriends.map(friend => (
+                <Pressable
+                  key={friend.id}
+                  style={styles.storyItem}
+                  onPress={() => selectFriend(friend)}
+                >
+                  <View style={styles.storyAvatar}>
+                    {friend.avatar_url ? (
+                      <Image
+                        source={{ uri: friend.avatar_url }}
+                        style={styles.storyAvatarImage}
+                      />
+                    ) : (
+                      <Text style={styles.storyInitial}>
+                        {(friend.name?.[0] || '?').toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.storyName} numberOfLines={1}>
+                    {friend.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+
+          {/* Removed inline "Invite Other Users" input/results in favor of modal */}
         </View>
+
+        {/* Invite Search Modal */}
+        <Modal
+          visible={inviteModalVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setInviteModalVisible(false)}
+        >
+          <View style={styles.inviteModalOverlay}>
+            <View style={styles.inviteModalContainer}>
+              <View style={styles.inviteModalHeader}>
+                <Text style={styles.inviteModalTitle}>Find players</Text>
+                <Pressable onPress={() => setInviteModalVisible(false)} style={styles.inviteModalClose}>
+                  <Text style={{ fontSize: 18, color: '#111827' }}>✕</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ padding: 12 }}>
+                <View style={styles.inviteSearchInputContainer}>
+                  <TextInput
+                    style={styles.inviteSearchInput}
+                    placeholder="Search by name or email..."
+                    placeholderTextColor="#888"
+                    value={inviteSearch}
+                    onChangeText={setInviteSearch}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
+
+              {inviteSearching ? (
+                <Text style={{ textAlign: 'center', color: '#888', paddingVertical: 12 }}>Searching…</Text>
+              ) : (
+                <FlatList
+                  data={inviteResults}
+                  keyExtractor={(u: any) => u.id}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.inviteResultsContent}
+                  ListEmptyComponent={
+                    <Text style={{ textAlign: 'center', color: '#888', paddingVertical: 12 }}>
+                      {inviteSearch.trim() ? 'No users found' : 'Type to search for players'}
+                    </Text>
+                  }
+                  renderItem={({ item: u }: any) => {
+                    const alreadySelected = selectedPlayers.some(p => p.id === u.id);
+                    return (
+                      <Pressable
+                        style={styles.inviteResultRow}
+                        onPress={() => {
+                          if (!alreadySelected) inviteOther(u.id, u.full_name || 'Unknown', u.avatar_url || null);
+                        }}
+                        disabled={alreadySelected}
+                        accessibilityLabel={`Invite ${u.full_name || 'Unknown'}`}
+                      >
+                        <View style={styles.inviteResultAvatar}>
+                          {u.avatar_url ? (
+                            <Image source={{ uri: u.avatar_url }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                          ) : (
+                            <Text style={{ color: '#fff', fontWeight: '700' }}>
+                              {(u.full_name?.[0] || '?').toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.inviteResultName}>{u.full_name || 'Unknown'}</Text>
+                          {!!u.email && <Text style={styles.inviteResultEmail}>{u.email}</Text>}
+                        </View>
+                        <Text style={[styles.inviteResultAction, alreadySelected && { opacity: 0.5 }]}>
+                          {alreadySelected ? 'Selected' : 'Add'}
+                        </Text>
+                      </Pressable>
+                    );
+                  }}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
 
         {/* BEGIN Button */}
         <TouchableOpacity
@@ -397,6 +580,7 @@ export default function StartGameScreen() {
     </ScrollView>
   );
 }
+const INVITE_MODAL_MAX_HEIGHT = Math.round(Dimensions.get('window').height * 0.85);
 const styles = {
   container: {
     flexGrow: 1,
@@ -598,5 +782,180 @@ const styles = {
   iconText: {
     fontSize: 12,
     color: '#888',
+  },
+  storyRow: {
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  storyScroll: {
+    paddingHorizontal: 6,
+  },
+  storyItem: {
+    width: 72,
+    alignItems: 'center' as 'center',
+    marginRight: 12,
+  },
+  storyItemConfirm: {
+    // Optional: subtle emphasis for the whole item
+  },
+  storyItemPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  storyAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center' as 'center',
+    justifyContent: 'center' as 'center',
+    borderWidth: 2,
+    borderColor: '#C7D2FE',
+    overflow: 'hidden' as 'hidden',
+    position: 'relative' as 'relative',
+  },
+  storyAvatarConfirm: {
+    borderColor: '#ef4444',
+  },
+  storyAvatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  storyInitial: {
+    color: '#2563eb',
+    fontWeight: '700' as '700',
+    fontSize: 18,
+  },
+  storyName: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#111827',
+    textAlign: 'center' as 'center',
+  },
+  storyNameConfirm: {
+    color: '#ef4444',
+    fontWeight: '700' as '700',
+  },
+  confirmOverlay: {
+    position: 'absolute' as 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 60,
+    backgroundColor: 'rgba(133, 7, 7, 0.15)',
+    alignItems: 'center' as 'center',
+    justifyContent: 'center' as 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#ef4444',
+  },
+  confirmText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700' as '700',
+  },
+  // If you still keep the badge elsewhere, you can keep/remove these:
+  removeBadge: {
+    position: 'absolute' as 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ef4444',
+    alignItems: 'center' as 'center',
+    justifyContent: 'center' as 'center',
+    shadowColor: '#000',
+    shadowOpacity: 1,
+    shadowRadius: 2,
+    elevation: 2,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  removeBadgeText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 16,
+    fontWeight: '700' as '700',
+  },
+  inviteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center' as 'center',
+    alignItems: 'center' as 'center',
+    padding: 16,
+  },
+  inviteModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '95%' as const,
+    maxHeight: INVITE_MODAL_MAX_HEIGHT,
+    overflow: 'hidden' as 'hidden',
+  },
+  inviteModalHeader: {
+    flexDirection: 'row' as 'row',
+    alignItems: 'center' as 'center',
+    justifyContent: 'space-between' as 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  inviteModalTitle: {
+    fontSize: 18,
+    fontWeight: '700' as '700',
+    color: '#2563eb',
+  },
+  inviteModalClose: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  inviteSearchInputContainer: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+  },
+  inviteSearchInput: {
+    height: 44,
+    color: '#111827',
+    fontSize: 16,
+  },
+  inviteResultsContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 16,
+  },
+  inviteResultRow: {
+    flexDirection: 'row' as 'row',
+    alignItems: 'center' as 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  inviteResultAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2563eb',
+    alignItems: 'center' as 'center',
+    justifyContent: 'center' as 'center',
+  },
+  inviteResultName: {
+    fontSize: 14,
+    fontWeight: '600' as '600',
+    color: '#111827',
+  },
+  inviteResultEmail: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  inviteResultAction: {
+    color: '#2563eb',
+    fontWeight: '700' as '700',
+    fontSize: 14,
+    paddingHorizontal: 8,
   },
 };

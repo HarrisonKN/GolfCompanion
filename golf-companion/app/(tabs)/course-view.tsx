@@ -538,6 +538,7 @@ export default function CourseViewScreen() {
   };
 
   // ------------------- INIT & DATA FETCH -------------------------
+  // Only test Supabase connection; no location fetching here
   const initializeApp = async () => {
     try {
       setLoading(true);
@@ -551,21 +552,6 @@ export default function CourseViewScreen() {
         ),
       ]);
       if (!connectionTest) throw new Error("Supabase connection failed.");
-
-      // Location permission
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        const currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Lowest,
-        });
-        setLocation(currentLocation);
-        setRegion({
-          latitude: currentLocation.coords.latitude,
-          longitude: currentLocation.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
-      }
     } catch (error: any) {
       setConnectionError(error.message);
     } finally {
@@ -576,6 +562,31 @@ export default function CourseViewScreen() {
   useEffect(() => {
     console.log("🧭 Initializing location services on mount...");
     initializeApp();
+  }, []);
+
+  // Load previously saved location from AsyncStorage on mount
+  useEffect(() => {
+    const loadSavedLocation = async () => {
+      try {
+        const raw = await AsyncStorage.getItem("lastKnownLocation");
+        if (raw) {
+          const coords = JSON.parse(raw);
+          setLocation({ coords, timestamp: Date.now() } as Location.LocationObject);
+          setRegion({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          });
+          console.log("📍 Loaded saved location:", coords);
+        } else {
+          console.log("⚠️ No saved location found in storage");
+        }
+      } catch (e) {
+        console.error("❌ Failed to load saved location:", e);
+      }
+    };
+    loadSavedLocation();
   }, []);
 
   const fetchCourses = async () => {
@@ -769,7 +780,9 @@ export default function CourseViewScreen() {
 
   // Fetch holes when a course is selected
   useEffect(() => {
-    if (selectedCourse) fetchHoles();
+    if (selectedCourse)
+      switchingCourseRef.current = true;
+      fetchHoles();
   }, [selectedCourse]);
 
   const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
@@ -1349,41 +1362,6 @@ export default function CourseViewScreen() {
             </Pressable>
           </View>
 
-          {/* New: live scoreboard for this course (today) */}
-          <View style={S.sbContainer}>
-            <View style={S.sbGrid}>
-              {scoreboard.map((p) => {
-                const first = (p.name || "").trim().split(" ")[0] || "Player";
-                const initials = first.slice(0, 1).toUpperCase();
-                //const toParStr = p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`; // 0 -> "0"
-                const toParStr =
-                  p.toPar === 0 ? 'E' :
-                  p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
-                //This section above either shows E for even par or numbers always
-                return (
-                  <View key={p.player_id} style={S.sbTile}>
-                    {p.avatar_url ? (
-                      <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
-                    ) : (
-                      <View style={S.sbAvatarCircle}>
-                        <Text style={S.sbAvatarCircleText}>{initials}</Text>
-                      </View>
-                    )}
-                    <Text
-                      style={S.sbPlayerName}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {first}
-                    </Text>
-                    <Text style={S.sbScoreText}>
-                      {p.strokes} ({toParStr})
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
         </View>
       </View>
 
@@ -1807,94 +1785,7 @@ export default function CourseViewScreen() {
       )}
 
 
-      {selectedHole && (
-        <>
-          {/* existing Drop Pin */}
-          <Pressable style={[S.pinButton, { left: 20 }]} onPress={handleDropPin}>
-            <Text style={S.pinButtonText}>Drop Pin</Text>
-          </Pressable>
-
-          {/* Speed-dial FAB */}
-          <View pointerEvents="box-none" style={S.fabContainer}>
-            {/* Action: Scores */}
-            <Animated.View
-              style={[
-                S.fabActionWrap,
-                {
-                  bottom: 16 + insets.bottom + LABEL_CLEARANCE,
-                  //right: 16,
-                  transform: [{ translateY: actionScoreY }],
-                  opacity: fabAnim,
-                },
-              ]}
-            >
-              <Pressable
-                style={S.fabAction}
-                android_ripple={{ color: palette.secondary }}
-                hitSlop={8}
-                onPress={() => {
-                  setScoreVisible(v => !v);
-                  toggleFab();
-                }}
-              >
-                <Text style={S.fabActionIcon}>🧮</Text>
-              </Pressable>
-              <Animated.Text style={[S.fabActionLabel, { opacity: fabAnim }]}>
-                Scores
-              </Animated.Text>
-            </Animated.View>
-
-            {/* Action: My Location */}
-            <Animated.View
-              style={[
-                S.fabActionWrap,
-                {
-                  bottom: 32 + insets.bottom + LABEL_CLEARANCE,
-                  //right: 16,
-                  transform: [{ translateY: actionLocY }],
-                  opacity: fabAnim,
-                },
-              ]}
-            >
-              <Pressable
-                style={S.fabAction}
-                android_ripple={{ color: palette.secondary }}
-                hitSlop={8}
-                onPress={() => {
-                  if (location && mapRef.current) {
-                    mapRef.current.animateToRegion(
-                      {
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                        latitudeDelta: 0.005,
-                        longitudeDelta: 0.005,
-                      },
-                      500
-                    );
-                  }
-                  toggleFab();
-                }}
-              >
-                <Text style={S.fabActionIcon}>⌖</Text>
-              </Pressable>
-              <Animated.Text style={[S.fabActionLabel, { opacity: fabAnim }]}>
-                Location
-              </Animated.Text>
-            </Animated.View>
-
-            {/* Main FAB */}
-            <Pressable
-              style={[S.fabMain, { bottom: 48 + insets.bottom, right: 16 }]}
-              android_ripple={{ color: palette.secondary }}
-              onPress={toggleFab}
-            >
-              <Animated.Text style={[S.fabMainIcon, { transform: [{ rotate: rotateZ }] }]}>
-                ＋
-              </Animated.Text>
-            </Pressable>
-          </View>
-        </>
-      )}
+      {/* Drop Pin button removed per instructions; handleDropPin still available for internal use. */}
 
       {/* Action Buttons for New Holes */}
       {selectedHole &&
@@ -1976,6 +1867,93 @@ export default function CourseViewScreen() {
           </View>
         </View>
       </Modal>
+
+        {/* Scoreboard moved to bottom of the screen */}
+        <View
+          style={[
+            S.sbContainer,
+            {
+              position: "absolute",
+              bottom: insets.bottom + 50,
+              alignSelf: "center",
+              width: "75%",
+              height: 90,
+              zIndex: 4000,
+              backgroundColor: "#111",
+              paddingVertical: 2,
+              paddingBottom: insets.bottom + 2,
+              borderRadius: 12,
+            },
+          ]}
+        >
+          <View style={S.sbGrid}>
+            {scoreboard.map((p) => {
+              const first = (p.name || "").trim().split(" ")[0] || "Player";
+              const initials = first.slice(0, 1).toUpperCase();
+              const toParStr =
+                p.toPar === 0 ? 'E' :
+                p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
+              return (
+                <View key={p.player_id} style={S.sbTile}>
+                  {p.avatar_url ? (
+                    <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
+                  ) : (
+                    <View style={S.sbAvatarCircle}>
+                      <Text style={S.sbAvatarCircleText}>{initials}</Text>
+                    </View>
+                  )}
+                  <Text
+                    style={S.sbPlayerName}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {first}
+                  </Text>
+                  <Text style={S.sbScoreText}>
+                    {p.strokes} ({toParStr})
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+      {/* Small Find My Location button */}
+      <Pressable
+        onPress={async () => {
+          try {
+            const current = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            if (mapRef.current && current) {
+              mapRef.current.animateToRegion({
+                latitude: current.coords.latitude,
+                longitude: current.coords.longitude,
+                latitudeDelta: 0.01,
+                longitudeDelta: 0.01,
+              });
+            }
+          } catch (e) {
+            console.warn("⚠️ Could not get current location", e);
+          }
+        }}
+        style={{
+          position: "absolute",
+          bottom: insets.bottom + 50,
+          left: 10,
+          width: 38,
+          height: 38,
+          borderRadius: 19,
+          backgroundColor: "#111",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 5000,
+          elevation: 5,
+        }}
+      >
+        <Text style={{ color: "#fff", fontSize: 18 }}>📍</Text>
+      </Pressable>
+
 
       {/* Step overlay for hole entry steps */}
       <StepOverlay
@@ -2488,5 +2466,3 @@ iconText: {
     sbBadgeOver: { backgroundColor: "#ef4444" },  // over par = red
     sbBadgeEven: { backgroundColor: "#4b5563" },  // even = gray
   });
-
-     

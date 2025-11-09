@@ -573,6 +573,11 @@ export default function CourseViewScreen() {
     }
   };
 
+  useEffect(() => {
+    console.log("🧭 Initializing location services on mount...");
+    initializeApp();
+  }, []);
+
   const fetchCourses = async () => {
     try {
       const { data, error } = await supabase

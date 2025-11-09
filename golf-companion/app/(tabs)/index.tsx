@@ -171,25 +171,54 @@ export default function HomeScreen() {
                 ]}
                 onPress={async () => {
                   try {
-                    const { data: fcmToken } = await Notifications.getDevicePushTokenAsync();
+                    const tokenResponse = await Notifications.getDevicePushTokenAsync();
+                    //const fcmToken = tokenResponse.data;
+                    const fcmToken = tokenResponse.data + "_" + Math.floor(Math.random() * 1000);
                     console.log('✅ FCM Token:', fcmToken);
 
                     const supabaseUser = user?.id;
                     console.log("👤 Supabase user:", supabaseUser);
                     if (!fcmToken || !supabaseUser) throw new Error("Missing token or user ID");
 
-                    const { error } = await supabase
+                    // 🔧 Ensure Supabase client knows about the current session before querying
+                    if (user?.access_token && user?.refresh_token) {
+                      console.log("🔄 Forcing Supabase session sync before update");
+                      await supabase.auth.setSession({
+                        access_token: user.access_token,
+                        refresh_token: user.refresh_token,
+                      });
+                    }
+
+                    // 🔄 Forcing Supabase client to re-sync after login
+                    console.log("🔄 Forcing Supabase client to re-sync after login");
+                    await supabase.auth.refreshSession();
+
+                    const {
+                      data: { session },
+                    } = await supabase.auth.getSession();
+                    console.log("🧠 Auth UID from Supabase:", session?.user?.id);
+
+                    const { data, error } = await supabase
                       .from("profiles")
                       .update({ fcm_token: fcmToken })
-                      .eq("id", supabaseUser);
+                      .eq("id", supabaseUser)
+                      .select();
 
-                    if (error) throw error;
-
-                    Toast.show({
-                      type: 'success',
-                      text1: 'Push token saved!',
-                      text2: fcmToken,
-                    });
+                    if (error) {
+                      console.error("❌ Supabase error:", error.message, error.details, error.hint);
+                      Toast.show({
+                        type: 'error',
+                        text1: 'Error saving token',
+                        text2: error.message,
+                      });
+                    } else {
+                      console.log("✅ Supabase update success:", data);
+                      Toast.show({
+                        type: 'success',
+                        text1: 'Push token saved!',
+                        text2: fcmToken,
+                      });
+                    }
                   } catch (err: any) {
                     Toast.show({
                       type: 'error',

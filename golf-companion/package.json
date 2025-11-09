@@ -54,7 +54,7 @@
     "express": "^5.1.0",
     "firebase": "^12.4.0",
     "haversine-distance": "^1.2.4",
-    "react": "19.0.0", 
+    "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.7",
     "react-native-agora": "^4.5.3",

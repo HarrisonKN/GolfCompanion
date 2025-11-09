@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { supabase } from './supabase';
+import { supabase } from "@/lib/supabaseClient";
 
 interface AuthContextType {
   user: any;
@@ -31,6 +31,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  useEffect(() => {
+  const loadSessionFromSecureStore = async () => {
+    try {
+      const accessToken = await SecureStore.getItemAsync('supabase_access_token');
+      const refreshToken = await SecureStore.getItemAsync('supabase_refresh_token');
+
+      if (accessToken && refreshToken) {
+        console.log('🔁 Backup session loader: restoring tokens to Supabase client');
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+      } else {
+        console.log('⚠️ No tokens found in SecureStore for backup session restore');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load session from SecureStore:', error);
+    }
+  };
+
+  loadSessionFromSecureStore();
+}, []);
+
   // Restore session from SecureStore on mount
   useEffect(() => {
     const restoreSession = async () => {
@@ -60,6 +83,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Always get the current session and update state
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
+      // After restoring session, explicitly sync Supabase client with tokens if present
+      if (session?.access_token && session?.refresh_token) {
+      console.log('🔑 Session is active after login (no need to re-set)');
+      }
       setLoading(false);
       setIsInitialized(true);
       console.log('Session restore complete. User:', session?.user ? 'found' : 'not found');
@@ -69,7 +96,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Listen for auth state changes and sync with SecureStore
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state change:', event);
       console.log('Session present:', !!session);
       
@@ -84,8 +111,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         console.log('Access token present:', !!session.access_token);
         console.log('Refresh token present:', !!session.refresh_token);
         
-        SecureStore.setItemAsync('supabase_access_token', session.access_token);
-        SecureStore.setItemAsync('supabase_refresh_token', session.refresh_token);
+        await SecureStore.setItemAsync('supabase_access_token', session.access_token);
+        await SecureStore.setItemAsync('supabase_refresh_token', session.refresh_token);
+
+        if (session?.access_token && session?.refresh_token) {
+          console.log('🔑 Session active after login (no need to re-set)');
+        }
+
         setUser(session.user);
       } else {
         console.log('Clearing tokens from SecureStore');

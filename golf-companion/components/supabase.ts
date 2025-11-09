@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Environment variables pulled from app.json extra
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl;
@@ -33,7 +34,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
   supabaseClient = createClient('https://placeholder.supabase.co', 'placeholder-key');
 } else {
   console.log('✅ Supabase client created successfully');
-  supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      storage: AsyncStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
 export const supabase = supabaseClient;

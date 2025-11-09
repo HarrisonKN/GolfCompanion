@@ -228,6 +228,7 @@ export default function CourseViewScreen() {
   const switchingCourseRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [MapLoaded, setMapLoaded] = useState(false);
+  const didInitialNavRef = useRef(false);
 
   // --- safe-area + dynamic map padding (our addition) ---
   const insets = useSafeAreaInsets();
@@ -399,52 +400,112 @@ export default function CourseViewScreen() {
   };
 
   // ---------- oriented fly-to-hole (our addition) ----------
+  // Improved hole fly helper: first fit, then rotate/pitch
+  function flyHole(mapRef: { current: MapView | null }, hole: Hole, duration = 900) {
+    if (!mapRef.current) return;
+    const tee = hole.tee_latitude != null && hole.tee_longitude != null
+      ? { latitude: hole.tee_latitude, longitude: hole.tee_longitude }
+      : null;
+    const green = hole.green_latitude != null && hole.green_longitude != null
+      ? { latitude: hole.green_latitude, longitude: hole.green_longitude }
+      : null;
+    if (!tee || !green) return;
+
+    // Fit both points with UI padding
+    try {
+      mapRef.current.fitToCoordinates([tee, green], {
+        edgePadding: {
+          top: topPadPx + 40,
+          bottom: bottomPadPx + 40,
+          left: 60,
+          right: 60,
+        },
+        animated: true,
+      });
+    } catch {}
+
+    // After fit, rotate and adjust zoom/altitude
+    setTimeout(() => {
+      orientedFlyToHole(mapRef, hole, duration);
+    }, 400);
+  }
+
+  // Center on a hole ignoring tee/green orientation
+  function centerOnHole(hole: Hole, duration = 700) {
+    if (!mapRef.current) return;
+
+    const pts: { latitude: number; longitude: number }[] = [];
+    if (hole.tee_latitude != null && hole.tee_longitude != null)
+      pts.push({ latitude: hole.tee_latitude, longitude: hole.tee_longitude });
+    if (hole.fairway_latitude != null && hole.fairway_longitude != null)
+      pts.push({ latitude: hole.fairway_latitude, longitude: hole.fairway_longitude });
+    if (hole.green_latitude != null && hole.green_longitude != null)
+      pts.push({ latitude: hole.green_latitude, longitude: hole.green_longitude });
+
+    if (!pts.length) return;
+
+    const avg = pts.reduce(
+      (a, p) => ({ latitude: a.latitude + p.latitude, longitude: a.longitude + p.longitude }),
+      { latitude: 0, longitude: 0 }
+    );
+    const center = {
+      latitude: avg.latitude / pts.length,
+      longitude: avg.longitude / pts.length,
+    };
+
+    // Zoom heuristic: prefer yardage if present; else default
+    const y = typeof hole.yardage === 'number' ? hole.yardage : 0;
+    if (Platform.OS === 'ios') {
+      const altitude = y ? Math.max(140, Math.min(900, y * 0.75 + 140)) : 420;
+      mapRef.current.animateCamera({ center, altitude, pitch: 0, heading: 0 }, { duration });
+    } else {
+      let zoom = y ? 19.0 - Math.log2(Math.max(60, y) / 130) : 17.6;
+      zoom = Math.max(16.0, Math.min(19.5, zoom));
+      mapRef.current.animateCamera({ center, zoom, pitch: 0, heading: 0 }, { duration });
+    }
+  }
+
+  // Tighter altitude/zoom heuristics
   async function orientedFlyToHole(
     mapRef: { current: MapView | null },
     hole: Hole,
     flightMs = 900
   ) {
     if (!mapRef.current) return;
-
-    const tee =
-      hole.tee_latitude != null && hole.tee_longitude != null
-        ? { latitude: hole.tee_latitude, longitude: hole.tee_longitude }
-        : null;
-    const green =
-      hole.green_latitude != null && hole.green_longitude != null
-        ? { latitude: hole.green_latitude, longitude: hole.green_longitude }
-        : null;
+    const tee = hole.tee_latitude != null && hole.tee_longitude != null
+      ? { latitude: hole.tee_latitude, longitude: hole.tee_longitude }
+      : null;
+    const green = hole.green_latitude != null && hole.green_longitude != null
+      ? { latitude: hole.green_latitude, longitude: hole.green_longitude }
+      : null;
     if (!tee || !green) return;
 
     const heading = bearingDeg(tee, green);
-
-    // Bias center a touch toward the green, then nudge back toward tee
-    const t = 0.5;
-    const mid = {
-      latitude: tee.latitude + (green.latitude - tee.latitude) * t,
-      longitude: tee.longitude + (green.longitude - tee.longitude) * t,
-    };
-    const center = nudgeAlongHeading(mid, heading, 20); // meters back toward tee
-
-    // Estimate zoom/altitude from hole length + visible height after paddings
     const meters = haversine(
       { lat: tee.latitude, lon: tee.longitude },
       { lat: green.latitude, lon: green.longitude }
     );
 
+    // Midpoint + slight backward nudge
+    const mid = {
+      latitude: (tee.latitude + green.latitude) / 2,
+      longitude: (tee.longitude + green.longitude) / 2,
+    };
+    const center = nudgeAlongHeading(mid, heading, Math.min(25, Math.max(10, meters * 0.06)));
+
     if (Platform.OS === "ios") {
-      // iOS altitude (meters). Tighter baseline.
-      let altitude = Math.max(200, Math.min(1000, meters * 0.9 + 160));
+      // Narrower altitude window
+      let altitude = Math.max(140, Math.min(750, meters * 0.72 + 120));
       mapRef.current.animateCamera(
-        { center, heading, pitch: 40, altitude },
+        { center, heading, pitch: 38, altitude },
         { duration: flightMs }
       );
     } else {
-      // Android zoom (higher = closer). Tighter baseline.
-      let zoom = 18.6 - Math.log2(Math.max(60, meters) / 150); // 150m ≈ 18.6
-      zoom = Math.max(16.2, Math.min(19, zoom));
+      // Zoom: shorter holes closer
+      let zoom = 19.2 - Math.log2(Math.max(50, meters) / 110); // 110m baseline
+      zoom = Math.max(16.5, Math.min(19.5, zoom));
       mapRef.current.animateCamera(
-        { center, heading, pitch: 40, zoom },
+        { center, heading, pitch: 38, zoom },
         { duration: flightMs }
       );
     }
@@ -501,7 +562,7 @@ export default function CourseViewScreen() {
       .select();
 
       if (error) {
-        console.error("❌ Supabase upsert error:", error);
+        console.error("Supabase upsert error:", error);
         showMessage(`Error saving score: ${error.message}`);
         return;
       }
@@ -530,7 +591,7 @@ export default function CourseViewScreen() {
         });
       }
     } catch (err: any) {
-      console.error("❌ Unexpected error:", err);
+      console.error("Unexpected error:", err);
       showMessage(`Unexpected error: ${err.message}`);
     } finally {
       setLoading(false);
@@ -862,13 +923,13 @@ export default function CourseViewScreen() {
   useEffect(() => {
     const updateYPositions = async () => {
       if (!mapRef.current || !selectedHole) {
-        console.log("🧭 Map or selected hole not ready");
+        console.log("Map or selected hole not ready");
         return;
       }
 
-      console.log("🗺️ MapLoaded:", MapLoaded);
-      console.log("📍 Tee → Fairway lat/lon:", selectedHole?.tee_latitude, selectedHole?.fairway_latitude);
-      console.log("📍 Fairway → Green lat/lon:", selectedHole?.fairway_latitude, selectedHole?.green_latitude);
+      console.log("MapLoaded:", MapLoaded);
+      console.log("Tee → Fairway lat/lon:", selectedHole?.tee_latitude, selectedHole?.fairway_latitude);
+      console.log("Fairway → Green lat/lon:", selectedHole?.fairway_latitude, selectedHole?.green_latitude);
 
       if (
         selectedHole.tee_latitude != null &&
@@ -883,7 +944,7 @@ export default function CourseViewScreen() {
 
         setTimeout(async () => {
           const point = await mapRef.current!.pointForCoordinate(mid);
-          console.log("🎯 Tee→Fairway screen point:", point);
+          console.log("Tee→Fairway screen point:", point);
           setTeeFairwayY(point.y - 20);
         }, 300);
       }
@@ -901,7 +962,7 @@ export default function CourseViewScreen() {
 
         setTimeout(async () => {
           const point = await mapRef.current!.pointForCoordinate(mid);
-          console.log("🎯 Fairway→Green screen point:", point);
+          console.log("Fairway→Green screen point:", point);
           setFairwayGreenY(point.y - 20);
         }, 300);
       }
@@ -1148,6 +1209,56 @@ export default function CourseViewScreen() {
   useEffect(() => {
     refreshScoreboard();
   }, [selectedCourse, playerIds, refreshScoreboard]);
+  
+  // Reset initial nav when course changes so we can fly again
+  useEffect(() => {
+    didInitialNavRef.current = false;
+  }, [selectedCourse]);
+
+  //Call on startup to get location + region
+  useEffect(() => {
+    initializeApp();
+  }, []);
+  
+  // Initial auto navigation: if course selected → Hole 1; else user location
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    if (didInitialNavRef.current) return;
+
+    if (selectedCourse) {
+      if (!holes.length) return; // wait for holes
+      const hole1 = holes.find(h => h.hole_number === 1) || holes[0];
+      if (!hole1) return;
+
+      // Ensure Hole 1 is selected first
+      if (selectedHoleNumber !== hole1.hole_number) {
+        setSelectedHoleNumber(hole1.hole_number);
+        return; // re-run after selection
+      }
+
+      // Just center on the hole (no tee/green requirement)
+      centerOnHole(hole1, 750);
+      didInitialNavRef.current = true;
+      return;
+    }
+
+    // No course → user location
+    if (!selectedCourse && location) {
+      mapRef.current.animateToRegion({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 700);
+      didInitialNavRef.current = true;
+    }
+  }, [mapReady, selectedCourse, holes, selectedHoleNumber, location, topPadPx, bottomPadPx]);
+  
+  
+  // Reset flag when course changes
+  useEffect(() => {
+    didInitialNavRef.current = false;
+  }, [selectedCourse]);
 
   // Initial + when course/holes change
   useEffect(() => {
@@ -1184,7 +1295,7 @@ export default function CourseViewScreen() {
       green: LatLng | null;
     };
     // Log tee data before update
-    console.log("🟡 Saving tee data:", tee);
+    console.log("Saving tee data:", tee);
     // Ensure all keys match exact lowercase column names in Supabase
     const { error } = await supabase
       .from("holes")
@@ -1331,15 +1442,41 @@ export default function CourseViewScreen() {
               onPress={() => {
                 const currentIdx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
                 const next = holes[currentIdx + 1];
-                if (next) setSelectedHoleNumber(next.hole_number);
+
+                // If there is a next hole, go to it
+                if (next) {
+                  setSelectedHoleNumber(next.hole_number);
+                  return;
+                }
+
+                // No next hole → finish round confirmation
+                setStepPromptMessage("Finish round?\nThis will show the scorecard.");
+                setShowStepConfirm(true);
+                setStepPromptConfirm(() => () => {
+                  setShowStepConfirm(false);
+                  setStepPromptMessage(null);
+                  if (user?.id && selectedCourse) {
+                    router.push({
+                      pathname: "/scorecard",
+                      params: { playerId: user.id, courseId: selectedCourse },
+                    });
+                  } else {
+                    // Fallback notice if needed
+                    showMessage("Missing user or course to show scorecard.");
+                  }
+                });
+                setStepPromptCancel(() => () => {
+                  setShowStepConfirm(false);
+                  setStepPromptMessage(null);
+                });
               }}
               style={({ pressed }) => [S.arrowButton, pressed && S.arrowButtonPressed]}
-              disabled={holes.findIndex(h => h.hole_number === selectedHoleNumber) === holes.length - 1 || holes.length === 0}
+              disabled={holes.length === 0}
             >
               {holes.findIndex(h => h.hole_number === selectedHoleNumber) < holes.length - 1 ? (
                 <Text style={S.arrowText}>›</Text>
               ) : (
-                <Text style={[S.arrowText, { opacity: 0.2 }]}>›</Text>
+                <Text style={S.arrowText}>Finish</Text>
               )}
             </Pressable>
           </View>

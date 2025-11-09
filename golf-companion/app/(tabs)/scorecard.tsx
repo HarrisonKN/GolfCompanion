@@ -26,6 +26,7 @@ import {
   Easing,
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
+import { captureRef } from 'react-native-view-shot';
 
 // ------------------- CONSTANTS & TYPES -------------------------
 
@@ -466,27 +467,34 @@ useFocusEffect(
 
   const saveScorecardAsImage = async () => {
     try {
-      // Request permissions
+      // Ask for Photos/Media permission
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission needed', 'We need access to your photos to save the scorecard.');
         return;
       }
 
-      // For now, we’ll save a text representation of the scorecard (placeholder for an image)
-      const scorecardText = JSON.stringify(players, null, 2);
-      const fileUri = FileSystem.documentDirectory + `scorecard-${Date.now()}.txt`;
-      await FileSystem.writeAsStringAsync(fileUri, scorecardText);
+      // Ensure the ref is available
+      if (!scorecardRef.current) {
+        Alert.alert('Error', 'Scorecard not ready to capture.');
+        return;
+      }
 
-      const asset = await MediaLibrary.createAssetAsync(fileUri);
+      // Capture the scorecard area as PNG
+      const uri = await captureRef(scorecardRef, {
+        format: 'png',
+        quality: 1,
+      });
+
+      // Save to media library (optionally create album)
+      const asset = await MediaLibrary.createAssetAsync(uri);
       await MediaLibrary.createAlbumAsync('Scorecards', asset, false);
 
-      await MediaLibrary.saveToLibraryAsync(asset.uri);
       Alert.alert('Saved', 'Scorecard saved to your Photos.');
 
-      // Optional: share
+      // Optional: share the image
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(asset.uri);
+        await Sharing.shareAsync(uri);
       }
     } catch (err) {
       console.error('Error saving image', err);

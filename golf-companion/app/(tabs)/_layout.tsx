@@ -1,3 +1,7 @@
+// ------------------- NOTES AND UPDATES -----------------
+{/* 
+
+*/}
 // app/(tabs)/_layout.tsx
 import { CourseProvider } from "@/components/CourseContext";
 import { useTheme } from "@/components/ThemeContext";

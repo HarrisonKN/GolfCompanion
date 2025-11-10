@@ -248,7 +248,7 @@ export default function StartGameScreen() {
   const handleBegin = async () => {
     if (!user?.id || !course) return;
 
-    const ids = selectedPlayers.map((p: { id: string }) => p.id);
+    const ids = Array.from(new Set([...selectedPlayers.map(p => p.id), user.id]));
     const names = selectedPlayers.map((p: { name: string }) => p.name);
 
     // Create game + participants atomically
@@ -264,7 +264,7 @@ export default function StartGameScreen() {
     await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({ ids, course, gameId: gid }));
 
     router.push({
-      pathname: '/(tabs)/scorecard',
+      pathname: '/gameModes',
       params: {
         courseId: String(course),
         gameId: gid,
@@ -369,66 +369,37 @@ export default function StartGameScreen() {
 
         {/* Selected Players Section */}
         <Text style={styles.sectionLabel}>Selected Players</Text>
-        <View style={styles.selectedPlayersSection}>
+        <View style={styles.selectedPlayersCompactRow}>
           {selectedPlayers.length === 0 ? (
             <Text style={{ color: '#888', textAlign: 'center' }}>No players selected yet.</Text>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.storyRow}
-              contentContainerStyle={styles.storyScroll}
-              onScrollBeginDrag={() => setConfirmRemoveId(null)}
-            >
-              {selectedPlayers.map(player => {
-                const isConfirm = confirmRemoveId === player.id;
-                return (
-                  <Pressable
-                    key={player.id}
-                    onPress={() => {
-                      if (isConfirm) {
-                        removePlayer(player.id);
-                        setConfirmRemoveId(null);
-                      } else {
-                        setConfirmRemoveId(player.id);
-                      }
-                    }}
-                    style={({ pressed, hovered }) => [
-                      styles.storyItem,
-                      (pressed || hovered) && styles.storyItemPressed,
-                      isConfirm && styles.storyItemConfirm,
-                    ]}
-                    accessibilityLabel={`Selected player ${player.name}`}
-                    accessibilityHint={isConfirm ? 'Tap to remove' : 'Tap to show remove option'}
-                  >
-                    <View style={[styles.storyAvatar, isConfirm && styles.storyAvatarConfirm]}>
-                      {player.avatar_url ? (
-                        <Image
-                          source={{ uri: player.avatar_url }}
-                          style={styles.storyAvatarImage}
-                        />
-                      ) : (
-                        <Text style={styles.storyInitial}>
-                          {(player.name?.[0] || '?').toUpperCase()}
-                        </Text>
-                      )}
-
-                      {isConfirm && (
-                        <View style={styles.confirmOverlay}>
-                          <Text style={styles.confirmText}>Remove</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text
-                      style={[styles.storyName, isConfirm && styles.storyNameConfirm]}
-                      numberOfLines={1}
-                    >
-                      {player.name}
+            selectedPlayers.slice(0, 4).map(player => (
+              <View key={player.id} style={styles.playerCardSmall}>
+                <View style={styles.avatarSmall}>
+                  {player.avatar_url ? (
+                    <Image
+                      source={{ uri: player.avatar_url }}
+                      style={{
+                        width: 60,
+                        height: 60,
+                        borderRadius: 30,
+                      }}
+                    />
+                  ) : (
+                    <Text style={styles.avatarInitial}>
+                      {(player.name?.[0] || '?').toUpperCase()}
                     </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+                  )}
+                </View>
+                <Text style={styles.playerName} numberOfLines={1}>{player.name}</Text>
+                <TouchableOpacity
+                  onPress={() => removePlayer(player.id)}
+                  style={styles.removePlayerCompactBtn}
+                >
+                  <Text style={styles.removePlayerCompactText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ))
           )}
         </View>
 
@@ -574,7 +545,7 @@ export default function StartGameScreen() {
           style={[styles.beginButton /*, pressed && styles.beginButtonPressed */]}
           activeOpacity={0.9}
         >
-          <Text style={styles.beginButtonText}>Begin Game</Text>
+          <Text style={styles.beginButtonText}>Next</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -620,40 +591,46 @@ const styles = {
     marginBottom: 8,
     textAlign: 'center' as 'center',
   },
-  selectedPlayersSection: {
-    marginBottom: 18,
-    backgroundColor: '#e0e7ff',
-    borderRadius: 12,
-    padding: 12,
-  },
-  selectedPlayerChip: {
-    backgroundColor: '#2563eb',
-    borderRadius: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    margin: 4,
+  selectedPlayersCompactRow: {
     flexDirection: 'row' as 'row',
+    flexWrap: 'wrap' as 'wrap',
+    justifyContent: 'center' as 'center',
+    marginBottom: 18,
+  },
+  playerCardSmall: {
     alignItems: 'center' as 'center',
+    margin: 8,
   },
-  selectedPlayerText: {
-    color: '#fff',
-    fontWeight: '600' as '600',
-    fontSize: 14,
-    marginRight: 8,
+  avatarSmall: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center' as 'center',
+    justifyContent: 'center' as 'center',
+    marginBottom: 4,
   },
-  removePlayerButton: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    paddingVertical: 2,
-    paddingHorizontal: 10,
-    marginLeft: 4,
-    borderWidth: 1,
-    borderColor: '#2563eb',
-  },
-  removePlayerButtonText: {
+  avatarInitial: {
     color: '#2563eb',
     fontWeight: '700' as '700',
+    fontSize: 18,
+  },
+  playerName: {
     fontSize: 12,
+    color: '#111827',
+    textAlign: 'center' as 'center',
+  },
+  removePlayerCompactBtn: {
+    marginTop: 4,
+    backgroundColor: '#ef4444',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  removePlayerCompactText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700' as '700',
   },
   inviteSection: {
     backgroundColor: '#f5f5f5',

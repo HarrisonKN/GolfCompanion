@@ -12,6 +12,7 @@ import {
   Alert,
   Animated,
   Button,
+  Dimensions,
   Image,
   Modal,
   Platform,
@@ -20,9 +21,21 @@ import {
   Text,
   TextInput,
   ToastAndroid,
-  View
+  View,
+  StyleProp, 
+  ViewStyle,
+  InteractionManager, 
+  Easing 
 } from "react-native";
-
+import DropDownPicker from "react-native-dropdown-picker";
+import MapView, {
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+  Region,
+} from "react-native-maps";
+import type { LatLng } from "react-native-maps";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // ------------------- STEP OVERLAY COMPONENT -------------------------
 function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: {
@@ -80,19 +93,6 @@ function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: 
     </Modal>
   );
 }
-import DropDownPicker from "react-native-dropdown-picker";
-import MapView, {
-  Marker,
-  Polyline,
-  PROVIDER_GOOGLE,
-  Region,
-} from "react-native-maps";
-import type { LatLng } from "react-native-maps";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { InteractionManager, Easing, Dimensions } from "react-native";
-import type { StyleProp, ViewStyle } from "react-native";
-
-// …
 
 // ------------------- TYPES -------------------------
 type Course = {
@@ -188,6 +188,10 @@ export default function CourseViewScreen() {
   const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
   const [scoreboard, setScoreboard] = useState<ScoreboardItem[]>([]);
   const refreshScoreboardRef = useRef<null | (() => void)>(null);
+  // Scoreboard scale (percentage, persisted)
+  const [sbScalePct, setSbScalePct] = useState<number>(100); // 100% default
+  const sbScale = sbScalePct / 100;
+  const mul = React.useCallback((n: number) => Math.max(1, Math.round(n * sbScale)), [sbScale]);
 
   // --- Hole entry modal state (NEW) ---
   const [holeEntryStep, setHoleEntryStep] = useState(0);
@@ -1169,6 +1173,20 @@ export default function CourseViewScreen() {
     setScoreboard(items);
   }, [selectedCourse, parByHole, playerIds, gameId, user?.id]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem('sbScalePct');
+        const n = raw ? parseInt(raw, 10) : NaN;
+        if (!Number.isNaN(n) && n >= 60 && n <= 180) setSbScalePct(n);
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.setItem('sbScalePct', String(sbScalePct)).catch(() => {});
+  }, [sbScalePct]);
+
   // Refresh on focus and tab press (already present)
   useFocusEffect(React.useCallback(() => { refreshScoreboard(); }, [refreshScoreboard]));
   useEffect(() => {
@@ -1407,6 +1425,7 @@ export default function CourseViewScreen() {
       >
         <View style={{ alignItems: "center", justifyContent: "center", width: "100%" }}>
           <View style={S.bannerContainer}>
+            {/* EDIT HERE and change the entire pressable below*/}
             <Pressable
               onPress={() => {
                 const currentIdx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
@@ -1422,6 +1441,26 @@ export default function CourseViewScreen() {
                 <Text style={[S.arrowText, { opacity: 0.2 }]}>‹</Text>
               )}
             </Pressable>
+
+            {/* EDIT THIS IN IF YOU WANT TO HAVE A WRAP-AROUND NAVIGATION FOR HOLES, so at hole 1 you can go to the last hole
+
+              <Pressable
+              onPress={() => {
+                const currentIdx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
+                const prev = holes[currentIdx - 1];
+                if (prev) {
+                  setSelectedHoleNumber(prev.hole_number);
+                } else if (holes.length > 0) {
+                  // wrap to last hole
+                  setSelectedHoleNumber(holes[holes.length - 1].hole_number);
+                }
+              }}
+              style={({ pressed }) => [S.arrowButton, pressed && S.arrowButtonPressed]}
+              disabled={holes.length === 0}
+            >
+              <Text style={S.arrowText}>‹</Text>
+            </Pressable>
+            */}
 
             <View style={S.bannerTextContainer}>
               <Text style={S.bannerCourse}>
@@ -1461,13 +1500,12 @@ export default function CourseViewScreen() {
                 const currentIdx = holes.findIndex(h => h.hole_number === selectedHoleNumber);
                 const next = holes[currentIdx + 1];
 
-                // If there is a next hole, go to it
                 if (next) {
                   setSelectedHoleNumber(next.hole_number);
                   return;
                 }
 
-                // No next hole → finish round confirmation
+                // last hole → finish confirmation
                 setStepPromptMessage("Finish round?\nThis will show the scorecard.");
                 setShowStepConfirm(true);
                 setStepPromptConfirm(() => () => {
@@ -1479,7 +1517,6 @@ export default function CourseViewScreen() {
                       params: { playerId: user.id, courseId: selectedCourse },
                     });
                   } else {
-                    // Fallback notice if needed
                     showMessage("Missing user or course to show scorecard.");
                   }
                 });
@@ -1490,11 +1527,17 @@ export default function CourseViewScreen() {
               }}
               style={({ pressed }) => [S.arrowButton, pressed && S.arrowButtonPressed]}
               disabled={holes.length === 0}
+              accessibilityLabel={
+                holes.findIndex(h => h.hole_number === selectedHoleNumber) < holes.length - 1
+                  ? "Next hole"
+                  : "Finish round"
+              }
             >
               {holes.findIndex(h => h.hole_number === selectedHoleNumber) < holes.length - 1 ? (
                 <Text style={S.arrowText}>›</Text>
               ) : (
-                <Text style={S.arrowText}>Finish</Text>
+                // same size as arrows to avoid layout shift
+                <Text style={S.FinishText}>🏁</Text>
               )}
             </Pressable>
           </View>
@@ -2006,6 +2049,7 @@ export default function CourseViewScreen() {
       </Modal>
 
         {/* Scoreboard moved to bottom of the screen */}
+      {scoreboard.length > 0 && (
         <View
           style={[
             S.sbContainer,
@@ -2013,13 +2057,13 @@ export default function CourseViewScreen() {
               position: "absolute",
               bottom: insets.bottom + 50,
               alignSelf: "center",
-              width: "75%",
-              height: 90,
+              width: `${Math.min(92, Math.max(50, Math.round(70 * sbScale)))}%`,
+              minHeight: mul(70),
               zIndex: 4000,
               backgroundColor: "#111",
-              paddingVertical: 2,
-              paddingBottom: insets.bottom + 2,
-              borderRadius: 12,
+              paddingVertical: mul(6),
+              paddingBottom: insets.bottom - 20,
+              borderRadius: mul(12),
             },
           ]}
         >
@@ -2054,6 +2098,7 @@ export default function CourseViewScreen() {
             })}
           </View>
         </View>
+      )}
 
       {/* Small Find My Location button */}
       <Pressable
@@ -2071,7 +2116,7 @@ export default function CourseViewScreen() {
               });
             }
           } catch (e) {
-            console.warn("⚠️ Could not get current location", e);
+            console.warn("Could not get current location", e);
           }
         }}
         style={{
@@ -2503,10 +2548,15 @@ iconText: {
       fontWeight: "bold",
       color: palette.white,
     },
+    FinishText: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: palette.white,
+    },
     sbContainer: {
       marginTop: 10,
       backgroundColor: "#111",
-      paddingHorizontal: 12,
+      paddingHorizontal: 6,
       paddingVertical: 8,
       borderRadius: 14,
       width: "92%",
@@ -2524,13 +2574,13 @@ iconText: {
     },
     sbGrid: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      justifyContent: "space-between",
+      flexWrap: "nowrap",
+      justifyContent:"center"
     },
     sbTile: {
-      width: 72,
+      width: 64,
       alignItems: "center",
-      marginVertical: 6,
+      marginVertical: 3,
     },
     sbAvatarCircle: {
       width: 36,

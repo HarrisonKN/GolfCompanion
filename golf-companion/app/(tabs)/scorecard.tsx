@@ -760,10 +760,10 @@ useFocusEffect(
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setSaveModalVisible(true)}
-            style={[styles(palette).addPlayerButton, styles(palette).smallButton,]}
+            style={[styles(palette).saveButton, styles(palette).smallButton,]}
             activeOpacity={0.85}
           >
-            <Text style={styles(palette).addPlayerButtonText}>Save</Text>
+            <Text style={styles(palette).saveButtonText}>Save</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1114,8 +1114,6 @@ const styles = (palette: any) => StyleSheet.create({
     fontWeight: '700',
   },
   addPlayerButtonContainer: {
-    position: 'absolute',
-    bottom: 32,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -1139,6 +1137,26 @@ const styles = (palette: any) => StyleSheet.create({
     color: palette.white,
     fontWeight: '800',
     letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  saveButton: {
+    backgroundColor: palette.primary,
+    paddingVertical: 18,
+    paddingHorizontal: 56,
+    borderRadius: 28,
+    shadowColor: palette.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: palette.third,
+  },
+  saveButtonText: {
+    color: palette.white,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textAlign: 'center',
   },
   modalBackdrop: {
     flex: 1,

@@ -11,7 +11,22 @@
     "version:patch": "node scripts/updateBuildNumber.js patch",
     "version:minor": "node scripts/updateBuildNumber.js minor",
     "version:major": "node scripts/updateBuildNumber.js major",
-    "build:version": "node scripts/updateBuildNumber.js"
+    "build:version": "node scripts/updateBuildNumber.js",
+    "build:android": "npx eas build --platform android --non-interactive",
+    "build:ios": "npx eas build --platform ios --non-interactive",
+    "build:all": "npm run build:android && npm run build:ios",
+    "release": "node scripts/bump-and-build.js",
+    "release:android": "node scripts/bump-and-build.js --platform=android",
+    "release:ios": "node scripts/bump-and-build.js --platform=ios",
+    "release:patch": "node scripts/bump-and-build.js --type=patch",
+    "release:minor": "node scripts/bump-and-build.js --type=minor",
+    "release:major": "node scripts/bump-and-build.js --type=major",
+    "build:apk": "cd android && gradlew.bat assembleRelease",
+    "bump-build:patch": "node scripts/updateBuildNumber.js patch && cd android && gradlew.bat assembleRelease",
+    "bump-build:minor": "node scripts/updateBuildNumber.js minor && cd android && gradlew.bat assembleRelease",
+    "bump-build:major": "node scripts/updateBuildNumber.js major && cd android && gradlew.bat assembleRelease",
+
+    "updateandbuild": "node scripts/bump-and-build.js patch"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",

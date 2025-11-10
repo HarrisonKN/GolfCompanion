@@ -1,3 +1,13 @@
+// ------------------- NOTES AND UPDATES -----------------
+{/* 
+
+I changed the invite friends section and the selected players section, nothing major just some styling and layout 
+changes to make it more user friendly.
+
+I am going to change how users and things are shown so that there isnt so much movement on the screen when selecting and removing
+players around the screen.
+
+*/}
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity, Image, Modal, Dimensions, FlatList } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';

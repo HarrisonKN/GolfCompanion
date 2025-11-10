@@ -1,3 +1,9 @@
+// ------------------- NOTES AND UPDATES -----------------
+{/* 
+  I removed the bottom buttons being fixed to the bottom of the screen, and now it moves with the scorecard so as it expands, 
+  the buttons stay just below it.
+*/}
+
 // ------------------- IMPORTS -------------------------
 
 import { useAuth } from '@/components/AuthContext';

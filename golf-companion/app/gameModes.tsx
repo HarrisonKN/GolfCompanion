@@ -1,3 +1,12 @@
+// ------------------- NOTES AND UPDATES -----------------
+{/* 
+    NEW FILE,
+    This file shows the players selected, and then allows the user to select a game mode, which shows a description of the gamemode.
+
+    
+
+*/}
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Pressable, Image, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';

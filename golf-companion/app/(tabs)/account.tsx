@@ -179,9 +179,9 @@ export default function AccountsScreen() {
         console.log("✅ Supabase ping response:", ping.status);
       } catch (err) {
         if (err instanceof Error) {
-          console.error("❌ Supabase ping failed:", err.message);
+          console.error("Supabase ping failed:", err.message);
         } else {
-          console.error("❌ Supabase ping failed:", String(err));
+          console.error("Supabase ping failed:", String(err));
         }
       }
 

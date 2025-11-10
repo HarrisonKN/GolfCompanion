@@ -1,3 +1,15 @@
+// ------------------- NOTES AND UPDATES -----------------
+{/* 
+
+I added , well removed, the scoreboard when there is no course selected,
+
+and changed the look of the scoreboard, so now all players should fit on 1 row,
+Everything has been scaled to fit 4 players, will need to add extra conditions to allow for more players in the future.
+
+Also changed the finish button to an icon, so that there wasnt such a jump in size and text of the top header,
+
+
+*/}
 // ------------------- IMPORTS -------------------------
 import { useAuth } from "@/components/AuthContext";
 import { useCourse } from "@/components/CourseContext";

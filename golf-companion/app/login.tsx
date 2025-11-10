@@ -39,6 +39,10 @@ export default function LoginScreen() {
 
       const data = await signIn(email, password);
       console.log('Login successful', data);
+
+      // Small delay to allow Supabase to persist session before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       router.replace('/(tabs)/account');
     } catch (error: any) {
       console.error('Login error:', error);

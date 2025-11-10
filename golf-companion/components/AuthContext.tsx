@@ -57,39 +57,77 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Restore session from SecureStore on mount
   useEffect(() => {
     const restoreSession = async () => {
-      console.log('Starting session restore...');
+      console.log("Starting session restore...");
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      if (sessionData?.session?.user) {
+        console.log("✅ Supabase session active");
+        setUser(sessionData.session.user);
+        setLoading(false);
+        setIsInitialized(true);
+        return;
+      }
+
+      // Manual fallback from SecureStore
       const accessToken = await SecureStore.getItemAsync('supabase_access_token');
       const refreshToken = await SecureStore.getItemAsync('supabase_refresh_token');
-      console.log('RestoreSession: accessToken length:', accessToken?.length || 0);
-      console.log('RestoreSession: refreshToken length:', refreshToken?.length || 0);
 
       if (accessToken && refreshToken) {
-        console.log('Both tokens found, restoring session...');
-        const { data, error } = await supabase.auth.setSession({
+        console.log("🔄 Restoring session manually...");
+        const { data: restored, error } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
         });
-        if (error) {
-          console.log('Failed to restore session:', error);
-          await SecureStore.deleteItemAsync('supabase_access_token');
-          await SecureStore.deleteItemAsync('supabase_refresh_token');
-        } else {
-          console.log('Session restored successfully');
+
+        if (error) console.error("Manual restore error:", error.message);
+        if (restored?.session?.user) {
+          console.log("✅ Manual restore successful");
+          setUser(restored.session.user);
+          setLoading(false);
+          setIsInitialized(true);
+          return;
         }
-      } else {
-        console.log('Missing tokens, cannot restore session');
       }
-      
-      // Always get the current session and update state
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-      // After restoring session, explicitly sync Supabase client with tokens if present
-      if (session?.access_token && session?.refresh_token) {
-      console.log('🔑 Session is active after login (no need to re-set)');
+
+      console.warn("🚪 No valid session found, retrying before redirect...");
+
+      // Give Supabase a bit more time to persist session (retry once)
+      await new Promise(resolve => setTimeout(resolve, 800));
+      const { data: retrySession } = await supabase.auth.getSession();
+      if (retrySession?.session?.user) {
+        console.log("✅ Session found on retry");
+        setUser(retrySession.session.user);
+        setLoading(false);
+        setIsInitialized(true);
+        return;
       }
+
+      console.warn("❌ Still no session after retry, waiting briefly for possible SIGNED_IN event...");
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { data: finalCheck } = await supabase.auth.getSession();
+      if (finalCheck?.session?.user) {
+        console.log("✅ Session appeared after final wait");
+        setUser(finalCheck.session.user);
+        setLoading(false);
+        setIsInitialized(true);
+        return;
+      }
+
+      console.warn("🚪 No session even after final wait — holding redirect until Auth is initialized...");
+      setUser(null);
       setLoading(false);
+
+      // Do NOT immediately redirect; mark as initialized so login can complete
+      if (!isInitialized) {
+        console.log("🕐 Auth not fully initialized yet — skipping redirect");
+        setIsInitialized(true);
+        return;
+      }
+
+      // If we already initialized and still no session, then we redirect next render
+      console.log("🚪 No session after initialization — safe to redirect now");
       setIsInitialized(true);
-      console.log('Session restore complete. User:', session?.user ? 'found' : 'not found');
     };
     restoreSession();
   }, []);
@@ -97,39 +135,48 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Listen for auth state changes and sync with SecureStore
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event);
-      console.log('Session present:', !!session);
-      
-      // Don't clear tokens on INITIAL_SESSION if we haven't finished restoring yet
-      if (event === 'INITIAL_SESSION' && !isInitialized) {
-        console.log('Skipping INITIAL_SESSION cleanup - still restoring');
+      console.log("Auth state change:", event);
+
+      // Ignore INITIAL_SESSION events to avoid false sign-outs
+      if (event === "INITIAL_SESSION") {
+        console.log("Skipping cleanup on INITIAL_SESSION");
+        if (session) {
+          setUser(session.user);
+        }
         return;
       }
-      
+
+      if (event === "SIGNED_IN") {
+        console.log("🟢 Signed in event caught, updating user");
+        setUser(session?.user ?? null);
+        if (session?.access_token && session?.refresh_token) {
+          await SecureStore.setItemAsync('supabase_access_token', session.access_token);
+          await SecureStore.setItemAsync('supabase_refresh_token', session.refresh_token);
+        }
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        console.log("User signed out");
+        await SecureStore.deleteItemAsync('supabase_access_token');
+        await SecureStore.deleteItemAsync('supabase_refresh_token');
+        setUser(null);
+        return;
+      }
+
+      // Default handling for other events (e.g. TOKEN_REFRESHED)
       if (session) {
-        console.log('Saving tokens to SecureStore');
-        console.log('Access token present:', !!session.access_token);
-        console.log('Refresh token present:', !!session.refresh_token);
-        
+        console.log("Saving tokens to SecureStore");
         await SecureStore.setItemAsync('supabase_access_token', session.access_token);
         await SecureStore.setItemAsync('supabase_refresh_token', session.refresh_token);
-
-        if (session?.access_token && session?.refresh_token) {
-          console.log('🔑 Session active after login (no need to re-set)');
-        }
-
         setUser(session.user);
-      } else {
-        console.log('Clearing tokens from SecureStore');
-        SecureStore.deleteItemAsync('supabase_access_token');
-        SecureStore.deleteItemAsync('supabase_refresh_token');
-        setUser(null);
       }
     });
     return () => listener.subscription.unsubscribe();
   }, [isInitialized]);
 
   const signOut = async () => {
+    //console.log("skipping signout.");
     console.log('Signing out...');
     await supabase.auth.signOut();
     await SecureStore.deleteItemAsync('supabase_access_token');

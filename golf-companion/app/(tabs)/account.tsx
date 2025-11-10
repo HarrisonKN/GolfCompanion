@@ -351,14 +351,19 @@ export default function AccountsScreen() {
   // Use useFocusEffect to handle screen focus properly
   useFocusEffect(
     React.useCallback(() => {
-      if (!authLoading && !user && !isRedirecting) {
-        console.log('No user found, redirecting to login');
-        safeNavigate('/login');
+      if (authLoading) {
+        console.log("⏳ Auth still loading — skipping redirect for now");
+        return;
+      }
+
+      if (!user && !authLoading) { //this was !isRedirecting
+        console.log("No user found, redirecting to login");
+        safeNavigate('/login');  //comment out for testing
         return;
       }
 
       // Always fetch latest profile and rounds when focused and user is present
-      if (!authLoading && user && isMounted) {
+      if (user && isMounted) {
         fetchProfile();
         fetchRounds();
       }

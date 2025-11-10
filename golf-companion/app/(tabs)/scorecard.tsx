@@ -309,13 +309,16 @@ export default function Scorecard() {
   // ------------------- Sync & Clear pending “scores” rows ---------------
 useFocusEffect(
   React.useCallback(() => {
-    if (!user || !selectedCourse) return;
+    if (!selectedCourse || players.length === 0) return;
+
     (async () => {
-      // 1️⃣ pull in the raw rows, including id
+      const playerIdsList = players.map(p => p.id).filter(Boolean);
+      if (playerIdsList.length === 0) return;
+
       const { data: scoreData, error: fetchError } = await supabase
         .from('scores')
-        .select('hole_number, score, putts')
-        .eq('player_id', user.id)
+        .select('player_id, hole_number, score, putts')
+        .in('player_id', playerIdsList)
         .eq('course_id', selectedCourse)
         .order('hole_number');
 
@@ -324,30 +327,26 @@ useFocusEffect(
         return;
       }
 
-      // 2️⃣ if nothing new, do not overwrite UI
       if (!scoreData || scoreData.length === 0) return;
 
-      // 3️⃣ merge into existing players[0].scores
       setPlayers(prev => {
-        const existing = prev[0] || { name: user?.email || 'You', scores: Array(holeCount).fill('') };
-        // copy the current first player's scores (or default blanks)
-        const merged = [...existing.scores];
+        const updated = prev.map(p => ({ ...p, scores: [...p.scores] }));
 
         for (const row of scoreData) {
-          const idx = (row.hole_number ?? 1) - 1;
-          if (idx >= 0 && idx < holeCount) {
-            // overlay each fetched hole_number
-            const scoreStr = `${row.score ?? ''}/${row.putts ?? ''}`;
-            merged[idx] = scoreStr.trim();
+          const playerIndex = updated.findIndex(pl => pl.id === row.player_id);
+          if (playerIndex >= 0) {
+            const idx = (row.hole_number ?? 1) - 1;
+            if (idx >= 0 && idx < holeCount) {
+              const scoreStr = `${row.score ?? ''}/${row.putts ?? ''}`.trim();
+              updated[playerIndex].scores[idx] = scoreStr;
+            }
           }
         }
 
-        return [{ ...existing, scores: merged }, ...prev.slice(1)];
+        return updated;
       });
-
-      // NOTE: We are NOT deleting here anymore; you can purge rows elsewhere after saving round
     })();
-  }, [user, selectedCourse])
+  }, [selectedCourse, players])
 );
 
   const addPlayer = () => {

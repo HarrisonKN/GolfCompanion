@@ -270,9 +270,18 @@ export default function CourseViewScreen() {
   // show/hide the score panel (start hidden as you asked)
   const [scoreVisible, setScoreVisible] = useState(false);
 
+  // --- Player score modal state ---
+  const [scoreModalVisible, setScoreModalVisible] = useState(false);
+  const [activePlayer, setActivePlayer] = useState<ScoreboardItem | null>(null);
+  const [tempScore, setTempScore] = useState(0);
+  const [tempPutts, setTempPutts] = useState(0);
+
   // speed-dial open/close
   const [fabOpen, setFabOpen] = useState(false);
   const fabAnim = useRef(new Animated.Value(0)).current;
+
+  //my position button 
+  const [buttonPressed, setButtonPressed] = useState(false);
 
   const toggleFab = () => {
     const to = fabOpen ? 0 : 1;
@@ -1088,11 +1097,18 @@ export default function CourseViewScreen() {
       if (baseIds.length === 0 && user?.id) baseIds = [user.id];
     }
 
-    // Fetch scores (game-first, fallback course)
-    let rows: { player_id: string; hole_number: number; score: number | null }[] = [];
+    // Fetch scores (hybrid: both course-only and game-based)
+    let rows: { player_id: string; hole_number: number; score: number | null, game_id?: string | null, course_id?: string | null }[] = [];
     try {
-      let q = supabase.from('scores').select('player_id, hole_number, score');
-      q = gid ? q.eq('game_id', gid) : q.eq('course_id', selectedCourse);
+      let q = supabase
+        .from('scores')
+        .select('player_id, hole_number, score, game_id, course_id');
+
+      if (gid) {
+        q = q.or(`game_id.eq.${gid},and(game_id.is.null,course_id.eq.${selectedCourse})`);
+      } else {
+        q = q.eq('course_id', selectedCourse);
+      }
 
       // Limit to today when not in a game (prevents old scores inflating totals)
       if (!gid) {
@@ -1502,6 +1518,75 @@ export default function CourseViewScreen() {
         </View>
       </View>
 
+      {/* Player score entry modal */}
+      <Modal visible={scoreModalVisible} transparent animationType="fade">
+        <View style={S.modalContainer}>
+          <View style={S.modalContent}>
+            <Text style={S.modalTitle}>
+              {activePlayer ? `Enter score for ${activePlayer.name}` : "Enter Score"}
+            </Text>
+
+            <View style={S.statControl}>
+              <Text style={S.statLabel}>Score</Text>
+              <Pressable onPress={() => setTempScore((s) => s + 1)} style={S.button}>
+                <Text style={S.buttonText}>＋</Text>
+              </Pressable>
+              <Text style={S.statValue}>{tempScore}</Text>
+              <Pressable onPress={() => setTempScore((s) => Math.max(0, s - 1))} style={S.button}>
+                <Text style={S.buttonText}>－</Text>
+              </Pressable>
+            </View>
+
+            <View style={S.statControl}>
+              <Text style={S.statLabel}>Putts</Text>
+              <Pressable onPress={() => setTempPutts((p) => p + 1)} style={S.button}>
+                <Text style={S.buttonText}>＋</Text>
+              </Pressable>
+              <Text style={S.statValue}>{tempPutts}</Text>
+              <Pressable onPress={() => setTempPutts((p) => Math.max(0, p - 1))} style={S.button}>
+                <Text style={S.buttonText}>－</Text>
+              </Pressable>
+            </View>
+
+            <View style={S.modalButtons}>
+              <Button title="Cancel" onPress={() => setScoreModalVisible(false)} />
+              <Button
+                title="Enter"
+                onPress={async () => {
+                  if (!activePlayer || !selectedHoleNumber) return;
+                  const selectedHole = holes.find(h => h.hole_number === selectedHoleNumber);
+                  if (!selectedHole) return;
+
+                  const payload: any = {
+                    player_id: activePlayer.player_id,
+                    course_id: selectedCourse!,
+                    hole_number: selectedHole.hole_number,
+                    score: tempScore,
+                    putts: tempPutts,
+                    created_by: user?.id ?? activePlayer.player_id,
+                  };
+
+                  const { error } = await supabase
+                    .from("scores")
+                    .upsert([payload], {
+                      onConflict: "player_id,course_id,hole_number",
+                    })
+                    .select();
+
+                  if (error) {
+                    showMessage(`Error saving score: ${error.message}`);
+                    return;
+                  }
+
+                  await refreshScoreboardRef.current?.();
+                  setScoreModalVisible(false);
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <MapView
         provider={PROVIDER_GOOGLE}
         ref={mapRef}
@@ -1514,7 +1599,7 @@ export default function CourseViewScreen() {
             longitudeDelta: 0.05,
           }
         }
-        showsUserLocation={!!location}
+        showsUserLocation={true}
         showsMyLocationButton={false}
         showsCompass={false}
         mapType="hybrid"
@@ -2027,18 +2112,28 @@ export default function CourseViewScreen() {
             {scoreboard.map((p) => {
               const first = (p.name || "").trim().split(" ")[0] || "Player";
               const initials = first.slice(0, 1).toUpperCase();
-              const toParStr =
-                p.toPar === 0 ? 'E' :
-                p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
+              // Compute display values for total strokes and toPar
+              const total = p.strokes ?? 0;
+              const toParDisplay =
+                p.toPar === 0 ? "E" : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
               return (
                 <View key={p.player_id} style={S.sbTile}>
-                  {p.avatar_url ? (
-                    <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
-                  ) : (
-                    <View style={S.sbAvatarCircle}>
-                      <Text style={S.sbAvatarCircleText}>{initials}</Text>
-                    </View>
-                  )}
+                  <Pressable
+                    onPress={() => {
+                      setActivePlayer(p);
+                      setTempScore(0);
+                      setTempPutts(0);
+                      setScoreModalVisible(true);
+                    }}
+                  >
+                    {p.avatar_url ? (
+                      <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
+                    ) : (
+                      <View style={S.sbAvatarCircle}>
+                        <Text style={S.sbAvatarCircleText}>{initials}</Text>
+                      </View>
+                    )}
+                  </Pressable>
                   <Text
                     style={S.sbPlayerName}
                     numberOfLines={1}
@@ -2047,7 +2142,7 @@ export default function CourseViewScreen() {
                     {first}
                   </Text>
                   <Text style={S.sbScoreText}>
-                    {p.strokes} ({toParStr})
+                    {total} ({toParDisplay})
                   </Text>
                 </View>
               );
@@ -2057,8 +2152,15 @@ export default function CourseViewScreen() {
 
       {/* Small Find My Location button */}
       <Pressable
+        onPressIn={() => setButtonPressed(true)}
+        onPressOut={() => setButtonPressed(false)}
         onPress={async () => {
           try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== "granted") {
+              console.warn("Permission to access location was denied");
+              return;
+            }
             const current = await Location.getCurrentPositionAsync({
               accuracy: Location.Accuracy.Balanced,
             });
@@ -2070,6 +2172,7 @@ export default function CourseViewScreen() {
                 longitudeDelta: 0.01,
               });
             }
+            setLocation(current); // ✅ update location state so blue dot refreshes
           } catch (e) {
             console.warn("⚠️ Could not get current location", e);
           }
@@ -2081,7 +2184,8 @@ export default function CourseViewScreen() {
           width: 38,
           height: 38,
           borderRadius: 19,
-          backgroundColor: "#111",
+          backgroundColor: buttonPressed ? "#333" : "#111", // darker when pressed
+          transform: [{ scale: buttonPressed ? 0.9 : 1 }], // scale effect
           alignItems: "center",
           justifyContent: "center",
           zIndex: 5000,
@@ -2603,3 +2707,5 @@ iconText: {
     sbBadgeOver: { backgroundColor: "#ef4444" },  // over par = red
     sbBadgeEven: { backgroundColor: "#4b5563" },  // even = gray
   });
+
+      

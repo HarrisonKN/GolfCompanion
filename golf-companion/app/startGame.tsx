@@ -101,12 +101,35 @@ export default function StartGameScreen() {
       .insert([{ name: courseName.trim() }])
       .select();
     setSavingCourse(false);
+
     if (!error && data && data.length > 0) {
       const newCourse = data[0];
+
+      // ✅ Automatically create 18 holes for this course
+      const holesData = Array.from({ length: 18 }, (_, i) => ({
+        course_id: newCourse.id,
+        hole_number: i + 1,
+        par: 0,
+        yardage: 0,
+      }));
+
+      const { error: holesError } = await supabase.from('holes').insert(holesData);
+      if (holesError) {
+        console.warn('Error creating holes:', holesError);
+      }
+
+      // ✅ Initialize par_values in GolfCoursesr
+      const parValues = Array(18).fill(0);
+      await supabase
+        .from('GolfCourses')
+        .update({ par_values: parValues })
+        .eq('id', newCourse.id);
+
+      // ✅ Continue updating UI
       setCourseItems((prev) => [
         { label: "➕ Add a course", value: "add_course" },
         ...prev.filter(item => item.value !== "add_course"),
-        { label: newCourse.name, value: newCourse.id }
+        { label: newCourse.name, value: newCourse.id },
       ]);
       setCourse(newCourse.id);
       setAddingCourse(false);
@@ -299,7 +322,16 @@ export default function StartGameScreen() {
           value={course}
           items={courseItems}
           setOpen={setCourseOpen}
-          setValue={setCourse}
+          setValue={(callback) => {
+            const newValue = typeof callback === "function" ? callback(course) : callback;
+            if (newValue === "add_course") {
+              setAddingCourse(true);
+              setCourse(null);
+            } else {
+              setAddingCourse(false);
+              setCourse(newValue);
+            }
+          }}
           setItems={setCourseItems}
           containerStyle={styles.containerCompact}
           style={styles.dropdownCompact}

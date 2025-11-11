@@ -725,7 +725,7 @@ export default function CourseViewScreen() {
       // Insert new course into Supabase (other columns will default to null)
       const { data, error } = await supabase
         .from("GolfCourses")
-        .insert({ name: newCourseName })
+        .insert({ name: newCourseName, par_values: Array(18).fill(0) })
         .select();
       if (error) throw error;
       const added = data![0];
@@ -1408,6 +1408,51 @@ export default function CourseViewScreen() {
           );
         }
       }
+      // --- NEW: sync par into GolfCourses.par_values (18-int array) ---
+      try {
+        console.log('Updating course:', selectedCourse, 'hole', selectedHole?.hole_number, 'par', par);
+        // Only attempt when we have a valid par and the selected hole number
+        if (typeof par === 'number' && selectedHole?.hole_number && selectedCourse) {
+          // Fetch the latest par_values for this course (fallback to 18 zeros)
+          const { data: courseRow } = await supabase
+            .from('GolfCourses')
+            .select('par_values')
+            .eq('id', selectedCourse)
+            .single();
+
+          let current: number[] = Array.isArray(courseRow?.par_values)
+            ? [...courseRow!.par_values]
+            : Array(18).fill(0);
+
+          // Ensure length 18
+          if (current.length !== 18) current = Array(18).fill(0).map((v, i) => current[i] ?? 0);
+
+          const idx = Math.max(0, Math.min(17, selectedHole.hole_number - 1));
+          current[idx] = par;
+
+          console.log("🧩 Calling update_par_value with:", {
+            course_id: selectedCourse,
+            hole_index: idx,
+            new_par: par
+          });
+
+          const { error: upErr } = await supabase.rpc('update_par_value', {
+            course_id: selectedCourse,
+            hole_index: idx,
+            new_par: par
+          });
+
+          if (!upErr) {
+            // keep local state in sync so UI reflects immediately
+            setCourses(prev => prev.map(c => c.id === selectedCourse ? { ...c, par_values: current } as any : c));
+          } else {
+            console.warn('Failed to update par_values on course:', upErr);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('par_values sync error:', syncErr);
+      }
+      // --- END NEW ---
     }
     setHoleEntryStep(0);
     setEntryPromptVisible(false);

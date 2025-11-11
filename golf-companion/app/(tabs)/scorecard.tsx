@@ -207,6 +207,33 @@ export default function Scorecard() {
     }, [user, selectedCourse, isNewGame])
   );
 
+  //------REFRESH PAR VALUES ON PAGE REFRESH FOR ADDNG COURSES --------
+    useFocusEffect(
+    React.useCallback(() => {
+      if (!selectedCourse) return;
+
+      (async () => {
+        const { data, error } = await supabase
+          .from("GolfCourses")
+          .select("par_values")
+          .eq("id", selectedCourse)
+          .single();
+
+        if (error) {
+          console.error("Error fetching par values:", error);
+          return;
+        }
+
+        if (data?.par_values && Array.isArray(data.par_values)) {
+          // Ensure it’s always exactly 18 entries
+          const normalized = [...data.par_values];
+          while (normalized.length < holeCount) normalized.push(4);
+          setParValues(normalized.slice(0, holeCount));
+        }
+      })();
+    }, [selectedCourse])
+  );
+
   //---------------HOOKS---------------------------------
   // Birdie detection effect
   useEffect(() => {

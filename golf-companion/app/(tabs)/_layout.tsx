@@ -68,7 +68,7 @@ export default function TabsLayout() {
       supabase.auth.getSession().then(({ data }) => {
         if (!data.session) {
           console.log("🔴 Confirmed no active session, redirecting to login");
-          router.replace("/login");
+        // router.replace("/login"); this makes it go straight to login can implement later if we want
         } else {
           console.log("🟢 Session actually valid, skipping redirect");
           setUser(data.session.user);

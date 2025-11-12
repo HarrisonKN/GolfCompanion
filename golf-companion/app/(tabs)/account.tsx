@@ -356,10 +356,15 @@ export default function AccountsScreen() {
         return;
       }
 
-      if (!user && !authLoading) { //this was !isRedirecting
+      /*if (!user && !authLoading) { //this was !isRedirecting
         console.log("No user found, redirecting to login");
         safeNavigate('/login');  //comment out for testing
         return;
+      }*/
+
+      if (!authLoading && !user) {
+        console.log("⚠️ No user yet — waiting for Supabase initialization, skipping redirect");
+        return; // don't navigate yet
       }
 
       // Always fetch latest profile and rounds when focused and user is present
@@ -752,13 +757,22 @@ const inviteChannel = supabase
     );
   }
 
-  // If no user after auth loads, don't render anything (navigation will happen)
-  // this prevents rendering the screen if user is not authenticated causing potential crash
-  if (!user) {
+  // Handle no user more safely (wait for auth and confirm session)
+  if (!user && !authLoading) {
+    console.log("⚠️ No user yet — confirming with Supabase before redirect...");
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        console.log("🔴 No active session, redirecting to login");
+        safeNavigate("/login");
+      } else {
+        console.log("🟢 Session found after recheck, skipping redirect");
+      }
+    });
+
     return (
       <View style={[styles(palette).screen, styles(palette).centerContent]}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <ThemedText style={styles(palette).loadingText}>Redirecting to login...</ThemedText>
+        <ThemedText style={styles(palette).loadingText}>Checking session...</ThemedText>
       </View>
     );
   }

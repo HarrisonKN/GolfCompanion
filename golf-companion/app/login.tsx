@@ -1,10 +1,17 @@
 // ------------------- IMPORTS -------------------------
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, Alert } from 'react-native';
+import RotatingText from "@/components/RotatingText";
+import { Image } from "react-native";
 import React, { useState } from 'react';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
 import * as SecureStore from 'expo-secure-store';
+import { ThemedView } from "@/components/ThemedView";
+import ParallaxScrollView from "@/components/ParallaxScrollView";
+import { useTheme } from "@/components/ThemeContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { PALETTES } from "@/constants/theme";
 
 // ------------------- LOGIN LOGIC -------------------------
 const signIn = async (email: string, password: string) => {
@@ -52,13 +59,18 @@ export default function LoginScreen() {
     }
   };
 
-  // ------------------- LOGIN UI -------------------------
   return (
     <View style={styles.container}>
+      <View style={styles.headerContainer}>
+        <Image source={require("@/assets/images/golf-logo.png")} style={styles.logo} resizeMode="contain" />
+        <View style={styles.textContainer}>
+          <ThemedText style={styles.title} type="title">Golf</ThemedText>
+          <RotatingText texts={["Companion", "Banter", "Stats", "Community"]} rotationInterval={1800} />
+        </View>
+      </View>
       <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
         <Text style={styles.backButtonText}>{'<'} Back</Text>
       </Pressable>
-      
       <ThemedText type="title" style={styles.title}>
         Welcome Back
       </ThemedText>
@@ -111,33 +123,49 @@ export default function LoginScreen() {
   );
 }
 
-// ------------------- LOGIN STYLING -------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 30,
     justifyContent: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: PALETTES.light.background,
+  },
+  headerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 30,
+  },
+  textContainer: {
+    flexDirection: "column",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    marginBottom: 0,
   },
   backButton: {
     position: 'absolute',
     top: 60,
     left: 30,
+    
   },
   backButtonText: {
-    color: '#3B82F6',
+    color: PALETTES.light.primary,
     fontWeight: 'bold',
     fontSize: 16,
   },
   title: {
     fontSize: 32,
     fontWeight: '700',
-    marginBottom: 40,
-    color: '#1E3A8A',
+    marginBottom: 5,
+    color: PALETTES.light.primary,
   },
   input: {
     height: 50,
-    backgroundColor: '#fff',
+    backgroundColor: PALETTES.light.white,
     borderRadius: 12,
     paddingHorizontal: 20,
     marginVertical: 12,
@@ -150,7 +178,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   button: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: PALETTES.light.secondary,
     paddingVertical: 14,
     borderRadius: 12,
     marginTop: 30,
@@ -168,7 +196,7 @@ const styles = StyleSheet.create({
     }),
   },
   buttonPressed: {
-    backgroundColor: '#2563EB',
+    backgroundColor: PALETTES.light.third,
   },
   buttonDisabled: {
     backgroundColor: '#9CA3AF',
@@ -185,7 +213,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   linkHighlight: {
-    color: '#3B82F6',
+    color: PALETTES.light.primary,
     fontWeight: '600',
   },
 });

@@ -1,36 +1,59 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
+import { GoogleAuth } from "https://esm.sh/google-auth-library@9.0.0";
 
 serve(async (req) => {
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
+  try {
+    const { token, title, body } = await req.json();
 
-  const { token, title, body, data } = await req.json();
+    if (!token) {
+      return new Response(JSON.stringify({ error: "Missing FCM token" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
-  const serverKey = Deno.env.get("FCM_SERVER_KEY");
-  if (!serverKey) {
-    return new Response("Missing FCM server key", { status: 500 });
-  }
+    const serviceAccountJson = Deno.env.get("FIREBASE_SERVICE_ACCOUNT");
+    if (!serviceAccountJson) {
+      throw new Error("Missing FIREBASE_SERVICE_ACCOUNT secret");
+    }
 
-  const response = await fetch("https://fcm.googleapis.com/fcm/send", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `key=${serverKey}`,
-    },
-    body: JSON.stringify({
-      to: token,
-      notification: {
-        title,
-        body,
+    const serviceAccount = JSON.parse(serviceAccountJson);
+
+    const auth = new GoogleAuth({
+      credentials: serviceAccount,
+      scopes: ["https://www.googleapis.com/auth/firebase.messaging"],
+    });
+
+    const client = await auth.getClient();
+    const projectId = serviceAccount.project_id;
+
+    const messagePayload = {
+      message: {
+        token,
+        notification: {
+          title: title || "⛳ Golf Companion",
+          body: body || "You received a new notification!",
+        },
       },
-      data: data || {},
-    }),
-  });
+    };
 
-  const result = await response.json();
+    const res = await client.request({
+      url: `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+      method: "POST",
+      data: messagePayload,
+    });
 
-  return new Response(JSON.stringify({ success: true, result }), {
-    headers: { "Content-Type": "application/json" },
-  });
+    console.log("✅ Push notification sent:", res.data);
+
+    return new Response(JSON.stringify({ success: true, response: res.data }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    console.error("❌ Error:", err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 });

@@ -218,6 +218,53 @@ export default function HomeScreen() {
                         text1: 'Push token saved!',
                         text2: fcmToken,
                       });
+
+                      // 🔔 Send push notifications to all friends
+                      const { data: friends, error: friendsError } = await supabase
+                        .from("friends")
+                        .select(`
+                          friend_id,
+                          profiles:profiles!friends_friend_id_profiles_fkey(id, full_name, fcm_token)
+                        `)
+                        .eq("user_id", supabaseUser);
+                      console.log("👥 Friends found:", friends);
+
+                      if (friendsError) {
+                        console.error("❌ Error fetching friends:", friendsError);
+                        Toast.show({
+                          type: 'error',
+                          text1: 'Failed to fetch friends',
+                          text2: friendsError.message,
+                        });
+                      } else if (friends && friends.length > 0) {
+                        for (const friend of friends) {
+                          const friendToken = friend.profiles?.[0]?.fcm_token;
+                          console.log(`🔔 Sending to ${friend.profiles?.[0]?.full_name} (${friend.friend_id})`);
+                          if (!friendToken) continue;
+                          const { error: notifError } = await supabase.functions.invoke("pushNotification", {
+                            body: {
+                              token: friendToken,
+                              title: "Golf Invite 🏌️‍♂️",
+                              body: "Your friend just invited you for a round!",
+                            },
+                          });
+                          if (notifError) {
+                            console.error("❌ Push error:", notifError);
+                          } else {
+                            console.log(`✅ Push sent to ${friend.profiles?.[0]?.full_name} (${friendToken})`);
+                          }
+                        }
+                        Toast.show({
+                          type: 'success',
+                          text1: 'Push notifications sent to all friends!',
+                        });
+                      } else {
+                        Toast.show({
+                          type: 'info',
+                          text1: 'No friends found to send notifications',
+                        });
+                      }
+                      // --- end friends notification block ---
                     }
                   } catch (err: any) {
                     Toast.show({

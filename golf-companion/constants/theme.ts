@@ -51,7 +51,9 @@ export const PALETTES = {
     yellow: "#FFFF00",
     success: "#22C55E",
     warning: "#F59E42",
-    main: '#111'
+    main: '#111',
+    sand: '#F5E9D3',
+    teal: '#DFF7F4'
   },
   dark: {
     primary: "#10B981",  

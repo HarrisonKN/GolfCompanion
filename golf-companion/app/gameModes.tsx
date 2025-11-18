@@ -12,6 +12,7 @@ import { View, Text, ScrollView, TouchableOpacity, Pressable, Image, Dimensions 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/components/supabase';
+import { PALETTES } from '@/constants/theme';
 
 const PLAYER_AVATAR_SIZE = 50; // was 72
 const GRID_COLS = 4;
@@ -209,12 +210,12 @@ const styles = {
   screenTitle: {
     fontSize: 22,
     fontWeight: '700' as const,
-    color: '#2563eb',
+    color: PALETTES.light.primary,
     marginBottom: 12,
     textAlign: 'center' as const,
   },
   playersContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: PALETTES.light.white,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -257,14 +258,14 @@ const styles = {
   },
   playerHandicap: {
     fontSize: 11,
-    color: '#2563eb',
+    color: PALETTES.light.third,
     fontWeight: '600' as const,
     marginTop: 4,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: '#2563eb',
+    color: PALETTES.light.primary,
     marginTop: 28,
     marginBottom: 12,
     textAlign: 'center' as const,
@@ -300,8 +301,8 @@ const styles = {
     overflow: 'hidden' as const,
   },
   gridCircleActive: {
-    borderColor: '#2563eb',
-    backgroundColor: '#DBEAFE',
+    borderColor: PALETTES.light.primary,
+    backgroundColor: PALETTES.light.teal,
   },
   gridIcon: {
     fontSize: 24,
@@ -311,7 +312,7 @@ const styles = {
   gridLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: '#1f2937',
+    color: PALETTES.light.third,
     marginTop: 6,
     maxWidth: CIRCLE_SIZE + 8,
     textAlign: 'center' as const,
@@ -322,7 +323,7 @@ const styles = {
     borderRadius: 16,
     padding: 16,
     borderWidth: 2,
-    borderColor: '#2563eb',
+    borderColor: PALETTES.light.secondary,
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -346,7 +347,7 @@ const styles = {
   clearModeBtn: {
     marginTop: 16,
     alignSelf: 'flex-start' as const,
-    backgroundColor: '#2563eb',
+    backgroundColor: PALETTES.light.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
@@ -367,7 +368,7 @@ const styles = {
     borderTopColor: '#e5e7eb',
   },
   beginButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: PALETTES.light.primary,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center' as const,

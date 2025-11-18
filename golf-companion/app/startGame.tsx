@@ -17,6 +17,7 @@ import { supabase } from '@/components/supabase';
 import { useAuth } from '@/components/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
+import { PALETTES } from '@/constants/theme';
 
 const COMPACT_H = 36;
 
@@ -465,8 +466,8 @@ export default function StartGameScreen() {
                 onPress={() => setInviteModalVisible(true)}
                 accessibilityLabel="Invite other users"
               >
-                <View style={[styles.storyAvatar, { borderColor: '#2563eb', backgroundColor: '#DBEAFE' }]}>
-                  <Text style={{ color: '#2563eb', fontSize: 28, fontWeight: '700' }}>+</Text>
+                <View style={[styles.storyAvatar, { borderColor: PALETTES.light.primary, backgroundColor: PALETTES.light.teal}]}>
+                  <Text style={{ color: PALETTES.light.primary, fontSize: 28, fontWeight: '700' }}>+</Text>
                 </View>
                 <Text style={styles.storyName} numberOfLines={1}>
                   Invite
@@ -614,7 +615,7 @@ const styles = {
   title: {
     fontSize: 26,
     fontWeight: '700' as '700',
-    color: '#2563eb',
+    color: PALETTES.light.primary,
     textAlign: 'center' as 'center',
     marginBottom: 18,
     letterSpacing: 1,
@@ -628,7 +629,7 @@ const styles = {
   sectionLabel: {
     fontWeight: '700' as '700',
     fontSize: 16,
-    color: '#2563eb',
+    color: PALETTES.light.primary,
     marginTop: 24,
     marginBottom: 8,
     textAlign: 'center' as 'center',
@@ -647,18 +648,18 @@ const styles = {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: PALETTES.light.background,
     alignItems: 'center' as 'center',
     justifyContent: 'center' as 'center',
     marginBottom: 4,
   },
   avatarInitial: {
-    color: '#2563eb',
+    color: PALETTES.light.third,
     fontWeight: '700' as '700',
     fontSize: 18,
   },
   playerName: {
-    fontSize: 12,
+    fontSize: 16,
     color: '#111827',
     textAlign: 'center' as 'center',
   },
@@ -675,12 +676,12 @@ const styles = {
     fontWeight: '700' as '700',
   },
   inviteSection: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: PALETTES.light.white,
     borderRadius: 12,
     padding: 12,
     marginBottom: 18,
     shadowColor: '#000',
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 2,
   },
@@ -701,7 +702,7 @@ const styles = {
     borderColor: 'transparent',
   },
   playerChipText: {
-    color: '#2563eb',
+    color: PALETTES.light.third,
     fontWeight: '600' as '600',
     fontSize: 14,
   },
@@ -724,7 +725,7 @@ const styles = {
     justifyContent: 'space-between' as 'space-between',
   },
   inviteButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: PALETTES.light.third,
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 14,
@@ -736,7 +737,7 @@ const styles = {
     fontSize: 14,
   },
   beginButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: PALETTES.light.primary,
     paddingVertical: 18,
     paddingHorizontal: 32,
     borderRadius: 14,
@@ -749,7 +750,7 @@ const styles = {
     transform: [{ scale: 1 }],
   },
   beginButtonPressed: {
-    backgroundColor: '#3B82F6',
+    backgroundColor:PALETTES.light.primary,
     shadowOpacity: 0.08,
     transform: [{ scale: 0.96 }],
   },
@@ -923,12 +924,12 @@ const styles = {
   inviteModalTitle: {
     fontSize: 18,
     fontWeight: '700' as '700',
-    color: '#2563eb',
+    color: PALETTES.light.primary,
   },
   inviteModalClose: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: PALETTES.light.white,
   },
   inviteSearchInputContainer: {
     borderWidth: 1,
@@ -958,7 +959,7 @@ const styles = {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2563eb',
+    backgroundColor: PALETTES.light.background,
     alignItems: 'center' as 'center',
     justifyContent: 'center' as 'center',
   },

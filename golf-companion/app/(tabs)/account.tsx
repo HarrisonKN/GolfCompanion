@@ -1510,7 +1510,7 @@ const styles = (palette: any) => StyleSheet.create({
     paddingVertical: SCREEN_HEIGHT * 0.02,
     borderBottomWidth: 1,
     borderBottomColor: palette.grey,
-    backgroundColor: palette.white,
+    backgroundColor: palette.background,
     shadowColor: palette.black,
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -1525,7 +1525,7 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingTop: SCREEN_HEIGHT * 0.04, // Move higher up
     paddingBottom: SCREEN_HEIGHT * 0.01, // More condensed
-    backgroundColor: palette.white,
+    backgroundColor: palette.background,
     borderBottomWidth: 0, // Remove bottom border for cleaner look
   },
 
@@ -1541,7 +1541,7 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingTop: SCREEN_HEIGHT * 0.005, // Minimal top padding
     paddingBottom: SCREEN_HEIGHT * 0.015, // Reduced bottom padding
-    backgroundColor: palette.white,
+    backgroundColor: palette.background,
     borderBottomWidth: 1,
     borderBottomColor: palette.grey,
   },
@@ -1574,7 +1574,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   container: {
     paddingHorizontal: SCREEN_WIDTH * 0.08,
-    paddingVertical: SCREEN_HEIGHT * 0.04,
+    paddingVertical: SCREEN_HEIGHT * 0.04
   },
   sectionTitle: {
     paddingTop: SCREEN_HEIGHT * 0.015,
@@ -1673,15 +1673,14 @@ const styles = (palette: any) => StyleSheet.create({
   roundTile: {
     width: SCREEN_WIDTH * 0.8,
     height: SCREEN_HEIGHT * 0.40,
-    backgroundColor: palette.white,
+    backgroundColor: palette.background,
     borderRadius: 16,
     padding: SCREEN_WIDTH * 0.045,
     marginRight: SCREEN_WIDTH * 0.05,
-    shadowColor: palette.black,
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
   },
   roundCourse: {
     fontSize: SCREEN_WIDTH * 0.045,
@@ -1702,11 +1701,12 @@ const styles = (palette: any) => StyleSheet.create({
   },
   roundStat: {
     fontSize: SCREEN_WIDTH * 0.035,
-    color: palette.textDark,
+    color: palette.textLight,
     marginBottom: SCREEN_HEIGHT * 0.002,
   },
   scorecardTable: {
     flexDirection: 'column',
+    color: palette.background
   },
   scorecardRow: {
     flexDirection: 'row',
@@ -1716,7 +1716,7 @@ const styles = (palette: any) => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.grey,
+    backgroundColor: palette.white,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
@@ -1724,7 +1724,7 @@ const styles = (palette: any) => StyleSheet.create({
     width: SCREEN_WIDTH * 0.11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.grey,
+    backgroundColor: palette.primary,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
     marginLeft: SCREEN_WIDTH * 0.01,
@@ -1732,13 +1732,13 @@ const styles = (palette: any) => StyleSheet.create({
   scorecardHeaderText: {
     fontSize: SCREEN_WIDTH * 0.03,
     fontWeight: '700',
-    color: palette.primary,
+    color: palette.textDark,
   },
   scorecardCellPlayer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.secondary,
+    backgroundColor: palette.white,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
@@ -1746,7 +1746,7 @@ const styles = (palette: any) => StyleSheet.create({
     width: SCREEN_WIDTH * 0.11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.secondary,
+    backgroundColor: palette.grey,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
     marginLeft: SCREEN_WIDTH * 0.01,
@@ -1849,18 +1849,17 @@ const styles = (palette: any) => StyleSheet.create({
   friendTile: {
     width: 90,
     height: 90,
-    backgroundColor: palette.white,
+    backgroundColor: palette.background,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: palette.grey,
-    shadowColor: palette.primary,
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+    //borderWidth: 1,
+    //borderColor: palette.grey,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
     padding: 6,
   },
   friendAvatarCircle: {
@@ -1915,7 +1914,7 @@ modalOverlay: {
   alignItems: 'center',
 },
 modalContainer: {
-  backgroundColor: palette.white,
+  backgroundColor: palette.background,
   borderRadius: 20,
   width: '95%', // Increased from 90% to 95%
   height: '85%', // Changed from maxHeight to fixed height
@@ -2101,15 +2100,15 @@ appInfoSection: {
   paddingHorizontal: 8,
 },
 appInfoContainer: {
-  backgroundColor: palette.white,
+  backgroundColor: palette.background,
   borderRadius: 12,
   padding: 16,
   marginHorizontal: SCREEN_WIDTH * 0.05,
-  shadowColor: palette.black,
-  shadowOpacity: 0.05,
-  shadowRadius: 4,
-  shadowOffset: { width: 0, height: 2 },
-  elevation: 2,
+  shadowColor: palette.shadow,
+  shadowOpacity: 0.35,
+  shadowRadius: 32,
+  elevation: 45,
+  marginBottom: 24,
 },
 appInfoRow: {
   flexDirection: 'row',
@@ -2126,7 +2125,7 @@ appInfoLabel: {
 },
 appInfoValue: {
   fontSize: 14,
-  color: palette.textDark,
+  color: palette.textLight,
   fontWeight: '500',
 },
 });

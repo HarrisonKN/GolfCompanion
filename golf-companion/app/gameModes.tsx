@@ -221,7 +221,7 @@ export default function GameModesScreen() {
   );
 }
 
-const styles = (palette) => ({
+const styles = (palette: any) => ({
   screenTitle: {
     fontSize: 22,
     fontWeight: '700' as const,

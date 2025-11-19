@@ -90,8 +90,8 @@ export const PALETTES = {
     background: "#06121F",    // deep charcoal navy
     secondary: "#0A1E33",     // slate navy
     third: "#11344F",         // deeper navy accent
-    textDark: "#E6F8F6",      // soft cool white
-    textLight: "#06121F",     // cool dusty blue-gray
+    textDark: "#06121F",      // soft cool white
+    textLight: "#E6F8F6",     // cool dusty blue-gray
     white: "#FFFFFF",
     black: "#000000",
     grey: "#4A5A6A",
@@ -116,7 +116,7 @@ export const PALETTES = {
     success: "#22C55E",
     warning: "#F59E42",
     main: "#111",
-    shadow: "#4C9A57",
+    shadow: "#5FE268",
   },
   alt2: { // Navy + Green
     primary: "#D4AF37",       // metallic gold accent
@@ -124,7 +124,7 @@ export const PALETTES = {
     secondary: "#111B33",     // cool navy layer
     third: "#1F2A48",         // rich slate navy
     error: "#EF4444",
-    textDark: "#F2F4F7",      // clean soft white
+    textDark: "#000000",      // clean soft white
     textLight: "#9AA4B2",     // muted cool grey-blue
     white: "#FFFFFF",
     black: "#000000",

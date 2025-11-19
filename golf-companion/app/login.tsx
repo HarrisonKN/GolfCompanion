@@ -28,6 +28,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { palette } = useTheme();
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -60,25 +61,25 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Image source={require("@/assets/images/golf-logo.png")} style={styles.logo} resizeMode="contain" />
-        <View style={styles.textContainer}>
-          <ThemedText style={styles.title} type="title">Golf</ThemedText>
+    <View style={styles(palette).container}>
+      <View style={styles(palette).headerContainer}>
+        <Image source={require("@/assets/images/golf-logo.png")} style={styles(palette).logo} resizeMode="contain" />
+        <View style={styles(palette).textContainer}>
+          <ThemedText style={styles(palette).title} type="title">Golf</ThemedText>
           <RotatingText texts={["Companion", "Banter", "Stats", "Community"]} rotationInterval={1800} />
         </View>
       </View>
-      <Pressable onPress={() => router.replace('/')} style={styles.backButton}>
-        <Text style={styles.backButtonText}>{'<'} Back</Text>
+      <Pressable onPress={() => router.replace('/')} style={styles(palette).backButton}>
+        <Text style={styles(palette).backButtonText}>{'<'} Back</Text>
       </Pressable>
-      <ThemedText type="title" style={styles.title}>
+      <ThemedText type="title" style={styles(palette).title}>
         Welcome Back
       </ThemedText>
 
       <TextInput
         placeholder="Email"
         placeholderTextColor="#888"
-        style={styles.input}
+        style={styles(palette).input}
         autoCapitalize="none"
         keyboardType="email-address"
         textContentType="emailAddress"
@@ -92,7 +93,7 @@ export default function LoginScreen() {
         placeholder="Password"
         placeholderTextColor="#888"
         secureTextEntry
-        style={styles.input}
+        style={styles(palette).input}
         textContentType="password"
         importantForAutofill="yes"
         value={password}
@@ -102,33 +103,33 @@ export default function LoginScreen() {
 
       <Pressable
         style={({ pressed }) => [
-          styles.button,
-          pressed && styles.buttonPressed,
-          loading && styles.buttonDisabled,
+          styles(palette).button,
+          pressed && styles(palette).buttonPressed,
+          loading && styles(palette).buttonDisabled,
         ]}
         onPress={handleLogin}
         disabled={loading}
       >
-        <ThemedText style={styles.buttonText}>
+        <ThemedText style={styles(palette).buttonText}>
           {loading ? 'Logging in...' : 'Login'}
         </ThemedText>
       </Pressable>
 
       <Pressable onPress={() => router.push('/signup')} disabled={loading}>
-        <ThemedText style={styles.linkText}>
-          Don't have an account? <Text style={styles.linkHighlight}>Sign Up</Text>
+        <ThemedText style={styles(palette).linkText}>
+          Don't have an account? <Text style={styles(palette).linkHighlight}>Sign Up</Text>
         </ThemedText>
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = (palette: any) => StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 30,
     justifyContent: 'center',
-    backgroundColor: PALETTES.light.background,
+    backgroundColor: palette.background,
   },
   headerContainer: {
     flexDirection: "row",
@@ -153,7 +154,7 @@ const styles = StyleSheet.create({
     
   },
   backButtonText: {
-    color: PALETTES.light.primary,
+    color: palette.primary,
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -161,11 +162,11 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     marginBottom: 5,
-    color: PALETTES.light.primary,
+    color: palette.primary,
   },
   input: {
     height: 50,
-    backgroundColor: PALETTES.light.white,
+    backgroundColor: palette.white,
     borderRadius: 12,
     paddingHorizontal: 20,
     marginVertical: 12,
@@ -178,11 +179,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   button: {
-    backgroundColor: PALETTES.light.secondary,
+    backgroundColor: palette.secondary,
     paddingVertical: 14,
     borderRadius: 12,
     marginTop: 30,
-    marginBottom: 18,
+    marginBottom: 24,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
     ...Platform.select({
       android: {
         elevation: 5,
@@ -196,24 +201,24 @@ const styles = StyleSheet.create({
     }),
   },
   buttonPressed: {
-    backgroundColor: PALETTES.light.third,
+    backgroundColor: palette.third,
   },
   buttonDisabled: {
     backgroundColor: '#9CA3AF',
   },
   buttonText: {
-    color: '#fff',
+    color: palette.textLight,
     textAlign: 'center',
     fontWeight: '700',
     fontSize: 18,
   },
   linkText: {
     textAlign: 'center',
-    color: '#555',
+    color: palette.textLight,
     fontSize: 15,
   },
   linkHighlight: {
-    color: PALETTES.light.primary,
+    color: palette.primary,
     fontWeight: '600',
   },
 });

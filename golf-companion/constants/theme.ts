@@ -91,7 +91,7 @@ export const PALETTES = {
     secondary: "#0A1E33",     // slate navy
     third: "#11344F",         // deeper navy accent
     textDark: "#E6F8F6",      // soft cool white
-    textLight: "#8FA9B8",     // cool dusty blue-gray
+    textLight: "#06121F",     // cool dusty blue-gray
     white: "#FFFFFF",
     black: "#000000",
     grey: "#4A5A6A",

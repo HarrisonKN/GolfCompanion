@@ -308,6 +308,7 @@ export default function StartGameScreen() {
         gameId: gid,
         playerNames: JSON.stringify(names),
         playerIds: JSON.stringify(ids),
+        playerAvatars: JSON.stringify(selectedPlayers.map(p => p.avatar_url || null)),
         newGame: '1',
       },
     });

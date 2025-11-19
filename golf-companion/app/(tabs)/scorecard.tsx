@@ -30,6 +30,7 @@ import {
   View,
   Animated,
   Easing,
+  Image,
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { captureRef } from 'react-native-view-shot';
@@ -46,7 +47,7 @@ type Course = {
   par_values: number[] | null; // allow null from DB
 };
 
-type PlayerRow = { id?: string; name: string; scores: string[] };
+type PlayerRow = { id?: string; name: string; avatar_url?: string | null; scores: string[] };
 
 type CourseDropdownItem = { label: string; value: string } | { label: string; value: 'add_course' };
 
@@ -101,7 +102,7 @@ export default function Scorecard() {
   const birdieLeft = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
 
   // grab courseId layerId from the URL
-  const { courseId, playerNames, playerIds, newGame, gameId } = useLocalSearchParams();
+  const { courseId, playerNames, playerIds, playerAvatars, newGame, gameId } = useLocalSearchParams();
 
   const isNewGame = String(Array.isArray(newGame) ? newGame[0] : newGame || '') === '1';
 
@@ -113,26 +114,37 @@ export default function Scorecard() {
     try {
       const rawNames = Array.isArray(playerNames) ? playerNames[0] : playerNames;
       const names = JSON.parse(String(rawNames)) as string[];
-  
+
       let ids: (string | undefined)[] = [];
       try {
         const rawIds = Array.isArray(playerIds) ? playerIds[0] : playerIds;
         ids = rawIds ? (JSON.parse(String(rawIds)) as string[]) : [];
       } catch {}
-  
+
+      let avatars: (string | null)[] = [];
+      try {
+        const rawAv = Array.isArray(playerAvatars) ? playerAvatars[0] : playerAvatars;
+        avatars = rawAv ? (JSON.parse(String(rawAv)) as (string | null)[]) : [];
+      } catch {}
+
       if (Array.isArray(names) && names.length) {
         setPlayers(
-          names.map((n, i) => ({
-            id: ids[i], // may be undefined for manual players
-            name: n,
-            scores: Array(holeCount).fill(''),
-          }))
+          names.map((n, i) => {
+            const raw = (n || '').toString().trim();
+            const firstName = raw.split(' ')[0] || raw || 'Player';
+            return {
+              id: ids[i], // may be undefined for manual players
+              name: firstName,
+              avatar_url: avatars[i] || null,
+              scores: Array(holeCount).fill(''),
+            };
+          })
         );
       }
     } catch (e) {
       console.warn('Invalid player params', e);
     }
-  }, [playerNames, playerIds]);
+  }, [playerNames, playerIds, playerAvatars]);
 
   useEffect(() => {
     if (courseId && typeof courseId === 'string') setSelectedCourse(courseId);
@@ -687,7 +699,30 @@ useFocusEffect(
                   <View style={styles(palette).row}>
                     {/* Name */}
                     <View style={styles(palette).nameCell}>
-                      <Text style={styles(palette).playerNameText}>{player.name}</Text>
+                      <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                        {player.avatar_url ? (
+                          <Image
+                            source={{ uri: player.avatar_url }}
+                            style={{ width: 40, height: 40, borderRadius: 20 }}
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              backgroundColor: palette.third,
+                              justifyContent: 'center',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Text style={{ color: palette.white, fontWeight: '700', fontSize: 12 }}>
+                              {player.name?.[0]?.toUpperCase() || '?'}
+                            </Text>
+                          </View>
+                        )}
+                        <Text style={styles(palette).playerNameText}>{player.name}</Text>
+                      </View>
                     </View>
 
                     {/* Holes 1-9 */}
@@ -927,19 +962,19 @@ const styles = (palette: any) => StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scorecardTitleWrap: {
-    backgroundColor: palette.primary,
+    backgroundColor: palette.backgroundV2,
     borderRadius: 24,
     paddingHorizontal: 20,
     paddingVertical: 8,
     alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
+    marginBottom: 24,
   },
   scorecardTitle: {
-  color: palette.white,
+  color: palette.primary,
   fontSize: 28,
   fontWeight: '800',
   letterSpacing: 0.5,
@@ -957,6 +992,8 @@ const styles = (palette: any) => StyleSheet.create({
     width: '100%',
     maxWidth: 900,
     alignSelf: 'center',
+    borderRadius: 32,
+    overflow: 'hidden',
   },
   horizontalScroll: {
     flexGrow: 0,
@@ -965,26 +1002,30 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: 0,
   },
   tableContainer: {
-  backgroundColor: palette.background,
-  borderRadius: 16,
-  padding: 12,
-  marginVertical: 12,
-  borderWidth: 1,
-  borderColor: '#00000012',
-  shadowColor: '#000',
-  shadowOpacity: 0.06,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 6 },
-  elevation: 4,
-  overflow: 'hidden',
-  minWidth: 900,
+    backgroundColor: palette.backgroundV2,
+    padding: 24,
+    marginVertical: 12,
+    marginBottom: 8,
+    minWidth: 900,
+    overflow: 'hidden',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.45,
+    shadowRadius: 48,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 50,
+    borderRadius: 32,
   },
   headerUnified: {
-  backgroundColor: palette.primary,
-  borderRadius: 12,
-  borderWidth: 0,
-  marginBottom: 12,
-  overflow: 'hidden',
+    backgroundColor: palette.primary,
+    borderRadius: 24,
+    borderWidth: 0,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 40,
   },
   headerDivider: {
     height: 1,
@@ -1021,7 +1062,7 @@ const styles = (palette: any) => StyleSheet.create({
   borderColor: '#FFFFFF33',
   flex: 1,
   },
-  headerNameCell: {
+  headerNameCell: { 
   backgroundColor: 'transparent',
   width: 120,
   height: 40,
@@ -1048,14 +1089,15 @@ const styles = (palette: any) => StyleSheet.create({
   row: {
   flexDirection: 'row',
   alignItems: 'center',
-  backgroundColor: palette.white,
-  borderBottomWidth: 1,
+  backgroundColor: 'transparent',
+  borderBottomWidth: 0,
   borderBottomColor: '#0000000D',
+  height: 60,
   },
   nameCell: {
   backgroundColor: palette.primary,
-  width: 120,
-  height: 40,
+  minWidth: 120,
+  height: 70,
   justifyContent: 'center',
   alignItems: 'center',
   borderTopLeftRadius: 12,
@@ -1066,21 +1108,22 @@ const styles = (palette: any) => StyleSheet.create({
   borderWidth: 0,
   },
   cell: {
-  backgroundColor: 'transparent',
+  backgroundColor: palette.white,
   minWidth: CELL_WIDTH,
-  height: 40,
+  height: 70,
   justifyContent: 'center',
   alignItems: 'center',
   borderRightWidth: 1,
   borderColor: '#00000012',
   flex: 1,
   position: 'relative', // <-- this enables the absolute child
+  borderRadius: 0,
   },
   cellTouchable: {
     minWidth: CELL_WIDTH,
-    height: 40,
+    height: 70,
     flex: 1,
-    borderRadius: 10,
+    borderRadius: 0,
     overflow: 'hidden',
   },
   cellText: {
@@ -1092,15 +1135,15 @@ const styles = (palette: any) => StyleSheet.create({
   },
   playerCard: {
     backgroundColor: 'transparent',
-    borderRadius: 18,
+    borderRadius: 20,
     marginVertical: 8,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: palette.primary,
+    shadowColor: palette.white,
+    shadowOpacity: 0.35,
+    shadowRadius: 36,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 35,
+    borderWidth: 0,
+    height: 70,
   },
   playerNameText: {
     color: palette.white,
@@ -1115,23 +1158,23 @@ const styles = (palette: any) => StyleSheet.create({
     letterSpacing: 1,
   },
   inOutCell: {
-  backgroundColor: 'transparent',
+  backgroundColor: palette.primary,
   minWidth: CELL_WIDTH,
-  height: 40,
+  height: 70,
   justifyContent: 'center',
   alignItems: 'center',
   borderRightWidth: 1,
-  borderColor: '#00000012',
+  borderColor: palette.black,
   flex: 1,
   },
   emptyCell: {
     width: 40,
-    height: 40,
+    height: 70,
     backgroundColor: 'transparent',
   },
   removeCell: {
     width: 40,
-    height: 40,
+    height: 70,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: palette.primary,
@@ -1157,13 +1200,10 @@ const styles = (palette: any) => StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 56,
     borderRadius: 28,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: palette.third,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
   },
   addPlayerButtonText: {
     color: palette.white,
@@ -1176,13 +1216,10 @@ const styles = (palette: any) => StyleSheet.create({
     paddingVertical: 18,
     paddingHorizontal: 56,
     borderRadius: 28,
-    shadowColor: palette.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: palette.third,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
   },
   saveButtonText: {
     color: palette.white,
@@ -1192,10 +1229,15 @@ const styles = (palette: any) => StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(22,33,62,0.55)',
+    backgroundColor: palette.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
+    marginBottom: 24,
   },
   modalView: {
     backgroundColor: palette.white,
@@ -1218,14 +1260,14 @@ const styles = (palette: any) => StyleSheet.create({
     fontSize: 17,
   },
   modalText: {
-    color: palette.white,
+    color: palette.textDark,
     fontSize: 22,
     marginBottom: 14,
     fontWeight: '700',
     textAlign: 'center',
   },
   confirmButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: palette.primary,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius:999,
@@ -1253,11 +1295,11 @@ const styles = (palette: any) => StyleSheet.create({
   marginTop: 12,
   borderWidth: 1,
   borderColor: '#0000001A',
-  shadowColor: '#000',
-  shadowOpacity: 0.06,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 3,
+  shadowColor: palette.shadow,
+  shadowOpacity: 0.35,
+  shadowRadius: 32,
+  elevation: 45,
+  marginBottom: 24,
   zIndex:3000,
 },
   dropdown: {

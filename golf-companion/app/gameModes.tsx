@@ -107,6 +107,7 @@ export default function GameModesScreen() {
         gameId: gid,
         playerIds: JSON.stringify(parsedIds),
         playerNames: JSON.stringify(players.map(p => p.name)),
+        playerAvatars: JSON.stringify(players.map(p => p.avatar_url || null)),
         gameMode: selectedMode?.id || '',
         tee: tee || '',
         newGame: '1',

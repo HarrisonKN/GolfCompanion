@@ -8,11 +8,13 @@
 */}
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { Stack } from "expo-router";
 import { View, Text, ScrollView, TouchableOpacity, Pressable, Image, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/components/supabase';
 import { PALETTES } from '@/constants/theme';
+import { useTheme } from '@/components/ThemeContext';
 
 const PLAYER_AVATAR_SIZE = 50; // was 72
 const GRID_COLS = 4;
@@ -41,6 +43,8 @@ export default function GameModesScreen() {
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [selectedMode, setSelectedMode] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
+
+  const { palette } = useTheme();
 
   const parsedIds: string[] = useMemo(() => {
     try { return playerIds ? JSON.parse(String(playerIds)) : []; } catch { return []; }
@@ -111,27 +115,36 @@ export default function GameModesScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+    <>
+      <Stack.Screen
+        options={{
+          title: "Game Modes",
+          headerStyle: { backgroundColor: palette.background },
+          headerTintColor: palette.primary,
+          headerShadowVisible: false,
+        }}
+      />
+      <View style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 140 }}>
-        <Text style={styles.screenTitle}>Players</Text>
-        <View style={styles.playersContainer}>
+        <Text style={styles(palette).screenTitle}>Players</Text>
+        <View style={styles(palette).playersContainer}>
           {loadingPlayers ? (
             <Text style={{ color: '#6b7280', textAlign: 'center', padding: 16 }}>Loading players…</Text>
           ) : players.length === 0 ? (
             <Text style={{ color: '#6b7280', textAlign: 'center', padding: 16 }}>No players found.</Text>
           ) : (
-            <View style={styles.playerRowSingle}>
+            <View style={styles(palette).playerRowSingle}>
               {players.slice(0, 4).map(p => (
-                <View key={p.id} style={styles.playerCardSmall}>
-                  <View style={styles.avatarSmall}>
+                <View key={p.id} style={styles(palette).playerCardSmall}>
+                  <View style={styles(palette).avatarSmall}>
                     {p.avatar_url ? (
                       <Image source={{ uri: p.avatar_url }} style={{ width: PLAYER_AVATAR_SIZE, height: PLAYER_AVATAR_SIZE, borderRadius: PLAYER_AVATAR_SIZE / 2 }} />
                     ) : (
-                      <Text style={styles.avatarInitial}>{(p.name?.[0] || '?').toUpperCase()}</Text>
+                      <Text style={styles(palette).avatarInitial}>{(p.name?.[0] || '?').toUpperCase()}</Text>
                     )}
                   </View>
-                  <Text style={styles.playerName} numberOfLines={1}>{p.name}</Text>
-                  <Text style={styles.playerHandicap}>
+                  <Text style={styles(palette).playerName} numberOfLines={1}>{p.name}</Text>
+                  <Text style={styles(palette).playerHandicap}>
                     {p.handicap !== null && p.handicap !== undefined ? `HCP ${p.handicap}` : 'HCP —'}
                   </Text>
                 </View>
@@ -140,9 +153,9 @@ export default function GameModesScreen() {
           )}
         </View>
 
-        <Text style={styles.sectionTitle}>Game Modes</Text>
+        <Text style={styles(palette).sectionTitle}>Game Modes</Text>
         
-        <View style={styles.grid}>
+        <View style={styles(palette).grid}>
             {gameModesData.map((mode, idx) => {
                 // Get icon and name from mode object
                 const icon = mode.icon;      // e.g. '⛳'
@@ -153,13 +166,13 @@ export default function GameModesScreen() {
                 <Pressable
                     key={mode.id}
                     onPress={() => setSelectedMode(mode)}
-                    style={styles.gridItem}
+                    style={styles(palette).gridItem}
                 >
                     {/* Icon inside a styled circle */}
-                    <View style={[styles.gridCircle, isActive && styles.gridCircleActive]}>
-                        <Text style={styles.gridIcon}>{icon}</Text>
+                    <View style={[styles(palette).gridCircle, isActive && styles(palette).gridCircleActive]}>
+                        <Text style={styles(palette).gridIcon}>{icon}</Text>
                         <Text
-                            style={[styles.gridLabel, isActive && { color: '#2563eb' }]} numberOfLines={1}>{name}
+                            style={[styles(palette).gridLabel, isActive && { color: '#2563eb' }]} numberOfLines={1}>{name}
                         </Text>
                     </View>
                     {/* Game mode name below the icon */}
@@ -170,59 +183,61 @@ export default function GameModesScreen() {
         </View>
 
         {selectedMode && (
-          <View style={styles.modeDetail}>
+          <View style={styles(palette).modeDetail}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={styles.detailIcon}>{selectedMode.icon}</Text>
-              <Text style={styles.detailTitle}>{selectedMode.name}</Text>
+              <Text style={styles(palette).detailIcon}>{selectedMode.icon}</Text>
+              <Text style={styles(palette).detailTitle}>{selectedMode.name}</Text>
             </View>
-            <Text style={styles.detailDesc}>{selectedMode.description}</Text>
+            <Text style={styles(palette).detailDesc}>{selectedMode.description}</Text>
             <TouchableOpacity
               onPress={() => setSelectedMode(null)}
-              style={styles.clearModeBtn}
+              style={styles(palette).clearModeBtn}
               activeOpacity={0.8}
             >
-              <Text style={styles.clearModeText}>Clear Selection</Text>
+              <Text style={styles(palette).clearModeText}>Clear Selection</Text>
             </TouchableOpacity>
           </View>
         )}
       </ScrollView>
 
-      <View style={styles.bottomBar}>
+      <View style={[styles(palette).bottomBar, { backgroundColor: palette.background }]}>
         <TouchableOpacity
           onPress={handleStart}
           disabled={!selectedMode || creating}
           style={[
-            styles.beginButton,
+            styles(palette).beginButton,
             (!selectedMode || creating) && { opacity: 0.5 },
           ]}
           activeOpacity={0.9}
         >
-          <Text style={styles.beginButtonText}>
+          <Text style={styles(palette).beginButtonText}>
             {creating ? 'Starting…' : 'Begin Game'}
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+      </View>
+    </>
   );
 }
 
-const styles = {
+const styles = (palette) => ({
   screenTitle: {
     fontSize: 22,
     fontWeight: '700' as const,
-    color: PALETTES.light.primary,
+    color: palette.primary,
     marginBottom: 12,
     textAlign: 'center' as const,
   },
   playersContainer: {
-    backgroundColor: PALETTES.light.white,
+    backgroundColor: palette.background,
     borderRadius: 14,
     paddingVertical: 12,
     paddingHorizontal: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
+    marginBottom: 24,
   },
   playerRowSingle: {
     flexDirection: 'row' as const,
@@ -241,31 +256,31 @@ const styles = {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     borderWidth: 2,
-    borderColor: '#C7D2FE',
+    borderColor: palette.primary,
     marginBottom: 6,
     overflow: 'hidden' as const,
   },
   avatarInitial: {
     fontSize: 28,
     fontWeight: '700' as const,
-    color: '#2563eb',
+    color: palette.textLight,
   },
   playerName: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: '#111827',
+    color: palette.textLight,
     textAlign: 'center' as const,
   },
   playerHandicap: {
     fontSize: 11,
-    color: PALETTES.light.third,
+    color: palette.third,
     fontWeight: '600' as const,
     marginTop: 4,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: PALETTES.light.primary,
+    color: palette.primary,
     marginTop: 28,
     marginBottom: 12,
     textAlign: 'center' as const,
@@ -274,14 +289,15 @@ const styles = {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     justifyContent: 'flex-start' as const,
-    backgroundColor: '#fff',
+    backgroundColor: palette.background,
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
+    marginBottom: 24,
   },
   gridItem: {
     width: ITEM_SIZE,
@@ -293,7 +309,7 @@ const styles = {
     width: CIRCLE_SIZE,
     height: CIRCLE_SIZE,
     borderRadius: CIRCLE_SIZE / 2,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: palette.secondary,
     borderWidth: 2,
     borderColor: 'transparent',
     alignItems: 'center' as const,
@@ -301,8 +317,8 @@ const styles = {
     overflow: 'hidden' as const,
   },
   gridCircleActive: {
-    borderColor: PALETTES.light.primary,
-    backgroundColor: PALETTES.light.teal,
+    borderColor: palette.primary,
+    backgroundColor: palette.teal,
   },
   gridIcon: {
     fontSize: 24,
@@ -312,19 +328,19 @@ const styles = {
   gridLabel: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: PALETTES.light.third,
+    color: palette.textLight,
     marginTop: 6,
     maxWidth: CIRCLE_SIZE + 8,
     textAlign: 'center' as const,
   },
   modeDetail: {
     marginTop: 20,
-    backgroundColor: '#ffffff',
+    backgroundColor: palette.background,
     borderRadius: 16,
     padding: 16,
     borderWidth: 2,
-    borderColor: PALETTES.light.secondary,
-    shadowColor: '#000',
+    borderColor: palette.secondary,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
@@ -336,24 +352,24 @@ const styles = {
   detailTitle: {
     fontSize: 20,
     fontWeight: '700' as const,
-    color: '#1f2937',
+    color: palette.textLight,
   },
   detailDesc: {
     marginTop: 12,
     fontSize: 14,
     lineHeight: 20,
-    color: '#374151',
+    color:  palette.textLight,
   },
   clearModeBtn: {
     marginTop: 16,
     alignSelf: 'flex-start' as const,
-    backgroundColor: PALETTES.light.primary,
+    backgroundColor: palette.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
   },
   clearModeText: {
-    color: '#fff',
+    color: palette.textLight,
     fontWeight: '700' as const,
     fontSize: 14,
   },
@@ -363,12 +379,12 @@ const styles = {
     right: 0,
     bottom: 0,
     padding: 16,
-    backgroundColor: 'rgba(248,250,252,0.95)',
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    backgroundColor: palette.background,
+    //borderTopWidth: 1,
+    //borderTopColor: '#e5e7eb',
   },
   beginButton: {
-    backgroundColor: PALETTES.light.primary,
+    backgroundColor: palette.primary,
     paddingVertical: 16,
     borderRadius: 14,
     alignItems: 'center' as const,
@@ -378,9 +394,9 @@ const styles = {
     elevation: 8,
   },
   beginButtonText: {
-    color: '#fff',
+    color: palette.textLight,
     fontWeight: '700' as const,
     fontSize: 18,
     letterSpacing: 0.5,
   },
-};
+});

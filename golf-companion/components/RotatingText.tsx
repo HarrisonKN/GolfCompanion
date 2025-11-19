@@ -2,6 +2,7 @@
 import { COLORS } from "@/constants/theme"; //Importing Color themes for consistency
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, View } from "react-native";
+import { useTheme } from "@/components/ThemeContext";
 
 interface RotatingTextProps {
   texts: string[];
@@ -12,6 +13,7 @@ export default function RotatingText({
   texts,
   rotationInterval = 2000,
 }: RotatingTextProps) {
+  const { palette } = useTheme();
   const [index, setIndex] = useState(0);
   const translateY = useRef(new Animated.Value(30)).current;
 
@@ -43,7 +45,7 @@ export default function RotatingText({
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: palette.primary }]}>
       <Animated.Text style={[styles.text, { transform: [{ translateY }] }]}>
         {texts[index]}
       </Animated.Text>
@@ -57,7 +59,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 8,
-    backgroundColor: COLORS.secondary,
     borderRadius: 8,
   },
   text: {

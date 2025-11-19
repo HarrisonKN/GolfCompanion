@@ -965,7 +965,7 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: 0,
   },
   tableContainer: {
-  backgroundColor: palette.white,
+  backgroundColor: palette.background,
   borderRadius: 16,
   padding: 12,
   marginVertical: 12,
@@ -1198,7 +1198,7 @@ const styles = (palette: any) => StyleSheet.create({
     padding: 24,
   },
   modalView: {
-    backgroundColor: palette.grey,
+    backgroundColor: palette.white,
     borderRadius: 18,
     padding: 20,
     width: '85%',
@@ -1210,7 +1210,7 @@ const styles = (palette: any) => StyleSheet.create({
     elevation: 5,
   },
   modalInput: {
-    backgroundColor: palette.background,
+    backgroundColor: palette.black,
     color: palette.black,
     padding: 16,
     marginVertical: 14,
@@ -1268,7 +1268,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   dropdownContainer: {
   backgroundColor: palette.white,
-  borderColor: '#0000001A',
+  borderColor: palette.black,
   borderWidth: 1,
   borderRadius: 12,
   },

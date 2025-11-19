@@ -3,7 +3,7 @@ import { useColorScheme } from 'react-native';
 import { PALETTES } from '@/constants/theme';
 import * as SecureStore from 'expo-secure-store';
 
-type ThemeMode = 'system' | 'light' | 'dark';
+type ThemeMode = 'system' | 'light' | 'dark' | 'alt1' | 'alt2' | 'alt3';
 
 interface ThemeContextType {
   mode: ThemeMode;
@@ -26,7 +26,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     (async () => {
       const storedMode = await SecureStore.getItemAsync('theme_mode');
-      if (storedMode === 'light' || storedMode === 'dark' || storedMode === 'system') {
+      if (
+        storedMode === 'light' ||
+        storedMode === 'dark' ||
+        storedMode === 'system' ||
+        storedMode === 'alt1' ||
+        storedMode === 'alt2' ||
+        storedMode === 'alt3'
+      ) {
         setModeState(storedMode as ThemeMode);
       }
     })();
@@ -39,8 +46,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   useEffect(() => {
-    const scheme = mode === 'system' ? systemScheme : mode;
-    setPalette(PALETTES[scheme]);
+    const scheme =
+      mode === 'system'
+        ? systemScheme
+        : mode; 
+
+    if (PALETTES[scheme]) {
+      setPalette(PALETTES[scheme]);
+    }
   }, [mode, systemScheme]);
 
   return (

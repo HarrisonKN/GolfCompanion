@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/components/ThemeContext';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -17,24 +17,37 @@ export default function SettingsScreen() {
       <ThemedText style={{ fontWeight: '700', marginBottom: 12, color: palette.textDark }}>
         Theme
       </ThemedText>
-      <View style={{ flexDirection: 'row', gap: 16, marginBottom: 32 }}>
-        {['system', 'light', 'dark'].map((themeMode) => (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ flexDirection: 'row', gap: 16 }}
+        style={{ marginBottom: 32 }}
+      >
+        {['system', 'light', 'dark', 'alt1', 'alt2', 'alt3'].map((themeMode) => (
           <Pressable
             key={themeMode}
             style={{
               backgroundColor: mode === themeMode ? palette.primary : palette.grey,
-              paddingVertical: 12,
-              paddingHorizontal: 24,
+              paddingVertical: 8,
+              paddingHorizontal: 16,
               borderRadius: 12,
+              height: 40,
+              justifyContent: 'center',
             }}
             onPress={() => setMode(themeMode as any)}
           >
             <ThemedText style={{ color: palette.white, fontWeight: '700' }}>
-              {themeMode.charAt(0).toUpperCase() + themeMode.slice(1)}
+              {themeMode === 'alt1'
+                ? 'Forest'
+                : themeMode === 'alt2'
+                ? 'Navy'
+                : themeMode === 'alt3'
+                ? 'Mint'
+                : themeMode.charAt(0).toUpperCase() + themeMode.slice(1)}
             </ThemedText>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Help & Support Section */}
       <ThemedText style={{ fontWeight: '700', marginBottom: 12, color: palette.textDark }}>

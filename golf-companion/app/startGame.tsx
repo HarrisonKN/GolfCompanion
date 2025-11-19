@@ -9,7 +9,7 @@ players around the screen.
 
 */}
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity, Image, Modal, Dimensions, FlatList } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity, Image, Modal, Dimensions, FlatList, StyleSheet } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
@@ -18,21 +18,24 @@ import { useAuth } from '@/components/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
 import { PALETTES } from '@/constants/theme';
+import { useTheme } from '@/components/ThemeContext';
 
 const COMPACT_H = 36;
 
 function ArrowDown({ style }: { style?: any }) {
+  const { palette } = useTheme();
   return (
-    <View style={[style, styles.iconCompact]}>
-      <Text style={styles.iconText}>▾</Text>
+    <View style={[style, styles(palette).iconCompact]}>
+      <Text style={styles(palette).iconText}>▾</Text>
     </View>
   );
 }
 
 function ArrowUp({ style }: { style?: any }) {
+  const { palette } = useTheme();
   return (
-    <View style={[style, styles.iconCompact]}>
-      <Text style={styles.iconText}>▴</Text>
+    <View style={[style, styles(palette).iconCompact]}>
+      <Text style={styles(palette).iconText}>▴</Text>
     </View>
   );
 }
@@ -40,6 +43,7 @@ function ArrowUp({ style }: { style?: any }) {
 export default function StartGameScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { palette } = useTheme();
 
   // Course dropdown state
   const [courseOpen, setCourseOpen] = useState(false);
@@ -309,11 +313,13 @@ export default function StartGameScreen() {
     });
   };
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Start a New Game</Text>
-        <Text style={styles.subtitle}>
+return (
+    <ScrollView contentContainerStyle={styles(palette).container}>
+      <View style={{ position: 'relative' }}>
+        
+        <View style={styles(palette).card}>
+        <Text style={styles(palette).title}>Start a New Game</Text>
+        <Text style={styles(palette).subtitle}>
           Select your course, tee, and invite players to begin your round!
         </Text>
         {/* Course Picker */}
@@ -334,23 +340,23 @@ export default function StartGameScreen() {
             }
           }}
           setItems={setCourseItems}
-          containerStyle={styles.containerCompact}
-          style={styles.dropdownCompact}
-          textStyle={styles.textCompact}
-          placeholderStyle={styles.placeholderCompact}
-          arrowIconContainerStyle={styles.iconCompact}
+          containerStyle={styles(palette).containerCompact}
+          style={styles(palette).dropdownCompact}
+          textStyle={styles(palette).textCompact}
+          placeholderStyle={styles(palette).placeholderCompact}
+          arrowIconContainerStyle={styles(palette).iconCompact}
           ArrowDownIconComponent={ArrowDown}
           ArrowUpIconComponent={ArrowUp}
           listMode="MODAL"
           modalProps={{ animationType: "slide", transparent: true }}
           modalContentContainerStyle={{
-            backgroundColor: '#f5f5f5',
+            backgroundColor: palette.background,
             maxHeight: 300,
             marginHorizontal: 20,
             borderRadius: 8,
           }}
-          dropDownContainerStyle={styles.dropdownContainer}
-          listItemLabelStyle={styles.textCompact}
+          dropDownContainerStyle={styles(palette).dropdownContainer}
+          listItemLabelStyle={styles(palette).textCompact}
           zIndex={2000}
         />
         {/* Add-course inline UI (appears when "➕ Add a course" is selected) */}
@@ -390,35 +396,35 @@ export default function StartGameScreen() {
           setOpen={setTeeOpen}
           setValue={setTee}
           setItems={setTeeItems}
-          containerStyle={styles.containerCompact}
-          style={styles.dropdownCompact}
-          textStyle={styles.textCompact}
-          placeholderStyle={styles.placeholderCompact}
-          arrowIconContainerStyle={styles.iconCompact}
+          containerStyle={styles(palette).containerCompact}
+          style={styles(palette).dropdownCompact}
+          textStyle={styles(palette).textCompact}
+          placeholderStyle={styles(palette).placeholderCompact}
+          arrowIconContainerStyle={styles(palette).iconCompact}
           ArrowDownIconComponent={ArrowDown}
           ArrowUpIconComponent={ArrowUp}
           listMode="MODAL"
           modalProps={{ animationType: "slide", transparent: true }}
           modalContentContainerStyle={{
-            backgroundColor: '#f5f5f5',
+            backgroundColor: palette.background,
             maxHeight: 300,
             marginHorizontal: 20,
             borderRadius: 8,
           }}
-          dropDownContainerStyle={styles.dropdownContainer}
-          listItemLabelStyle={styles.textCompact}
+          dropDownContainerStyle={styles(palette).dropdownContainer}
+          listItemLabelStyle={styles(palette).textCompact}
           zIndex={2000}
         />
 
         {/* Selected Players Section */}
-        <Text style={styles.sectionLabel}>Selected Players</Text>
-        <View style={styles.selectedPlayersCompactRow}>
+        <Text style={styles(palette).sectionLabel}>Selected Players</Text>
+        <View style={styles(palette).selectedPlayersCompactRow}>
           {selectedPlayers.length === 0 ? (
-            <Text style={{ color: '#888', textAlign: 'center' }}>No players selected yet.</Text>
+            <Text style={{ color: palette.textLight, textAlign: 'center' }}>No players selected yet.</Text>
           ) : (
             selectedPlayers.slice(0, 4).map(player => (
-              <View key={player.id} style={styles.playerCardSmall}>
-                <View style={styles.avatarSmall}>
+              <View key={player.id} style={styles(palette).playerCardSmall}>
+                <View style={styles(palette).avatarSmall}>
                   {player.avatar_url ? (
                     <Image
                       source={{ uri: player.avatar_url }}
@@ -429,17 +435,17 @@ export default function StartGameScreen() {
                       }}
                     />
                   ) : (
-                    <Text style={styles.avatarInitial}>
+                    <Text style={styles(palette).avatarInitial}>
                       {(player.name?.[0] || '?').toUpperCase()}
                     </Text>
                   )}
                 </View>
-                <Text style={styles.playerName} numberOfLines={1}>{player.name}</Text>
+                <Text style={styles(palette).playerName} numberOfLines={1}>{player.name}</Text>
                 <TouchableOpacity
                   onPress={() => removePlayer(player.id)}
-                  style={styles.removePlayerCompactBtn}
+                  style={styles(palette).removePlayerCompactBtn}
                 >
-                  <Text style={styles.removePlayerCompactText}>Remove</Text>
+                  <Text style={styles(palette).removePlayerCompactText}>Remove</Text>
                 </TouchableOpacity>
               </View>
             ))
@@ -447,8 +453,8 @@ export default function StartGameScreen() {
         </View>
 
         {/* Invite Section (Friends + Invite Button) */}
-        <View style={styles.inviteSection}>
-          <Text style={styles.sectionLabel}>Invite Friends</Text>
+        <View style={styles(palette).inviteSection}>
+          <Text style={styles(palette).sectionLabel}>Invite Friends</Text>
 
           {availableFriends.length === 0 ? (
             <Text style={{ color: '#888', textAlign: 'center' }}>All friends selected.</Text>
@@ -456,20 +462,20 @@ export default function StartGameScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              style={styles.storyRow}
-              contentContainerStyle={styles.storyScroll}
+              style={styles(palette).storyRow}
+              contentContainerStyle={styles(palette).storyScroll}
             >
               {/* Circular + button to open search modal */}
               <Pressable
                 key="invite-button"
-                style={styles.storyItem}
+                style={styles(palette).storyItem}
                 onPress={() => setInviteModalVisible(true)}
                 accessibilityLabel="Invite other users"
               >
-                <View style={[styles.storyAvatar, { borderColor: PALETTES.light.primary, backgroundColor: PALETTES.light.teal}]}>
-                  <Text style={{ color: PALETTES.light.primary, fontSize: 28, fontWeight: '700' }}>+</Text>
+                <View style={[styles(palette).storyAvatar, { borderColor: palette.primary, backgroundColor: palette.primary}]}>
+                  <Text style={{ color: palette.textLight, fontSize: 28, fontWeight: '700' }}>+</Text>
                 </View>
-                <Text style={styles.storyName} numberOfLines={1}>
+                <Text style={styles(palette).storyName} numberOfLines={1}>
                   Invite
                 </Text>
               </Pressable>
@@ -477,22 +483,22 @@ export default function StartGameScreen() {
               {availableFriends.map(friend => (
                 <Pressable
                   key={friend.id}
-                  style={styles.storyItem}
+                  style={styles(palette).storyItem}
                   onPress={() => selectFriend(friend)}
                 >
-                  <View style={styles.storyAvatar}>
+                  <View style={styles(palette).storyAvatar}>
                     {friend.avatar_url ? (
                       <Image
                         source={{ uri: friend.avatar_url }}
-                        style={styles.storyAvatarImage}
+                        style={styles(palette).storyAvatarImage}
                       />
                     ) : (
-                      <Text style={styles.storyInitial}>
+                      <Text style={styles(palette).storyInitial}>
                         {(friend.name?.[0] || '?').toUpperCase()}
                       </Text>
                     )}
                   </View>
-                  <Text style={styles.storyName} numberOfLines={1}>
+                  <Text style={styles(palette).storyName} numberOfLines={1}>
                     {friend.name}
                   </Text>
                 </Pressable>
@@ -510,19 +516,19 @@ export default function StartGameScreen() {
           transparent
           onRequestClose={() => setInviteModalVisible(false)}
         >
-          <View style={styles.inviteModalOverlay}>
-            <View style={styles.inviteModalContainer}>
-              <View style={styles.inviteModalHeader}>
-                <Text style={styles.inviteModalTitle}>Find players</Text>
-                <Pressable onPress={() => setInviteModalVisible(false)} style={styles.inviteModalClose}>
+          <View style={styles(palette).inviteModalOverlay}>
+            <View style={styles(palette).inviteModalContainer}>
+              <View style={styles(palette).inviteModalHeader}>
+                <Text style={styles(palette).inviteModalTitle}>Find players</Text>
+                <Pressable onPress={() => setInviteModalVisible(false)} style={styles(palette).inviteModalClose}>
                   <Text style={{ fontSize: 18, color: '#111827' }}>✕</Text>
                 </Pressable>
               </View>
 
               <View style={{ padding: 12 }}>
-                <View style={styles.inviteSearchInputContainer}>
+                <View style={styles(palette).inviteSearchInputContainer}>
                   <TextInput
-                    style={styles.inviteSearchInput}
+                    style={styles(palette).inviteSearchInput}
                     placeholder="Search by name or email..."
                     placeholderTextColor="#888"
                     value={inviteSearch}
@@ -540,7 +546,7 @@ export default function StartGameScreen() {
                   data={inviteResults}
                   keyExtractor={(u: any) => u.id}
                   keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={styles.inviteResultsContent}
+                  contentContainerStyle={styles(palette).inviteResultsContent}
                   ListEmptyComponent={
                     <Text style={{ textAlign: 'center', color: '#888', paddingVertical: 12 }}>
                       {inviteSearch.trim() ? 'No users found' : 'Type to search for players'}
@@ -550,14 +556,14 @@ export default function StartGameScreen() {
                     const alreadySelected = selectedPlayers.some(p => p.id === u.id);
                     return (
                       <Pressable
-                        style={styles.inviteResultRow}
+                        style={styles(palette).inviteResultRow}
                         onPress={() => {
                           if (!alreadySelected) inviteOther(u.id, u.full_name || 'Unknown', u.avatar_url || null);
                         }}
                         disabled={alreadySelected}
                         accessibilityLabel={`Invite ${u.full_name || 'Unknown'}`}
                       >
-                        <View style={styles.inviteResultAvatar}>
+                        <View style={styles(palette).inviteResultAvatar}>
                           {u.avatar_url ? (
                             <Image source={{ uri: u.avatar_url }} style={{ width: 36, height: 36, borderRadius: 18 }} />
                           ) : (
@@ -567,10 +573,10 @@ export default function StartGameScreen() {
                           )}
                         </View>
                         <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={styles.inviteResultName}>{u.full_name || 'Unknown'}</Text>
-                          {!!u.email && <Text style={styles.inviteResultEmail}>{u.email}</Text>}
+                          <Text style={styles(palette).inviteResultName}>{u.full_name || 'Unknown'}</Text>
+                          {!!u.email && <Text style={styles(palette).inviteResultEmail}>{u.email}</Text>}
                         </View>
-                        <Text style={[styles.inviteResultAction, alreadySelected && { opacity: 0.5 }]}>
+                        <Text style={[styles(palette).inviteResultAction, alreadySelected && { opacity: 0.5 }]}>
                           {alreadySelected ? 'Selected' : 'Add'}
                         </Text>
                       </Pressable>
@@ -585,51 +591,66 @@ export default function StartGameScreen() {
         {/* BEGIN Button */}
         <TouchableOpacity
           onPress={handleBegin}
-          style={[styles.beginButton /*, pressed && styles.beginButtonPressed */]}
+          style={[styles(palette).beginButton /*, pressed && styles.beginButtonPressed */]}
           activeOpacity={0.9}
         >
-          <Text style={styles.beginButtonText}>Next</Text>
+          <Text style={styles(palette).beginButtonText}>Next</Text>
         </TouchableOpacity>
+        </View>
       </View>
     </ScrollView>
   );
 }
 const INVITE_MODAL_MAX_HEIGHT = Math.round(Dimensions.get('window').height * 0.85);
-const styles = {
+const styles = (palette: any) => StyleSheet.create({
   container: {
     flexGrow: 1,
     justifyContent: 'center' as 'center',
     padding: 24,
-    backgroundColor: '#f8fafc',
+    backgroundColor: palette.background,
   },
+//   cardGlow: {
+//   position: 'absolute',
+//   top: -50,
+//   left: -50,
+//   right: -50,
+//   bottom: -50,
+//   borderRadius: 48,
+//   backgroundColor: palette.primary,
+//   opacity: 0.06,
+//   shadowColor: palette.primary,
+//   shadowOffset: { width: 0, height: 0 },
+//   shadowRadius: ,
+//   elevation: 60,
+// },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: palette.background,
+    borderRadius: 40,
     padding: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.35,
+    shadowRadius: 32,
+    elevation: 45,
     marginBottom: 24,
   },
   title: {
     fontSize: 26,
     fontWeight: '700' as '700',
-    color: PALETTES.light.primary,
+    color: palette.primary,
     textAlign: 'center' as 'center',
     marginBottom: 18,
     letterSpacing: 1,
   },
   subtitle: {
     fontSize: 16,
-    color: '#555',
+    color: palette.textLight,
     textAlign: 'center' as 'center',
     marginBottom: 18,
   },
   sectionLabel: {
     fontWeight: '700' as '700',
     fontSize: 16,
-    color: PALETTES.light.primary,
+    color: palette.primary,
     marginTop: 24,
     marginBottom: 8,
     textAlign: 'center' as 'center',
@@ -648,19 +669,19 @@ const styles = {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: PALETTES.light.background,
+    backgroundColor: palette.background,
     alignItems: 'center' as 'center',
     justifyContent: 'center' as 'center',
     marginBottom: 4,
   },
   avatarInitial: {
-    color: PALETTES.light.third,
+    color: palette.textLight,
     fontWeight: '700' as '700',
     fontSize: 18,
   },
   playerName: {
     fontSize: 16,
-    color: '#111827',
+    color: palette.textLight,
     textAlign: 'center' as 'center',
   },
   removePlayerCompactBtn: {
@@ -676,14 +697,10 @@ const styles = {
     fontWeight: '700' as '700',
   },
   inviteSection: {
-    backgroundColor: PALETTES.light.white,
+    backgroundColor: palette.secondary,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 18
   },
   playerList: {
     flexDirection: 'row' as 'row',
@@ -702,12 +719,12 @@ const styles = {
     borderColor: 'transparent',
   },
   playerChipText: {
-    color: PALETTES.light.third,
+    color: palette.third,
     fontWeight: '600' as '600',
     fontSize: 14,
   },
   searchInput: {
-    backgroundColor: '#e3e3e3',
+    backgroundColor: palette.background,
     borderRadius: 8,
     padding: 8,
     marginBottom: 8,
@@ -725,7 +742,7 @@ const styles = {
     justifyContent: 'space-between' as 'space-between',
   },
   inviteButton: {
-    backgroundColor: PALETTES.light.third,
+    backgroundColor: palette.third,
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 14,
@@ -737,7 +754,7 @@ const styles = {
     fontSize: 14,
   },
   beginButton: {
-    backgroundColor: PALETTES.light.primary,
+    backgroundColor: palette.primary,
     paddingVertical: 18,
     paddingHorizontal: 32,
     borderRadius: 14,
@@ -750,7 +767,7 @@ const styles = {
     transform: [{ scale: 1 }],
   },
   beginButtonPressed: {
-    backgroundColor:PALETTES.light.primary,
+    backgroundColor:palette.primary,
     shadowOpacity: 0.08,
     transform: [{ scale: 0.96 }],
   },
@@ -764,12 +781,12 @@ const styles = {
     textShadowRadius: 4,
   },
   dropdown: {
-    backgroundColor: '#e3e3e3',
+    backgroundColor: palette.background,
     borderColor: '#3B82F6',
     marginBottom: 8,
   },
   dropdownContainer: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: palette.background,
     borderColor: '#3B82F6',
   },
   containerCompact: {
@@ -788,7 +805,7 @@ const styles = {
   textCompact: {
     fontSize: 14,
     lineHeight: 18,
-    color: '#222',
+    color: palette.textLight,
   },
   placeholderCompact: {
     fontSize: 14,
@@ -826,7 +843,7 @@ const styles = {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: palette.primary,
     alignItems: 'center' as 'center',
     justifyContent: 'center' as 'center',
     borderWidth: 2,
@@ -843,14 +860,14 @@ const styles = {
     borderRadius: 28,
   },
   storyInitial: {
-    color: '#2563eb',
+    color: palette.textLight,
     fontWeight: '700' as '700',
     fontSize: 18,
   },
   storyName: {
     marginTop: 6,
     fontSize: 12,
-    color: '#111827',
+    color: palette.textLight,
     textAlign: 'center' as 'center',
   },
   storyNameConfirm: {
@@ -905,13 +922,15 @@ const styles = {
     alignItems: 'center' as 'center',
     padding: 16,
   },
+
   inviteModalContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: palette.primary,
     borderRadius: 16,
     width: '95%' as const,
     maxHeight: INVITE_MODAL_MAX_HEIGHT,
     overflow: 'hidden' as 'hidden',
   },
+  // no idea what this changes
   inviteModalHeader: {
     flexDirection: 'row' as 'row',
     alignItems: 'center' as 'center',
@@ -919,22 +938,25 @@ const styles = {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: palette.grey,
   },
+   // no idea what this changes
   inviteModalTitle: {
     fontSize: 18,
     fontWeight: '700' as '700',
-    color: PALETTES.light.primary,
+    color: palette.primary,
   },
+   // no idea what this changes
   inviteModalClose: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: PALETTES.light.white,
+    backgroundColor: palette.white,
   },
+   // no idea what this changes
   inviteSearchInputContainer: {
     borderWidth: 1,
     borderColor: '#d1d5db',
-    backgroundColor: '#f9fafb',
+    backgroundColor: palette.background,
     borderRadius: 10,
     paddingHorizontal: 12,
   },
@@ -959,7 +981,7 @@ const styles = {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: PALETTES.light.background,
+    backgroundColor: palette.background,
     alignItems: 'center' as 'center',
     justifyContent: 'center' as 'center',
   },
@@ -978,4 +1000,4 @@ const styles = {
     fontSize: 14,
     paddingHorizontal: 8,
   },
-};
+});

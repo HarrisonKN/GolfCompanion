@@ -425,10 +425,10 @@ const styles = (palette: PaletteType) => StyleSheet.create({
   featureText:{
     fontSize: 14,
     textAlign: 'center',
-    color: palette.textDark,
+    color: palette.textLight,
   },
   featureTitle: {
-    color: palette.textDark, 
+    color: palette.textLight, 
     fontWeight: 'bold',
     fontSize: 16,
     textAlign: 'center',
@@ -444,7 +444,7 @@ const styles = (palette: PaletteType) => StyleSheet.create({
   authTitle: {
     marginBottom: 12,
     fontWeight: 'bold',
-    color: palette.textDark,
+    color: palette.textLight,
   },
   buttonRow: {
     backgroundColor: palette.background,
@@ -494,12 +494,12 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     letterSpacing: 0.5,
   },
   text: {
-    color: palette.secondary,
+    color: palette.textLight,
   },
   welcomeText: {
     textAlign: 'center',
     fontSize: 14,
-    color: palette.textDark,
+    color: palette.textLight,
   },
   contentContainer: {
     flexGrow: 1,

@@ -48,6 +48,10 @@ export default function LoginScreen() {
       const data = await signIn(email, password);
       console.log('Login successful', data);
 
+      // Debug: Verify user session after login
+      const { data: userCheck } = await supabase.auth.getUser();
+      console.log('Authenticated user:', userCheck?.user);
+
       // Small delay to allow Supabase to persist session before navigation
       await new Promise(resolve => setTimeout(resolve, 500));
 

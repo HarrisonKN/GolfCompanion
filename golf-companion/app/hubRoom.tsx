@@ -932,7 +932,7 @@ const styles = (palette: any) => StyleSheet.create({
     marginHorizontal: 12,
     borderRadius: 16,
     elevation: 2,
-    shadowColor: palette.primary,
+    shadowColor: palette.primary,   
     shadowOpacity: 0.08,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 1 },

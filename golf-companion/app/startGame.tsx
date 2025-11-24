@@ -9,6 +9,7 @@ players around the screen.
 
 */}
 import React, { useState, useEffect } from 'react';
+import * as Location from "expo-location";
 import { View, Text, Pressable, ScrollView, TextInput, TouchableOpacity, Image, Modal, Dimensions, FlatList, StyleSheet } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { useRouter } from 'expo-router';
@@ -41,6 +42,71 @@ function ArrowUp({ style }: { style?: any }) {
 }
 
 export default function StartGameScreen() {
+  // --- Live Location Sharing ---
+  const locationWatcher = React.useRef<Location.LocationSubscription | null>(null);
+
+  const startSharingLocation = React.useCallback(async (courseId: string, holeNumber: number) => {
+    console.log("📍 Starting live location sharing…", courseId, holeNumber);
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    console.log("📍 Permission status:", status);
+
+    if (status !== "granted") {
+      console.log("❌ Location permission denied");
+      return;
+    }
+
+    try {
+      locationWatcher.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 5000,
+          distanceInterval: 5,
+        },
+        async (loc) => {
+          const { latitude, longitude } = loc.coords;
+          console.log("📍 Location update:", latitude, longitude);
+
+          const userRes = await supabase.auth.getUser();
+          const uid = userRes.data.user?.id;
+          if (!uid) {
+            console.log("❌ No user ID found for location sharing");
+            return;
+          }
+
+          const { error } = await supabase.from("friend_locations").upsert({
+            user_id: uid,
+            course_id: courseId,
+            hole_number: holeNumber,
+            latitude,
+            longitude,
+          });
+
+          if (error) {
+            console.log("❌ Supabase upsert error:", error);
+          } else {
+            console.log("✅ Supabase location updated");
+          }
+        }
+      );
+
+      console.log("✅ Live location watcher started");
+    } catch (err) {
+      console.log("❌ Error starting location watcher:", err);
+    }
+  }, []);
+
+  const stopSharingLocation = React.useCallback(() => {
+    console.log("🛑 Stopping location sharing…");
+
+    if (locationWatcher.current) {
+      locationWatcher.current.remove();
+      locationWatcher.current = null;
+      console.log("🛑 Location watcher stopped");
+    } else {
+      console.log("⚠️ No active location watcher to stop");
+    }
+  }, []);
   const router = useRouter();
   const { user } = useAuth();
   const { palette } = useTheme();
@@ -300,6 +366,8 @@ export default function StartGameScreen() {
     }
 
     await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({ ids, course, gameId: gid }));
+
+    await startSharingLocation(course as string, 1);
 
     router.push({
       pathname: '/gameModes',

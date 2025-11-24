@@ -136,6 +136,17 @@ type ScoreboardItem = {
   holesPlayed: number;
 };
 
+type FriendLocation = {
+  user_id: string;
+  course_id: string | null;
+  hole_number: number | null;
+  latitude: number;
+  longitude: number;
+  updated_at: string;
+  name: string;
+  avatar_url: string | null;
+};
+
 // ------------------- GEO HELPERS (pure; OK at module scope) -------------------------
 // Bearing in degrees from point A -> B (0..360)
 function bearingDeg(
@@ -239,6 +250,9 @@ export default function CourseViewScreen() {
 
   const lastFlewCourseRef = useRef<string | null>(null);
 
+  // Cache for friend profile info
+  const profileCache = useRef<Map<string, { full_name: string; avatar_url: string | null }>>(new Map()).current;
+
   // --- animated crossfade overlay for hole transitions (our addition) ---
   const transitionOpacity = useRef(new Animated.Value(0)).current;
   const switchingCourseRef = useRef(false);
@@ -251,6 +265,8 @@ export default function CourseViewScreen() {
   const [topPadPx, setTopPadPx] = useState(0); // space covered by dropdown stack
   const [scoreH, setScoreH] = useState(0); // measured height of score overlay
   const [actionsH, setActionsH] = useState(0); // measured height of action buttons
+  // --- Friend Live Locations ---
+  const [friendLocations, setFriendLocations] = useState<FriendLocation[]>([]);
 
   // your styles use these bottoms in px; keep in sync with styles:
   const SCORE_BOTTOM = 75;
@@ -869,6 +885,95 @@ export default function CourseViewScreen() {
     if (selectedCourse)
       switchingCourseRef.current = true;
       fetchHoles();
+  }, [selectedCourse]);
+
+  // --- Live Friend Location Subscription ---
+  useEffect(() => {
+    if (!selectedCourse) return;
+
+    const loadFriends = async () => {
+      const { data } = await supabase
+        .from("friend_locations")
+        .select("*")
+        .eq("course_id", selectedCourse);
+      if (data) {
+        const enriched: FriendLocation[] = [];
+        const rows = data as any[];
+        for (const row of rows) {
+          const uid: string = row.user_id;
+          let prof = profileCache.get(uid);
+          if (!prof) {
+            const { data: fetched } = await supabase
+              .from("profiles")
+              .select("full_name, avatar_url")
+              .eq("id", uid)
+              .single();
+            prof = {
+              full_name: fetched?.full_name ?? "Friend",
+              avatar_url: fetched?.avatar_url ?? null,
+            };
+            profileCache.set(uid, prof);
+          }
+          enriched.push({
+            user_id: uid,
+            course_id: row.course_id ?? null,
+            hole_number: row.hole_number ?? null,
+            latitude: row.latitude,
+            longitude: row.longitude,
+            updated_at: row.updated_at,
+            name: prof.full_name,
+            avatar_url: prof.avatar_url,
+          });
+        }
+        setFriendLocations(enriched);
+      }
+    };
+    loadFriends();
+
+    const channel = supabase
+      .channel("friend_locations_channel")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friend_locations" },
+        async (payload) => {
+          const row: any = payload.new;
+          const uid: string = row.user_id;
+          let prof = profileCache.get(uid);
+          if (!prof) {
+            const { data: fetched } = await supabase
+              .from("profiles")
+              .select("full_name, avatar_url")
+              .eq("id", uid)
+              .single();
+            prof = {
+              full_name: fetched?.full_name ?? "Friend",
+              avatar_url: fetched?.avatar_url ?? null,
+            };
+            profileCache.set(uid, prof);
+          }
+
+          const enriched: FriendLocation = {
+            user_id: uid,
+            course_id: row.course_id ?? null,
+            hole_number: row.hole_number ?? null,
+            latitude: row.latitude,
+            longitude: row.longitude,
+            updated_at: row.updated_at,
+            name: prof.full_name,
+            avatar_url: prof.avatar_url,
+          };
+
+          setFriendLocations((prev) => {
+            const without = prev.filter((f) => f.user_id !== enriched.user_id);
+            return [...without, enriched];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [selectedCourse]);
 
   const selectedHole = holes.find((h) => h.hole_number === selectedHoleNumber);
@@ -1581,9 +1686,19 @@ export default function CourseViewScreen() {
                 // last hole → finish confirmation
                 setStepPromptMessage("Finish round?\nThis will show the scorecard.");
                 setShowStepConfirm(true);
-                setStepPromptConfirm(() => () => {
+                setStepPromptConfirm(() => async () => {
                   setShowStepConfirm(false);
                   setStepPromptMessage(null);
+                  // Stop sharing location by clearing the user's friend location
+                  if (user?.id) {
+                    const { error: flErr } = await supabase
+                      .from("friend_locations")
+                      .delete()
+                      .eq("user_id", user.id);
+                    if (flErr) {
+                      console.warn("Error clearing friend location", flErr);
+                    }
+                  }
                   if (user?.id && selectedCourse) {
                     router.push({
                       pathname: "/scorecard",
@@ -1759,7 +1874,31 @@ export default function CourseViewScreen() {
           }
         }}
       >
-        {/* Tee marker */}
+        {/* Friend Live Location Markers */}
+        {friendLocations
+          .filter((f) => f.user_id !== user?.id)
+          .map((f) => (
+          <Marker
+            key={`friend-${f.user_id}`}
+            coordinate={{
+              latitude: f.latitude,
+              longitude: f.longitude,
+            }}
+            title={f.name || "Friend"}
+            description={`Hole ${f.hole_number ?? "?"}`}
+          >
+            <Image
+              source={f.avatar_url ? { uri: f.avatar_url } : require("@/assets/images/defaultAvatar.png")}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                borderWidth: 2,
+                borderColor: "white",
+              }}
+            />
+          </Marker>
+        ))}
         {selectedHole?.tee_latitude != null &&
           selectedHole?.tee_longitude != null && (
             <Marker

@@ -745,39 +745,25 @@ const inviteChannel = supabase
     };
   }, [user?.id]);
 
-  // Early returns for loading and error states
-  if (!isMounted || authLoading || isRedirecting) {
+  // --- CLEAN AUTH LOADING & REDIRECT LOGIC ---
+
+  // 1. While AuthContext is restoring session
+  if (authLoading) {
     return (
       <View style={[styles(palette).screen, styles(palette).centerContent]}>
         <ActivityIndicator size="large" color="#3B82F6" />
-        <ThemedText style={styles(palette).loadingText}>
-          {isRedirecting ? 'Redirecting...' : 'Loading...'}
-        </ThemedText>
+        <ThemedText style={styles(palette).loadingText}>Loading...</ThemedText>
       </View>
     );
   }
 
-  // Handle no user more safely (wait for auth and confirm session)
-  if (!user && !authLoading) {
-    console.log("⚠️ No user yet — confirming with Supabase before redirect...");
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        console.log("🔴 No active session, redirecting to login");
-        safeNavigate("/login");
-      } else {
-        console.log("🟢 Session found after recheck, skipping redirect");
-      }
-    });
-
-    return (
-      <View style={[styles(palette).screen, styles(palette).centerContent]}>
-        <ActivityIndicator size="large" color="#3B82F6" />
-        <ThemedText style={styles(palette).loadingText}>Checking session...</ThemedText>
-      </View>
-    );
+  // 2. When auth has finished restoring, and no user exists → redirect
+  if (!user) {
+    safeNavigate("/login");
+    return null;
   }
 
-  // Show loading while fetching profile
+  // 3. If profile fetch is running
   if (loading) {
     return (
       <View style={[styles(palette).screen, styles(palette).centerContent]}>
@@ -787,7 +773,7 @@ const inviteChannel = supabase
     );
   }
 
-  // Show error state
+  // 4. Error fetching profile
   if (error) {
     return (
       <View style={[styles(palette).screen, styles(palette).centerContent]}>
@@ -802,7 +788,7 @@ const inviteChannel = supabase
     );
   }
 
-  // Show message if no profile (shouldn't happen with auto-creation)
+  // 5. Profile missing (rare case)
   if (!profile) {
     return (
       <View style={[styles(palette).screen, styles(palette).centerContent]}>

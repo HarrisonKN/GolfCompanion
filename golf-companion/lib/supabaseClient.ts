@@ -8,9 +8,9 @@ const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storage: {
-      getItem: SecureStore.getItemAsync,
-      setItem: SecureStore.setItemAsync,
-      removeItem: SecureStore.deleteItemAsync,
+      getItem: (key) => SecureStore.getItemAsync(key),
+      setItem: (key, value) => SecureStore.setItemAsync(key, value),
+      removeItem: (key) => SecureStore.deleteItemAsync(key),
     },
     autoRefreshToken: true,
     persistSession: true,

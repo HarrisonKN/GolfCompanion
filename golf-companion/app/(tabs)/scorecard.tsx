@@ -92,7 +92,8 @@ export default function Scorecard() {
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
 
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
-  const [selectedCell, setSelectedCell] = useState<{ playerIndex: number; holeIndex: number } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ playerIndex?: number; teamId?: string; holeIndex: number } | null>(null);
+  const [teamScores, setTeamScores] = useState<Record<string, string[]>>({});
 
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
@@ -108,16 +109,35 @@ export default function Scorecard() {
   const scrambleTeams = useMemo(() => {
     if (!teamParam) return null;
     try {
-      return JSON.parse(String(teamParam));
+      const raw = JSON.parse(String(teamParam));
+      if (!Array.isArray(raw)) return null;
+
+      return raw.map((t: any, idx: number) => ({
+        team_number:
+          typeof t.team_number === 'number'
+            ? t.team_number
+            : typeof t.id === 'number'
+            ? t.id
+            : idx + 1,
+        name: t.name ?? `Team ${idx + 1}`,
+        players: Array.isArray(t.players) ? t.players : [],
+      }));
     } catch {
       return null;
     }
   }, [teamParam]);
 
   const isScramble = gameMode === 'scramble';
+  const [dbTeams, setDbTeams] = useState<any[]>([]);
 
   const isNewGame = String(Array.isArray(newGame) ? newGame[0] : newGame || '') === '1';
 
+  //Troubleshooting
+useEffect(() => {
+  console.log("teamParam:", teamParam);
+  console.log("scrambleTeams RAW:", scrambleTeams);
+  console.log("dbTeams:", dbTeams);
+}, [teamParam, scrambleTeams, dbTeams]);
 
 
   // Initialize players from Start Game route param (names -> empty scores)
@@ -157,6 +177,26 @@ export default function Scorecard() {
       console.warn('Invalid player params', e);
     }
   }, [playerNames, playerIds, playerAvatars]);
+
+  useEffect(() => {
+  if (!isScramble) return;
+
+  const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+  if (!gid) return;
+
+  (async () => {
+    const { data, error } = await supabase
+      .from("game_teams")
+      .select("*")
+      .eq("game_id", gid);
+
+    if (!error && data) {
+      setDbTeams(data);
+    } else {
+      console.warn("Failed to load game_teams:", error);
+    }
+  })();
+}, [isScramble, gameId]);
 
   useEffect(() => {
     if (courseId && typeof courseId === 'string') setSelectedCourse(courseId);
@@ -262,7 +302,10 @@ export default function Scorecard() {
   // Birdie detection effect
   useEffect(() => {
     if (!selectedCell) return;
-    const latestScore = players[selectedCell.playerIndex]?.scores[selectedCell.holeIndex];
+    const latestScore =
+    selectedCell.playerIndex !== undefined
+      ? players[selectedCell.playerIndex]?.scores[selectedCell.holeIndex]
+      : '';
     const cls = classifyScore(latestScore, parValues[selectedCell.holeIndex]);
     if (cls === 'birdie') {
       setShowBirdieAnimation(true);
@@ -362,49 +405,100 @@ export default function Scorecard() {
 
   //----------------Sync & Clear pending “scores” rows---------------
   // Whenever this screen is focused, grab any recently-entered hole scores,
-  // show them in your table, then delete them from Supabase.
+  // show them in your table (players or teams), then delete them from Supabase.
   // ------------------- Sync & Clear pending “scores” rows ---------------
-useFocusEffect(
-  React.useCallback(() => {
-    if (!selectedCourse || players.length === 0) return;
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!selectedCourse) return;
 
-    (async () => {
-      const playerIdsList = players.map(p => p.id).filter(Boolean);
-      if (playerIdsList.length === 0) return;
+      // Scramble mode: sync team-based scores using team_id + game_id
+      if (isScramble && scrambleTeams && scrambleTeams.length > 0) {
+        (async () => {
+          const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+          if (!gid) return;
 
-      const { data: scoreData, error: fetchError } = await supabase
-        .from('scores')
-        .select('player_id, hole_number, score, putts')
-        .in('player_id', playerIdsList)
-        .eq('course_id', selectedCourse)
-        .order('hole_number');
+          const teamIds = scrambleTeams
+            .map((t: any) => {
+              const realTeam = dbTeams.find(dt => dt.team_number === t.team_number);
+              return realTeam?.id;
+            })
+            .filter(Boolean);
+          if (teamIds.length === 0) return;
 
-      if (fetchError) {
-        console.error('Error fetching scores', fetchError);
-        return;
-      }
+          const { data: scoreData, error: fetchError } = await supabase
+            .from('scores')
+            .select('team_id, hole_number, score, putts')
+            .eq('game_id', gid)
+            .in('team_id', teamIds)
+            .eq('course_id', selectedCourse)
+            .order('hole_number');
 
-      if (!scoreData || scoreData.length === 0) return;
+          if (fetchError) {
+            console.error('Error fetching team scores', fetchError);
+            return;
+          }
 
-      setPlayers(prev => {
-        const updated = prev.map(p => ({ ...p, scores: [...p.scores] }));
+          const initial: Record<string, string[]> = {};
+          for (const tid of teamIds) {
+            initial[tid] = Array(holeCount).fill('');
+          }
 
-        for (const row of scoreData) {
-          const playerIndex = updated.findIndex(pl => pl.id === row.player_id);
-          if (playerIndex >= 0) {
-            const idx = (row.hole_number ?? 1) - 1;
-            if (idx >= 0 && idx < holeCount) {
-              const scoreStr = `${row.score ?? ''}/${row.putts ?? ''}`.trim();
-              updated[playerIndex].scores[idx] = scoreStr;
+          if (scoreData) {
+            for (const row of scoreData) {
+              const tid = row.team_id as string | null;
+              if (!tid || !initial[tid]) continue;
+              const idx = (row.hole_number ?? 1) - 1;
+              if (idx >= 0 && idx < holeCount) {
+                const value = `${row.score ?? ''}/${row.putts ?? ''}`.trim();
+                initial[tid][idx] = value;
+              }
             }
           }
-        }
 
-        return updated;
-      });
-    })();
-  }, [selectedCourse, players])
-);
+          setTeamScores(initial);
+        })();
+      } else {
+        // Stroke/solo mode: sync per-player scores using player_id
+        if (players.length === 0) return;
+
+        (async () => {
+          const playerIdsList = players.map(p => p.id).filter(Boolean);
+          if (playerIdsList.length === 0) return;
+
+          const { data: scoreData, error: fetchError } = await supabase
+            .from('scores')
+            .select('player_id, hole_number, score, putts')
+            .in('player_id', playerIdsList as string[])
+            .eq('course_id', selectedCourse)
+            .order('hole_number');
+
+          if (fetchError) {
+            console.error('Error fetching scores', fetchError);
+            return;
+          }
+
+          if (!scoreData || scoreData.length === 0) return;
+
+          setPlayers(prev => {
+            const updated = prev.map(p => ({ ...p, scores: [...p.scores] }));
+
+            for (const row of scoreData) {
+              const playerIndex = updated.findIndex(pl => pl.id === row.player_id);
+              if (playerIndex >= 0) {
+                const idx = (row.hole_number ?? 1) - 1;
+                if (idx >= 0 && idx < holeCount) {
+                  const scoreStr = `${row.score ?? ''}/${row.putts ?? ''}`.trim();
+                  updated[playerIndex].scores[idx] = scoreStr;
+                }
+              }
+            }
+
+            return updated;
+          });
+        })();
+      }
+    }, [selectedCourse, players, isScramble, scrambleTeams, gameId])
+  );
 
   const addPlayer = () => {
     if (!newPlayerName.trim()) return;
@@ -473,6 +567,23 @@ useFocusEffect(
         );
       if (error) console.warn('persistHoleScore (course) failed:', error);
     }
+  };
+
+  const persistTeamHoleScore = async (teamId: string, holeIndex: number, value: string) => {
+    if (!selectedCourse) return;
+    const { score, putts } = parseScoreString(value);
+    const hole_number = holeIndex + 1;
+    const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (!gid) return; // scramble games should always have a game_id
+
+    const { error } = await supabase
+      .from('scores')
+      .upsert(
+        [{ game_id: gid, team_id: teamId, player_id: null, course_id: selectedCourse, hole_number, score, putts, created_by: user?.id }],
+        { onConflict: 'game_id,team_id,hole_number' }
+      );
+
+    if (error) console.warn('persistTeamHoleScore failed:', error);
   };
 
   const saveScorecardToSupabase = async () => {
@@ -569,6 +680,29 @@ useFocusEffect(
   };
 
   const scorecardRef = React.useRef<View>(null);
+
+  // Determine the currently selected score string for the modal (player or team cell)
+  const selectedScoreString = (() => {
+    if (!selectedCell) return '';
+
+    // Team-based cell in scramble mode
+    if (selectedCell.teamId && teamScores[selectedCell.teamId]) {
+      const arr = teamScores[selectedCell.teamId];
+      return arr[selectedCell.holeIndex] || '';
+    }
+
+    // Player-based cell
+    if (selectedCell.playerIndex !== undefined && selectedCell.playerIndex !== null) {
+      const p = players[selectedCell.playerIndex];
+      if (p && p.scores[selectedCell.holeIndex] !== undefined) {
+        return p.scores[selectedCell.holeIndex];
+      }
+    }
+
+    return '';
+  })();
+
+  const selectedParsed = parseScoreString(selectedScoreString);
 
   // ------------------- SCORECARD UI -------------------------
   return (
@@ -704,93 +838,275 @@ useFocusEffect(
             </View>
 
             {/* --- Players Section --- */}
-            {isScramble && scrambleTeams ? (
-              scrambleTeams.map((team: any, teamIndex: number) => {
-                // Build a combined fake playerRow for team scoring (empty for now)
-                const emptyScores = Array(holeCount).fill('');
-                return (
-                  <View key={teamIndex} style={styles(palette).playerCard}>
-                    <View style={styles(palette).row}>
-                      {/* Team Name Cell */}
-                      <View style={styles(palette).nameCell}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          {team.players.map((pid: string, i: number) => {
-                            const pIndex = players.findIndex(pl => pl.id === pid);
-                            if (pIndex === -1) return null;
-                            const p = players[pIndex];
-                            return (
-                              <Image
-                                key={pid}
-                                source={p.avatar_url ? { uri: p.avatar_url } : undefined}
-                                style={{
-                                  width: 36,
-                                  height: 36,
-                                  borderRadius: 18,
-                                  marginLeft: i === 0 ? 0 : -10,
-                                  borderWidth: 2,
-                                  borderColor: '#fff',
-                                }}
-                              />
-                            );
-                          })}
-                        </View>
-                        <Text style={{ color: palette.white, fontWeight: '700', marginTop: 4 }}>
-                          {team.players
-                            .map((pid: string) => {
+            {
+              // 1) SCRAMBLE MODE WITH TEAMS → show one row per team, scores from teamScores
+              isScramble && scrambleTeams && scrambleTeams.length > 0 ? (
+                scrambleTeams.map((team: any, teamIndex: number) => {
+                  const realTeam = dbTeams.find(t => t.team_number === team.team_number);
+                  const teamId = realTeam?.id; // UUID from database
+                  const scoresForTeam = teamScores[teamId] || Array(holeCount).fill('');
+                  const { inScore, outScore, totalScore } = calculateInOutTotals(scoresForTeam);
+
+                  return (
+                    <View key={teamIndex} style={styles(palette).playerCard}>
+                      <View style={styles(palette).row}>
+                        {/* Team Display */}
+                        <View style={styles(palette).nameCell}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            {team.players.map((pid: string, i: number) => {
                               const pIndex = players.findIndex(pl => pl.id === pid);
-                              return pIndex !== -1 ? players[pIndex].name : '';
-                            })
-                            .join(' & ')}
-                        </Text>
-                      </View>
+                              if (pIndex === -1) return null;
+                              const p = players[pIndex];
+                              return (
+                                <Image
+                                  key={pid}
+                                  source={p.avatar_url ? { uri: p.avatar_url } : undefined}
+                                  style={{
+                                    width: 36,
+                                    height: 36,
+                                    borderRadius: 18,
+                                    marginLeft: i === 0 ? 0 : -10,
+                                    borderWidth: 2,
+                                    borderColor: '#fff',
+                                  }}
+                                />
+                              );
+                            })}
+                          </View>
 
-                      {/* Holes 1–9 empty */}
-                      {emptyScores.slice(0, 9).map((_, holeIndex) => (
-                        <View key={holeIndex} style={[styles(palette).cell, holeIndex % 2 === 1 && styles(palette).cellAlt]}>
-                          <Text style={styles(palette).cellText}>Tap</Text>
+                          <Text style={{ color: palette.white, fontWeight: '700', marginTop: 4 }}>
+                            {realTeam?.name ?? team.name ?? `Team ${team.team_number}`}
+                          </Text>
                         </View>
-                      ))}
 
-                      {/* IN column empty */}
-                      <View style={styles(palette).inOutCell}>
-                        <Text style={styles(palette).cellText}>0</Text>
-                      </View>
+                        {/* Scramble Cells 1–9 */}
+                        {scoresForTeam.slice(0, 9).map((val, holeIdx) => {
+                          const [scoreStr, puttsStr] = (val || '').split('/');
+                          const cls = classifyScore(val || '', parValues[holeIdx]);
+                          return (
+                            <TouchableOpacity
+                              key={holeIdx}
+                              style={styles(palette).cellTouchable}
+                              activeOpacity={0.7}
+                              onPress={() => {
+                                setSelectedCell({ teamId, holeIndex: holeIdx });
+                                setScoreModalVisible(true);
+                              }}
+                            >
+                              <View
+                                style={[
+                                  styles(palette).cell,
+                                  holeIdx % 2 === 1 && styles(palette).cellAlt,
+                                  cls === 'birdie' && styles(palette).birdieCell,
+                                  cls === 'par' && styles(palette).parCell,
+                                  cls === 'bogey' && styles(palette).bogeyCell,
+                                ]}
+                              >
+                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                                {puttsStr !== undefined && puttsStr !== '' && (
+                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
 
-                      {/* Holes 10–18 empty */}
-                      {emptyScores.slice(9, 18).map((_, holeIndex) => (
-                        <View key={holeIndex + 9} style={[styles(palette).cell, holeIndex % 2 === 1 && styles(palette).cellAlt]}>
-                          <Text style={styles(palette).cellText}>Tap</Text>
+                        {/* IN total for team */}
+                        <View style={styles(palette).inOutCell}>
+                          <Text style={styles(palette).cellText}>{inScore}</Text>
                         </View>
-                      ))}
 
-                      {/* OUT column */}
-                      <View style={styles(palette).inOutCell}>
-                        <Text style={styles(palette).cellText}>0</Text>
-                      </View>
+                        {/* Scramble Cells 10–18 */}
+                        {scoresForTeam.slice(9, 18).map((val, holeIdx) => {
+                          const absoluteHole = holeIdx + 9;
+                          const [scoreStr, puttsStr] = (val || '').split('/');
+                          const cls = classifyScore(val || '', parValues[absoluteHole]);
+                          return (
+                            <TouchableOpacity
+                              key={absoluteHole}
+                              style={styles(palette).cellTouchable}
+                              activeOpacity={0.7}
+                              onPress={() => {
+                                setSelectedCell({ teamId, holeIndex: absoluteHole });
+                                setScoreModalVisible(true);
+                              }}
+                            >
+                              <View
+                                style={[
+                                  styles(palette).cell,
+                                  holeIdx % 2 === 1 && styles(palette).cellAlt,
+                                  cls === 'birdie' && styles(palette).birdieCell,
+                                  cls === 'par' && styles(palette).parCell,
+                                  cls === 'bogey' && styles(palette).bogeyCell,
+                                ]}
+                              >
+                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                                {puttsStr !== undefined && puttsStr !== '' && (
+                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
 
-                      {/* TOTAL column */}
-                      <View style={styles(palette).inOutCell}>
-                        <Text style={styles(palette).cellText}>0</Text>
-                      </View>
+                        {/* OUT and TOTAL for team */}
+                        <View style={styles(palette).inOutCell}>
+                          <Text style={styles(palette).cellText}>{outScore}</Text>
+                        </View>
+                        <View style={styles(palette).inOutCell}>
+                          <Text style={styles(palette).cellText}>{totalScore}</Text>
+                        </View>
 
-                      {/* Remove team button (optional) */}
-                      <View style={styles(palette).removeCell}>
-                        <Text style={styles(palette).removeText}>✕</Text>
+                        {/* Remove button left as-is */}
+                        <View style={styles(palette).removeCell}>
+                          <Text style={styles(palette).removeText}>✕</Text>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                );
-              })
-            ) : (
-              players.map((player, playerIndex) => {
-                const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
-                return (
-                  <View key={playerIndex} style={styles(palette).playerCard}>
-                    {/* ... keep the existing solo player row code unchanged ... */}
-                  </View>
-                );
-              })
-            )}
+                  );
+                })
+
+              // 2) SOLO MODE (default) → show full player rows (unchanged)
+              ) : (
+                players.map((player, playerIndex) => {
+                  const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
+                  return (
+                    <View key={playerIndex} style={styles(palette).playerCard}>
+                      <View style={styles(palette).row}>
+                        {/* Name + Avatar */}
+                        <View style={styles(palette).nameCell}>
+                          <View
+                            style={{
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            {player.avatar_url ? (
+                              <Image
+                                source={{ uri: player.avatar_url }}
+                                style={{ width: 40, height: 40, borderRadius: 20 }}
+                              />
+                            ) : (
+                              <View
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: 20,
+                                  backgroundColor: palette.third,
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: palette.white,
+                                    fontWeight: '700',
+                                    fontSize: 12,
+                                  }}
+                                >
+                                  {player.name?.[0]?.toUpperCase() || '?'}
+                                </Text>
+                              </View>
+                            )}
+
+                            <Text style={styles(palette).playerNameText}>{player.name}</Text>
+                          </View>
+                        </View>
+
+                        {/* HOLES 1–9 */}
+                        {player.scores.slice(0, 9).map((score, holeIndex) => {
+                          const cls = classifyScore(score, parValues[holeIndex]);
+                          const [scoreStr, puttsStr] = score.split('/');
+                          return (
+                            <TouchableOpacity
+                              key={holeIndex}
+                              style={styles(palette).cellTouchable}
+                              activeOpacity={0.7}
+                              onPress={() => {
+                                setSelectedCell({ playerIndex, holeIndex });
+                                setScoreModalVisible(true);
+                              }}
+                            >
+                              <View
+                                style={[
+                                  styles(palette).cell,
+                                  holeIndex % 2 === 1 && styles(palette).cellAlt,
+                                  cls === 'birdie' && styles(palette).birdieCell,
+                                  cls === 'par' && styles(palette).parCell,
+                                  cls === 'bogey' && styles(palette).bogeyCell,
+                                ]}
+                              >
+                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                                {puttsStr !== undefined && (
+                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+
+                        {/* IN */}
+                        <View style={styles(palette).inOutCell}>
+                          <Text style={styles(palette).cellText}>{inScore}</Text>
+                        </View>
+
+                        {/* HOLES 10–18 */}
+                        {player.scores.slice(9, 18).map((score, holeIndex) => {
+                          const cls = classifyScore(score, parValues[holeIndex + 9]);
+                          const [scoreStr, puttsStr] = score.split('/');
+                          return (
+                            <TouchableOpacity
+                              key={holeIndex + 9}
+                              style={styles(palette).cellTouchable}
+                              activeOpacity={0.7}
+                              onPress={() => {
+                                setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
+                                setScoreModalVisible(true);
+                              }}
+                            >
+                              <View
+                                style={[
+                                  styles(palette).cell,
+                                  holeIndex % 2 === 1 && styles(palette).cellAlt,
+                                  cls === 'birdie' && styles(palette).birdieCell,
+                                  cls === 'par' && styles(palette).parCell,
+                                  cls === 'bogey' && styles(palette).bogeyCell,
+                                ]}
+                              >
+                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                                {puttsStr !== undefined && (
+                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+
+                        {/* OUT */}
+                        <View style={styles(palette).inOutCell}>
+                          <Text style={styles(palette).cellText}>{outScore}</Text>
+                        </View>
+
+                        {/* TOTAL */}
+                        <View style={styles(palette).inOutCell}>
+                          <Text style={styles(palette).cellText}>{totalScore}</Text>
+                        </View>
+
+                        {/* REMOVE */}
+                        <TouchableOpacity
+                          style={styles(palette).removeCell}
+                          onPress={() => setConfirmRemoveIndex(playerIndex)}
+                        >
+                          <Text style={styles(palette).removeText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })
+              )
+            }
           </View>
         </ScrollView>
       </View>
@@ -892,26 +1208,39 @@ useFocusEffect(
       <ScoreEntryModal
         visible={scoreModalVisible}
         onClose={() => setScoreModalVisible(false)}
-        score={
-          selectedCell && players[selectedCell.playerIndex]
-            ? parseScoreString(players[selectedCell.playerIndex].scores[selectedCell.holeIndex]).score
-            : 0
-        }
-        putts={
-          selectedCell && players[selectedCell.playerIndex]
-            ? parseScoreString(players[selectedCell.playerIndex].scores[selectedCell.holeIndex]).putts
-            : 0
-        }
+        score={selectedParsed.score}
+        putts={selectedParsed.putts}
         onSave={async (score, putts) => {
           if (!selectedCell) return;
           const value = `${score}/${putts}`;
-          updateScore(selectedCell.playerIndex, selectedCell.holeIndex, value);
 
-          const pid = players[selectedCell.playerIndex]?.id;
-          if (pid) {
-            await persistHoleScore(pid, selectedCell.holeIndex, value);
-            // Course View listens to Realtime on 'scores' and will refresh automatically
+          // Team-based cell in scramble mode
+          if (selectedCell.teamId) {
+            const teamId = selectedCell.teamId;
+            const holeIndex = selectedCell.holeIndex;
+
+            // Update local teamScores state for immediate UI feedback
+            setTeamScores(prev => {
+              const existing = prev[teamId] || Array(holeCount).fill('');
+              const next = [...existing];
+              next[holeIndex] = value;
+              return { ...prev, [teamId]: next };
+            });
+
+            await persistTeamHoleScore(teamId, holeIndex, value);
           }
+          // Player-based cell (stroke/solo mode)
+          else if (selectedCell.playerIndex !== undefined && selectedCell.playerIndex !== null) {
+            const pIndex = selectedCell.playerIndex;
+            updateScore(pIndex, selectedCell.holeIndex, value);
+
+            const pid = players[pIndex]?.id;
+            if (pid) {
+              await persistHoleScore(pid, selectedCell.holeIndex, value);
+              // Course View listens to Realtime on 'scores' and will refresh automatically
+            }
+          }
+
           setScoreModalVisible(false);
         }}
       />

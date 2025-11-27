@@ -9,7 +9,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { Stack } from "expo-router";
-import { View, Text, ScrollView, TouchableOpacity, Pressable, Image, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Pressable, Image, Dimensions, TextInput } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/components/supabase';
@@ -43,6 +43,15 @@ export default function GameModesScreen() {
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [selectedMode, setSelectedMode] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
+  // Scramble teams state
+  const [teams, setTeams] = useState([
+    { id: 1, name: "Team 1", players: [] as string[] },
+    { id: 2, name: "Team 2", players: [] as string[] },
+  ]);
+  const [unassigned, setUnassigned] = useState<string[]>([]);
+  const [teamPickerPlayer, setTeamPickerPlayer] = useState<string | null>(null);
+  const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState<string>('');
 
   const { palette } = useTheme();
 
@@ -64,16 +73,17 @@ export default function GameModesScreen() {
           .in('id', parsedIds);
         if (!error && data) {
           // Preserve order matching parsedIds
-            const ordered = parsedIds.map(id => {
-              const found = data.find(p => p.id === id);
-              return {
-                id,
-                name: found?.full_name || (parsedNames[parsedIds.indexOf(id)] || 'Unknown'),
-                avatar_url: found?.avatar_url || null,
-                handicap: found?.handicap ?? null,
-              };
-            });
+          const ordered = parsedIds.map(id => {
+            const found = data.find(p => p.id === id);
+            return {
+              id,
+              name: found?.full_name || (parsedNames[parsedIds.indexOf(id)] || 'Unknown'),
+              avatar_url: found?.avatar_url || null,
+              handicap: found?.handicap ?? null,
+            };
+          });
           setPlayers(ordered);
+          setUnassigned(ordered.map(p => p.id));
         }
       } finally {
         setLoadingPlayers(false);
@@ -100,6 +110,22 @@ export default function GameModesScreen() {
       gameId: gid,
       mode: selectedMode?.id || null,
     }));
+    await AsyncStorage.setItem('scrambleTeams', JSON.stringify(teams));
+
+    const { data: teamRows, error: teamErr } = await supabase
+  .from("game_teams")
+  .insert(
+    teams.map((t, i) => ({
+      game_id: gid,
+      team_number: t.id,
+      name: t.name || `Team ${t.id}`,
+      players: t.players,
+    }))
+  )
+  .select();
+
+  await AsyncStorage.setItem('scrambleTeamRows', JSON.stringify(teamRows));
+
     router.push({
       pathname: '/(tabs)/scorecard',
       params: {
@@ -111,6 +137,7 @@ export default function GameModesScreen() {
         gameMode: selectedMode?.id || '',
         tee: tee || '',
         newGame: '1',
+        teams: JSON.stringify(teams),
       },
     });
   };
@@ -199,15 +226,127 @@ export default function GameModesScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {selectedMode?.id === 'scramble' && (
+          <View style={{ marginTop: 20 }}>
+            <Text style={styles(palette).sectionTitle}>Scramble Teams</Text>
+
+            {/* Unassigned pool */}
+            <Text style={{ color: palette.textLight, marginBottom: 8 }}>Unassigned Players</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 }}>
+              {unassigned.map(pid => {
+                const p = players.find(x => x.id === pid);
+                if (!p) return null;
+                return (
+                  <Pressable
+                    key={pid}
+                    onPress={() => setTeamPickerPlayer(pid)}
+                    style={{ marginRight: 10, alignItems: 'center' }}
+                  >
+                    <View style={styles(palette).avatarSmall}>
+                      {p.avatar_url ? (
+                        <Image source={{ uri: p.avatar_url }} style={{ width: PLAYER_AVATAR_SIZE, height: PLAYER_AVATAR_SIZE, borderRadius: PLAYER_AVATAR_SIZE / 2 }} />
+                      ) : (
+                        <Text style={styles(palette).avatarInitial}>{(p.name?.[0] || '?').toUpperCase()}</Text>
+                      )}
+                    </View>
+                    <Text style={{ color: palette.textLight, fontSize: 12 }}>{p.name}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Teams */}
+            {teams.map(team => (
+              <View key={team.id} style={{ marginBottom: 20 }}>
+                {editingTeamId === team.id ? (
+                  <View style={{ marginBottom: 6 }}>
+                    <TextInput
+                      value={editingName}
+                      onChangeText={setEditingName}
+                      style={{ borderWidth: 1, borderColor: palette.primary, padding: 6, borderRadius: 8, color: palette.textLight }}
+                      autoFocus
+                      onSubmitEditing={() => {
+                        setTeams(prev =>
+                          prev.map(t => t.id === team.id ? { ...t, name: editingName || t.name } : t)
+                        );
+                        setEditingTeamId(null);
+                      }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        setTeams(prev =>
+                          prev.map(t => t.id === team.id ? { ...t, name: editingName || t.name } : t)
+                        );
+                        setEditingTeamId(null);
+                      }}
+                      style={{ marginTop: 4 }}
+                    >
+                      <Text style={{ color: palette.primary }}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setEditingTeamId(team.id);
+                      setEditingName(team.name);
+                    }}
+                  >
+                    <Text style={{ color: palette.primary, marginBottom: 6, fontWeight: '700' }}>
+                      {team.name}
+                    </Text>
+                  </Pressable>
+                )}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                  {team.players.map(pid => {
+                    const p = players.find(x => x.id === pid);
+                    if (!p) return null;
+                    return (
+                      <Pressable
+                        key={pid}
+                        onPress={() => setTeamPickerPlayer(pid)}
+                        style={{ marginRight: 10, alignItems: 'center' }}
+                      >
+                        <View style={styles(palette).avatarSmall}>
+                          {p.avatar_url ? (
+                            <Image source={{ uri: p.avatar_url }} style={{ width: PLAYER_AVATAR_SIZE, height: PLAYER_AVATAR_SIZE, borderRadius: PLAYER_AVATAR_SIZE / 2 }} />
+                          ) : (
+                            <Text style={styles(palette).avatarInitial}>{(p.name?.[0] || '?').toUpperCase()}</Text>
+                          )}
+                        </View>
+                        <Text style={{ color: palette.textLight, fontSize: 12 }}>{p.name}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+
+            {/* Add Team Button */}
+            {teams.length < 4 && (
+              <TouchableOpacity
+                onPress={() =>
+                  setTeams([
+                    ...teams,
+                    { id: teams.length + 1, name: `Team ${teams.length + 1}`, players: [] }
+                  ])
+                }
+                style={{ backgroundColor: palette.primary, padding: 10, borderRadius: 10, alignSelf: 'flex-start' }}
+              >
+                <Text style={{ color: palette.textLight, fontWeight: '700' }}>+ Add Team</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles(palette).bottomBar, { backgroundColor: palette.background }]}>
         <TouchableOpacity
           onPress={handleStart}
-          disabled={!selectedMode || creating}
+          disabled={!selectedMode || creating || unassigned.length > 0}
           style={[
             styles(palette).beginButton,
-            (!selectedMode || creating) && { opacity: 0.5 },
+            (!selectedMode || creating || unassigned.length > 0) && { opacity: 0.5 },
           ]}
           activeOpacity={0.9}
         >
@@ -215,6 +354,53 @@ export default function GameModesScreen() {
             {creating ? 'Starting…' : 'Begin Game'}
           </Text>
         </TouchableOpacity>
+
+        {teamPickerPlayer && (
+        <View style={{ marginTop: 20, backgroundColor: palette.background, padding: 20, borderRadius: 20 }}>
+          <Text style={{ color: palette.primary, fontWeight: '700', marginBottom: 10 }}>Assign to Team</Text>
+
+          {teams.map(team => (
+            <TouchableOpacity
+              key={team.id}
+              onPress={() => {
+                setTeams(prev => prev.map(t => ({
+                  ...t,
+                  players: t.id === team.id
+                    ? [...t.players.filter(p => p !== teamPickerPlayer), teamPickerPlayer as string]
+                    : t.players.filter(p => p !== teamPickerPlayer)
+                })));
+                setUnassigned(prev => prev.filter(id => id !== teamPickerPlayer));
+                setTeamPickerPlayer(null);
+              }}
+              style={{ padding: 12, backgroundColor: palette.secondary, borderRadius: 10, marginBottom: 8 }}
+            >
+              <Text style={{ color: palette.textLight }}>{team.name}</Text>
+            </TouchableOpacity>
+          ))}
+
+          {/* REMOVE FROM TEAM */}
+          <TouchableOpacity
+            onPress={() => {
+              setTeams(prev => prev.map(t => ({
+                ...t,
+                players: t.players.filter(p => p !== teamPickerPlayer)
+              })));
+              setUnassigned(prev => [...prev, teamPickerPlayer as string]);
+              setTeamPickerPlayer(null);
+            }}
+            style={{ padding: 12, backgroundColor: '#ff4d4d', borderRadius: 10, marginBottom: 8 }}
+          >
+            <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '700' }}>Remove From Team</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setTeamPickerPlayer(null)}
+            style={{ padding: 12, backgroundColor: '#ccc', borderRadius: 10, marginTop: 10 }}
+          >
+            <Text style={{ color: '#000', textAlign: 'center' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       </View>
       </View>
     </>

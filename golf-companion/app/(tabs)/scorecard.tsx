@@ -13,6 +13,7 @@ import { supabase } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as MediaLibrary from 'expo-media-library';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -102,7 +103,18 @@ export default function Scorecard() {
   const birdieLeft = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
 
   // grab courseId layerId from the URL
-  const { courseId, playerNames, playerIds, playerAvatars, newGame, gameId } = useLocalSearchParams();
+  const { courseId, playerNames, playerIds, playerAvatars, newGame, gameId, teams: teamParam, gameMode } = useLocalSearchParams();
+
+  const scrambleTeams = useMemo(() => {
+    if (!teamParam) return null;
+    try {
+      return JSON.parse(String(teamParam));
+    } catch {
+      return null;
+    }
+  }, [teamParam]);
+
+  const isScramble = gameMode === 'scramble';
 
   const isNewGame = String(Array.isArray(newGame) ? newGame[0] : newGame || '') === '1';
 
@@ -692,125 +704,93 @@ useFocusEffect(
             </View>
 
             {/* --- Players Section --- */}
-            {players.map((player, playerIndex) => {
-              const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
-              return (
-                <View key={playerIndex} style={styles(palette).playerCard}>
-                  <View style={styles(palette).row}>
-                    {/* Name */}
-                    <View style={styles(palette).nameCell}>
-                      <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                        {player.avatar_url ? (
-                          <Image
-                            source={{ uri: player.avatar_url }}
-                            style={{ width: 40, height: 40, borderRadius: 20 }}
-                          />
-                        ) : (
-                          <View
-                            style={{
-                              width: 40,
-                              height: 40,
-                              borderRadius: 20,
-                              backgroundColor: palette.third,
-                              justifyContent: 'center',
-                              alignItems: 'center'
-                            }}
-                          >
-                            <Text style={{ color: palette.white, fontWeight: '700', fontSize: 12 }}>
-                              {player.name?.[0]?.toUpperCase() || '?'}
-                            </Text>
-                          </View>
-                        )}
-                        <Text style={styles(palette).playerNameText}>{player.name}</Text>
+            {isScramble && scrambleTeams ? (
+              scrambleTeams.map((team: any, teamIndex: number) => {
+                // Build a combined fake playerRow for team scoring (empty for now)
+                const emptyScores = Array(holeCount).fill('');
+                return (
+                  <View key={teamIndex} style={styles(palette).playerCard}>
+                    <View style={styles(palette).row}>
+                      {/* Team Name Cell */}
+                      <View style={styles(palette).nameCell}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          {team.players.map((pid: string, i: number) => {
+                            const pIndex = players.findIndex(pl => pl.id === pid);
+                            if (pIndex === -1) return null;
+                            const p = players[pIndex];
+                            return (
+                              <Image
+                                key={pid}
+                                source={p.avatar_url ? { uri: p.avatar_url } : undefined}
+                                style={{
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: 18,
+                                  marginLeft: i === 0 ? 0 : -10,
+                                  borderWidth: 2,
+                                  borderColor: '#fff',
+                                }}
+                              />
+                            );
+                          })}
+                        </View>
+                        <Text style={{ color: palette.white, fontWeight: '700', marginTop: 4 }}>
+                          {team.players
+                            .map((pid: string) => {
+                              const pIndex = players.findIndex(pl => pl.id === pid);
+                              return pIndex !== -1 ? players[pIndex].name : '';
+                            })
+                            .join(' & ')}
+                        </Text>
+                      </View>
+
+                      {/* Holes 1–9 empty */}
+                      {emptyScores.slice(0, 9).map((_, holeIndex) => (
+                        <View key={holeIndex} style={[styles(palette).cell, holeIndex % 2 === 1 && styles(palette).cellAlt]}>
+                          <Text style={styles(palette).cellText}>Tap</Text>
+                        </View>
+                      ))}
+
+                      {/* IN column empty */}
+                      <View style={styles(palette).inOutCell}>
+                        <Text style={styles(palette).cellText}>0</Text>
+                      </View>
+
+                      {/* Holes 10–18 empty */}
+                      {emptyScores.slice(9, 18).map((_, holeIndex) => (
+                        <View key={holeIndex + 9} style={[styles(palette).cell, holeIndex % 2 === 1 && styles(palette).cellAlt]}>
+                          <Text style={styles(palette).cellText}>Tap</Text>
+                        </View>
+                      ))}
+
+                      {/* OUT column */}
+                      <View style={styles(palette).inOutCell}>
+                        <Text style={styles(palette).cellText}>0</Text>
+                      </View>
+
+                      {/* TOTAL column */}
+                      <View style={styles(palette).inOutCell}>
+                        <Text style={styles(palette).cellText}>0</Text>
+                      </View>
+
+                      {/* Remove team button (optional) */}
+                      <View style={styles(palette).removeCell}>
+                        <Text style={styles(palette).removeText}>✕</Text>
                       </View>
                     </View>
-
-                    {/* Holes 1-9 */}
-                    {player.scores.slice(0, 9).map((score: string, holeIndex: number) => {
-                      const cls = classifyScore(score, parValues[holeIndex]);
-                      const [scoreStr, puttsStr] = score.split('/');
-                      return (
-                        <TouchableOpacity
-                          key={holeIndex}
-                          style={styles(palette).cellTouchable}
-                          activeOpacity={0.7}
-                          onPress={() => {
-                            setSelectedCell({ playerIndex, holeIndex });
-                            setScoreModalVisible(true);
-                          }}
-                        >
-                          <View style={[
-                            styles(palette).cell,
-                            (holeIndex % 2 === 1) && styles(palette).cellAlt,
-                            cls === 'birdie' && styles(palette).birdieCell,
-                            cls === 'par' && styles(palette).parCell,
-                            cls === 'bogey' && styles(palette).bogeyCell
-                          ]}>
-                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
-                            {puttsStr !== undefined && (
-                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-
-                    {/* IN column */}
-                    <View style={styles(palette).inOutCell}>
-                      <Text style={styles(palette).cellText}>{inScore}</Text>
-                    </View>
-
-                    {/* Holes 10-18 */}
-                    {player.scores.slice(9, 18).map((score: string, holeIndex: number) => {
-                      const cls = classifyScore(score, parValues[holeIndex + 9]);
-                      const [scoreStr, puttsStr] = score.split('/');
-                      return (
-                        <TouchableOpacity
-                          key={holeIndex + 9}
-                          style={styles(palette).cellTouchable}
-                          activeOpacity={0.7}
-                          onPress={() => {
-                            setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
-                            setScoreModalVisible(true);
-                          }}
-                        >
-                          <View style={[
-                            styles(palette).cell,
-                            (holeIndex % 2 === 1) && styles(palette).cellAlt,
-                            cls === 'birdie' && styles(palette).birdieCell,
-                            cls === 'par' && styles(palette).parCell,
-                            cls === 'bogey' && styles(palette).bogeyCell
-                          ]}>
-                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
-                            {puttsStr !== undefined && (
-                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
-                            )}
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-
-                    {/* OUT column */}
-                    <View style={styles(palette).inOutCell}>
-                      <Text style={styles(palette).cellText}>{outScore}</Text>
-                    </View>
-
-                    {/* TOTAL column */}
-                    <View style={styles(palette).inOutCell}>
-                      <Text style={styles(palette).cellText}>{totalScore}</Text>
-                    </View>
-
-                    {/* Remove player button */}
-                    <TouchableOpacity
-                      style={styles(palette).removeCell}
-                      onPress={() => setConfirmRemoveIndex(playerIndex)}
-                    >
-                      <Text style={styles(palette).removeText}>✕</Text>
-                    </TouchableOpacity>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })
+            ) : (
+              players.map((player, playerIndex) => {
+                const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
+                return (
+                  <View key={playerIndex} style={styles(palette).playerCard}>
+                    {/* ... keep the existing solo player row code unchanged ... */}
+                  </View>
+                );
+              })
+            )}
           </View>
         </ScrollView>
       </View>

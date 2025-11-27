@@ -396,6 +396,18 @@ export default function AccountsScreen() {
     fetchProfile();
   };
 
+  // --- DEBUG: Test Auth UID / RLS ---
+  const testUID = async () => {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      console.log("🔍 Debug UID:", data?.user?.id, "Error:", error);
+      Alert.alert("Debug UID", data?.user?.id ?? "NULL");
+    } catch (err) {
+      console.error("Debug UID error:", err);
+      Alert.alert("Debug UID Error", String(err));
+    }
+  };
+
   useEffect(() => {
     if (!user?.id) return;
     const fetchFriends = async () => {
@@ -866,6 +878,12 @@ const inviteChannel = supabase
             onPress={() => router.push('../settings')}
           >
             <MaterialIcons size={24} name="settings" color={palette.grey} />
+          </Pressable>
+          <Pressable
+            style={[styles(palette).logoutButton, { backgroundColor: palette.primary }]}
+            onPress={testUID}
+          >
+            <ThemedText style={styles(palette).logoutButtonText}>Debug UID</ThemedText>
           </Pressable>
         </View>
       </View>

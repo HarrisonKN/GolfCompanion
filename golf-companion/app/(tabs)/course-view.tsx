@@ -49,6 +49,7 @@ import MapView, {
 import type { LatLng } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // ------------------- STEP OVERLAY COMPONENT -------------------------
 function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: {
   visible: boolean;
@@ -242,7 +243,8 @@ export default function CourseViewScreen() {
   const { user } = useAuth();
   const { palette } = useTheme();
   const S = React.useMemo(() => styles(palette), [palette]);
-  const { courseId, playerIds, gameId } = useLocalSearchParams<{ courseId?: string; playerIds?: string; gameId?: string }>();  const router = useRouter();
+  const { courseId, playerIds, gameId, teams } = useLocalSearchParams<{ courseId?: string; playerIds?: string; gameId?: string; teams?: string }>();
+  const router = useRouter();
   const { selectedCourse, setSelectedCourse } = useCourse();
 
   const mountedRef = useRef(true);
@@ -305,6 +307,7 @@ export default function CourseViewScreen() {
   // --- Player score modal state ---
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
   const [activePlayer, setActivePlayer] = useState<ScoreboardItem | null>(null);
+  const [activeTeam, setActiveTeam] = useState<any | null>(null);
   const [tempScore, setTempScore] = useState(0);
   const [tempPutts, setTempPutts] = useState(0);
 
@@ -583,54 +586,7 @@ export default function CourseViewScreen() {
     setLoading(true);
     try {
       // Use upsert so the same hole can be edited
-      const payload: any = {
-        player_id: user.id,
-        course_id: selectedCourse!,
-        hole_number: selectedHole.hole_number,
-        score,
-        putts,
-        created_by: user.id,
-      };
-      if (gid) payload.game_id = gid;
-
-      const { error } = await supabase
-      .from("scores")
-      .upsert([payload], {
-        onConflict: gid
-          ? "game_id,player_id,hole_number"
-          : "player_id,course_id,hole_number",
-      })
-      .select();
-
-      if (error) {
-        console.error("Supabase upsert error:", error);
-        showMessage(`Error saving score: ${error.message}`);
-        return;
-      }
-
-      // Optionally refresh immediately (Realtime also triggers it)
-      try {
-        // refreshScoreboard is defined below; if you move this handler below it,
-        // you can uncomment the next line:
-        // await refreshScoreboard();
-
-        // Refresh scoreboard immediately so toPar/strokes update now
-        await refreshScoreboardRef.current?.();
-      } catch {}
-
-      // advance to next hole
-      const idx = holes.findIndex((h) => h.hole_number === selectedHoleNumber);
-      const next = holes[idx + 1];
-      if (next) {
-        setScore(0);
-        setPutts(0);
-        setSelectedHoleNumber(next.hole_number);
-      } else {
-        router.push({
-          pathname: "/scorecard",
-          params: { playerId: user.id, courseId: selectedCourse! },
-        });
-      }
+      await handleEnter();
     } catch (err: any) {
       console.error("Unexpected error:", err);
       showMessage(`Unexpected error: ${err.message}`);
@@ -1189,7 +1145,7 @@ export default function CourseViewScreen() {
   }, [holes, courseParArray]);
 
   // Fetch and compute scoreboard (today, for selected course)
-  const refreshScoreboard = React.useCallback(async () => {
+const refreshScoreboard = React.useCallback(async () => {
     if (!selectedCourse) return;
 
     // Resolve gameId (route -> storage)
@@ -1219,11 +1175,11 @@ export default function CourseViewScreen() {
     }
 
     // Fetch scores (hybrid: both course-only and game-based)
-    let rows: { player_id: string; hole_number: number; score: number | null, game_id?: string | null, course_id?: string | null }[] = [];
+    let rows: { player_id: string | null; team_id: string | null; hole_number: number; score: number | null }[] = [];
     try {
       let q = supabase
         .from('scores')
-        .select('player_id, hole_number, score, game_id, course_id');
+        .select('player_id, team_id, hole_number, score, game_id, course_id')
 
       if (gid) {
         q = q.or(`game_id.eq.${gid},and(game_id.is.null,course_id.eq.${selectedCourse})`);
@@ -1239,62 +1195,116 @@ export default function CourseViewScreen() {
         q = q.gte('created_at', start.toISOString());
       }
 
-      if (baseIds.length) q = q.in('player_id', baseIds);
+      // --- FIX: include both player and team IDs --- //
+      if ((baseIds.length || (scrambleTeams?.length ?? 0) > 0)) {
+        const teamIds: string[] = (scrambleTeams ?? [])
+        .map(t => t.team_id)
+        .filter((id): id is string => typeof id === "string");
+        const allKeys = [...baseIds.filter(Boolean), ...teamIds];
+
+        if (allKeys.length > 0) {
+          q = q.or(
+            `player_id.in.(${allKeys.join(",")}),team_id.in.(${allKeys.join(",")})`
+          );
+        }
+      }
+      // --- END FIX --- //
       const { data, error } = await q;
       if (error) throw error;
-      rows = data || [];
+      // Map to the new row type (strip extra fields)
+      rows = (data || []).map((r: any) => ({
+        player_id: r.player_id ?? null,
+        team_id: r.team_id ?? null,
+        hole_number: r.hole_number,
+        score: r.score,
+      }));
     } catch (e) {
       console.warn('Scoreboard fetch error:', e);
     }
 
     // Include anyone who already has rows (e.g., you added a friend’s score)
     const idsFromRows = Array.from(new Set((rows || []).map(r => r.player_id)));
-    baseIds = Array.from(new Set([...baseIds, ...idsFromRows]));
+    baseIds = Array.from(
+      new Set([
+        ...baseIds,
+        ...idsFromRows.filter((id): id is string => typeof id === "string")
+      ])
+    );
 
-    // Build per-player per-hole map (latest score per hole assumed by upsert uniqueness)
-    const rowsByPlayer = new Map<string, Map<number, number>>(); // pid -> (hole -> score)
+    // Build per-player/team per-hole map (latest score per hole assumed by upsert uniqueness)
+    const rowsByPlayer = new Map<string, Map<number, number>>(); // key (player_id or team_id) -> (hole -> score)
     for (const r of rows) {
       if (r.score == null) continue;
-      if (!rowsByPlayer.has(r.player_id)) rowsByPlayer.set(r.player_id, new Map());
-      // keep one score per hole
-      rowsByPlayer.get(r.player_id)!.set(r.hole_number, r.score);
+      const key = r.team_id ?? r.player_id;
+      if (!key) continue;
+      if (!rowsByPlayer.has(key)) rowsByPlayer.set(key, new Map());
+      rowsByPlayer.get(key)!.set(r.hole_number, r.score);
     }
 
-    const items = baseIds.map(pid => {
-      const holeMap = rowsByPlayer.get(pid) ?? new Map<number, number>();
+    const teamIds = Array.from(new Set(rows.map(r => r.team_id).filter(Boolean))) as string[];
 
-      let strokesAll = 0;      // all strokes entered (not shown)
-      let strokes = 0;         // strokes for holes that have a valid par
-      let parSum = 0;          // sum of par for counted holes
-      let holesPlayed = 0;     // holes with both a score and a valid par
+    const items = [
+      ...teamIds.map(tid => {
+        const holeMap = rowsByPlayer.get(tid) ?? new Map<number, number>();
+        let strokes = 0;
+        let parSum = 0;
+        let holesPlayed = 0;
 
-      for (const [holeNo, sc] of holeMap.entries()) {
-        strokesAll += sc;
-        const par = parByHole.get(holeNo);
-        if (Number.isFinite(par) && (par as number) > 0) {
-          parSum += par as number;
-          strokes += sc;
-          holesPlayed++;
+        for (const [holeNo, sc] of holeMap.entries()) {
+          const par = parByHole.get(holeNo);
+          if (Number.isFinite(par)) {
+            strokes += sc;
+            parSum += par as number;
+            holesPlayed++;
+          }
         }
-      }
 
-      const toPar = holesPlayed ? (strokes - parSum) : 0;
-      return {
-        player_id: pid,
-        name: 'Unknown',
-        avatar_url: null,
-        strokes,          // align displayed strokes with counted holes
-        toPar,
-        holesPlayed,
-      };
-    });
+        const toPar = holesPlayed ? strokes - parSum : 0;
+
+        return {
+          player_id: tid,
+          name: 'Team',
+          avatar_url: null,
+          strokes,
+          toPar,
+          holesPlayed,
+        };
+      }),
+
+      ...baseIds.map(pid => {
+        const holeMap = rowsByPlayer.get(pid) ?? new Map<number, number>();
+        let strokes = 0;
+        let parSum = 0;
+        let holesPlayed = 0;
+
+        for (const [holeNo, sc] of holeMap.entries()) {
+          const par = parByHole.get(holeNo);
+          if (Number.isFinite(par)) {
+            strokes += sc;
+            parSum += par as number;
+            holesPlayed++;
+          }
+        }
+
+        const toPar = holesPlayed ? strokes - parSum : 0;
+
+        return {
+          player_id: pid,
+          name: 'Unknown',
+          avatar_url: null,
+          strokes,
+          toPar,
+          holesPlayed,
+        };
+      })
+    ];
 
     // Profiles
     if (baseIds.length) {
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url')
-        .in('id', baseIds);
+        .in('id', baseIds.filter(Boolean));
       const profMap = new Map((profiles || []).map((p: any) => [p.id, { name: p.full_name ?? 'Unknown', avatar_url: p.avatar_url }]));
       for (const item of items) {
         const p = profMap.get(item.player_id);
@@ -1563,6 +1573,61 @@ export default function CourseViewScreen() {
     setEntryPromptVisible(false);
   };
 
+  // ---- Scramble teams loaded from AsyncStorage ----
+  const [scrambleTeams, setScrambleTeams] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    const loadTeams = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("scrambleTeams");
+        if (saved) {
+          setScrambleTeams(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.warn("Failed to load scrambleTeams", e);
+      }
+    };
+    loadTeams();
+  }, []);
+
+  // Fetch scramble teams from Supabase when gameId changes
+  useEffect(() => {
+    const loadTeamsFromDB = async () => {
+      try {
+        let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+        if (!gid) {
+          const raw = await AsyncStorage.getItem("currentGamePlayers");
+          if (raw) {
+            try { gid = JSON.parse(raw)?.gameId; } catch {}
+          }
+        }
+        if (!gid) return;
+
+        const { data, error } = await supabase
+          .from("game_teams")
+          .select("*")
+          .eq("game_id", gid)
+          .order("team_number");
+
+        if (!error && data) {
+          const formatted = data.map(t => ({
+            id: t.id,
+            team_id: t.id,
+            team_number: t.team_number,
+            name: t.name,
+           players: Array.isArray(t.players)
+            ? (t.players.filter((p: any): p is string => typeof p === "string") as string[])
+            : []
+          }));
+          setScrambleTeams(formatted);
+        }
+      } catch (err) {
+        console.warn("Failed to load teams from DB:", err);
+      }
+    };
+
+    loadTeamsFromDB();
+  }, [gameId]);
   // ------------------- COURSE VIEW UI -------------------------
   return (
     <View style={S.container}>
@@ -1768,25 +1833,52 @@ export default function CourseViewScreen() {
               <Button
                 title="Enter"
                 onPress={async () => {
-                  if (!activePlayer || !selectedHoleNumber) return;
+                  if (!selectedHoleNumber) return;
                   const selectedHole = holes.find(h => h.hole_number === selectedHoleNumber);
                   if (!selectedHole) return;
 
-                  const payload: any = {
-                    player_id: activePlayer.player_id,
+                  // Resolve gameId for game-based scoring
+                  let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+                  if (!gid) {
+                    const raw = await AsyncStorage.getItem('currentGamePlayers');
+                    if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
+                  }
+
+                  let payload: any = {
                     course_id: selectedCourse!,
                     hole_number: selectedHole.hole_number,
                     score: tempScore,
                     putts: tempPutts,
-                    created_by: user?.id ?? activePlayer.player_id,
+                    created_by: user?.id ?? null,
+                    game_id: gid ?? null,
                   };
+
+                  // TEAM scoring
+                  if (activeTeam) {
+                    payload.team_id = activeTeam.team_id;
+                    payload.player_id = null;
+                  }
+                  // PLAYER scoring
+                  else if (activePlayer) {
+                    payload.player_id = activePlayer.player_id;
+                    payload.team_id = null;
+                  }
+                  else {
+                    return;
+                  }
+
+                  // correct conflict rule depending on game or not
+                  const onConflict = gid
+                    ? (activeTeam ? "team_id,game_id,hole_number" : "player_id,game_id,hole_number")
+                    : (activeTeam ? "team_id,course_id,hole_number" : "player_id,course_id,hole_number");
+                  
+                  console.log("SCORES PAYLOAD:", payload);
 
                   const { error } = await supabase
                     .from("scores")
-                    .upsert([payload], {
-                      onConflict: "player_id,course_id,hole_number",
-                    })
+                    .upsert([payload], { onConflict })
                     .select();
+                    console.log("SCORES ERROR:", error);
 
                   if (error) {
                     showMessage(`Error saving score: ${error.message}`);
@@ -1795,6 +1887,8 @@ export default function CourseViewScreen() {
 
                   await refreshScoreboardRef.current?.();
                   setScoreModalVisible(false);
+                  setActiveTeam(null);
+                  setActivePlayer(null);
                 }}
               />
             </View>
@@ -2239,7 +2333,23 @@ export default function CourseViewScreen() {
             </Pressable>
           </View>
 
-          <Pressable style={S.enterButton} onPress={handleEnter}>
+          <Pressable
+            style={S.enterButton}
+            onPress={() => {
+              // Reuse the modal-based enter flow
+              setActivePlayer({
+                player_id: user?.id ?? "",
+                name: "You",
+                avatar_url: null,
+                strokes: 0,
+                toPar: 0,
+                holesPlayed: 0,
+              });
+              setTempScore(score);
+              setTempPutts(putts);
+              setScoreModalVisible(true);
+            }}
+          >
             <Text style={S.enterText}>Enter</Text>
           </Pressable>
         </View>
@@ -2328,8 +2438,8 @@ export default function CourseViewScreen() {
           </View>
         </View>
       </Modal>
-
-        {/* Scoreboard moved to bottom of the screen */}
+      
+      {/* Scoreboard moved to bottom of the screen */}
       {scoreboard.length > 0 && (
         <View
           style={[
@@ -2349,48 +2459,121 @@ export default function CourseViewScreen() {
           ]}
         >
           <View style={S.sbGrid}>
-            {scoreboard.map((p) => {
-              const first = (p.name || "").trim().split(" ")[0] || "Player";
-              const initials = first.slice(0, 1).toUpperCase();
-              // Compute display values for total strokes and toPar
-              const total = p.strokes ?? 0;
-              const toParDisplay =
-                p.toPar === 0 ? "E" : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
-              return (
-                <View key={p.player_id} style={S.sbTile}>
+            {scrambleTeams && Array.isArray(scrambleTeams) && scrambleTeams.length > 0 ? (
+              scrambleTeams.map((team: any, idx: number) => {
+
+                // find the team scoreboard entry
+                const sbTeam = scoreboard.find(s => s.player_id === team.team_id);
+
+                const strokes = sbTeam?.strokes ?? 0;
+                const toPar = sbTeam?.toPar ?? 0;
+                const toParDisplay = toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : `${toPar}`;
+
+                // get member profiles
+                const members = team.players
+                  .map((pid: string) => scoreboard.find(p => p.player_id === pid))
+                  .filter(Boolean) as ScoreboardItem[];
+
+                const combinedName = members
+                  .map(m => m.name.split(" ")[0])
+                  .join(" & ");
+
+                return (
                   <Pressable
+                    key={`team-${idx}`}
+                    style={S.sbTile}
                     onPress={() => {
-                      setActivePlayer(p);
+                      setActiveTeam({
+                        team_id: team.team_id,
+                        name: combinedName,
+                        players: members.map(m => m.player_id)
+                      });
                       setTempScore(0);
                       setTempPutts(0);
                       setScoreModalVisible(true);
                     }}
                   >
-                    {p.avatar_url ? (
-                      <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
-                    ) : (
-                      <View style={S.sbAvatarCircle}>
-                        <Text style={S.sbAvatarCircleText}>{initials}</Text>
-                      </View>
-                    )}
-                  </Pressable>
-                  <Text
-                    style={S.sbPlayerName}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {first}
-                  </Text>
-                  <Text style={S.sbScoreText}>
-                    {total} ({toParDisplay})
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      )}
+                    {/* avatars */}
+                    <View style={{ flexDirection: "row" }}>
+                      {members.slice(0, 2).map((m: ScoreboardItem, i: number) =>
+                        m.avatar_url ? (
+                          <Image
+                            key={i}
+                            source={{ uri: m.avatar_url }}
+                            style={[
+                              S.sbAvatarCircleImg,
+                              { marginLeft: i === 0 ? 0 : -12, borderWidth: 2, borderColor: "#111" }
+                            ]}
+                          />
+                        ) : (
+                          <View
+                            key={i}
+                            style={[
+                              S.sbAvatarCircle,
+                              { marginLeft: i === 0 ? 0 : -12, borderWidth: 2, borderColor: "#111" }
+                            ]}
+                          >
+                            <Text style={S.sbAvatarCircleText}>
+                              {m.name.trim().slice(0, 1).toUpperCase()}
+                            </Text>
+                          </View>
+                        )
+                      )}
+                    </View>
 
+                    {/* team name */}
+                    <Text style={S.sbPlayerName} numberOfLines={1}>
+                      {combinedName}
+                    </Text>
+
+                    {/* combined score */}
+                    <Text style={S.sbScoreText}>
+                      {strokes} ({toParDisplay})
+                    </Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              // INDIVIDUAL SCOREBOARD (unchanged)
+              scoreboard.map((p: any) => {
+                const first = (p.name || "").trim().split(" ")[0] || "Player";
+                const initials = first.slice(0, 1).toUpperCase();
+                const total = p.strokes ?? 0;
+                const toParDisplay =
+                  p.toPar === 0 ? "E" : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
+
+                return (
+                  <View key={p.player_id} style={S.sbTile}>
+                    <Pressable
+                      onPress={() => {
+                        setActivePlayer(p);
+                        setTempScore(0);
+                        setTempPutts(0);
+                        setScoreModalVisible(true);
+                      }}
+                    >
+                      {p.avatar_url ? (
+                        <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
+                      ) : (
+                        <View style={S.sbAvatarCircle}>
+                          <Text style={S.sbAvatarCircleText}>{initials}</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                    <Text style={S.sbPlayerName} numberOfLines={1}>
+                      {first}
+                    </Text>
+                    <Text style={S.sbScoreText}>
+                      {total} ({toParDisplay})
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        </View>        
+      )}               
+            
       {/* Small Find My Location button */}
       <Pressable
         onPressIn={() => setButtonPressed(true)}
@@ -2447,7 +2630,7 @@ export default function CourseViewScreen() {
       />
 
       {/* ---------- Fade overlay for hole transitions (our addition) ---------- */}
-      <Animated.View
+            <Animated.View
         pointerEvents="none"
         style={{
           position: "absolute",
@@ -2459,11 +2642,13 @@ export default function CourseViewScreen() {
           opacity: transitionOpacity,
         }}
       />
-    </View>
-  );
-}
+    </View>  
+  );        
+}          
 
 // ------------------- UI Styling -------------------------
+// --- Merge scramble team info with scoreboard totals ---
+
 const styles = (palette: any) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: palette.background },
@@ -2878,9 +3063,10 @@ iconText: {
       justifyContent:"center"
     },
     sbTile: {
-      width: 64,
+      width: 160,
       alignItems: "center",
       marginVertical: 3,
+      marginHorizontal: 5,
     },
     sbAvatarCircle: {
       width: 36,
@@ -2908,7 +3094,7 @@ iconText: {
       fontWeight: "600",
       fontSize: 11,
       textAlign: "center",
-      maxWidth: 72,
+      maxWidth: 150,
     },
     sbScoreText: {
       marginTop: 6,

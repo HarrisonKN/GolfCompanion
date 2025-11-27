@@ -342,8 +342,13 @@ export default function GameModesScreen() {
 
       <View style={[styles(palette).bottomBar, { backgroundColor: palette.background }]}>
         <TouchableOpacity
+        //IMPORTANT - LOGIC TO START GAMES WITHOUT TEAMS ASSIGNED IE:SOLO OR INDIVIDUAL SCORING WILL NEED TO ADD LOGIC FOR OTHER MODES
           onPress={handleStart}
-          disabled={!selectedMode || creating || unassigned.length > 0}
+          disabled={
+          !selectedMode ||
+          creating ||
+          (selectedMode?.id === 'scramble' && unassigned.length > 0)
+}
           style={[
             styles(palette).beginButton,
             (!selectedMode || creating || unassigned.length > 0) && { opacity: 0.5 },

@@ -1244,32 +1244,32 @@ const refreshScoreboard = React.useCallback(async () => {
     const teamIds = Array.from(new Set(rows.map(r => r.team_id).filter(Boolean))) as string[];
 
     const items = [
-      ...teamIds.map(tid => {
-        const holeMap = rowsByPlayer.get(tid) ?? new Map<number, number>();
-        let strokes = 0;
-        let parSum = 0;
-        let holesPlayed = 0;
+      ...(isScrambleMode
+        ? teamIds.map(tid => {
+            const holeMap = rowsByPlayer.get(tid) ?? new Map<number, number>();
+            let strokes = 0;
+            let parSum = 0;
+            let holesPlayed = 0;
 
-        for (const [holeNo, sc] of holeMap.entries()) {
-          const par = parByHole.get(holeNo);
-          if (Number.isFinite(par)) {
-            strokes += sc;
-            parSum += par as number;
-            holesPlayed++;
-          }
-        }
+            for (const [holeNo, sc] of holeMap.entries()) {
+              const par = parByHole.get(holeNo);
+              if (Number.isFinite(par)) {
+                strokes += sc;
+                parSum += par!;
+                holesPlayed++;
+              }
+            }
 
-        const toPar = holesPlayed ? strokes - parSum : 0;
-
-        return {
-          player_id: tid,
-          name: 'Team',
-          avatar_url: null,
-          strokes,
-          toPar,
-          holesPlayed,
-        };
-      }),
+            return {
+              player_id: tid,
+              name: 'Team',
+              avatar_url: null,
+              strokes,
+              toPar: holesPlayed ? strokes - parSum : 0,
+              holesPlayed,
+            };
+          })
+        : []),
 
       ...baseIds.map(pid => {
         const holeMap = rowsByPlayer.get(pid) ?? new Map<number, number>();
@@ -1281,19 +1281,17 @@ const refreshScoreboard = React.useCallback(async () => {
           const par = parByHole.get(holeNo);
           if (Number.isFinite(par)) {
             strokes += sc;
-            parSum += par as number;
+            parSum += par!;
             holesPlayed++;
           }
         }
-
-        const toPar = holesPlayed ? strokes - parSum : 0;
 
         return {
           player_id: pid,
           name: 'Unknown',
           avatar_url: null,
           strokes,
-          toPar,
+          toPar: holesPlayed ? strokes - parSum : 0,
           holesPlayed,
         };
       })
@@ -1628,6 +1626,38 @@ const refreshScoreboard = React.useCallback(async () => {
 
     loadTeamsFromDB();
   }, [gameId]);
+
+    // Decide if this screen should behave in scramble mode
+  const isScrambleMode = React.useMemo(() => {
+    // If the route has a teams param, this is definitely scramble
+    if (teams) {
+      try {
+        const raw = Array.isArray(teams) ? teams[0] : teams;
+        const parsed = JSON.parse(String(raw));
+        if (Array.isArray(parsed) && parsed.length > 0) return true;
+      } catch {
+        // Non-JSON but present → still treat as scramble
+        return true;
+      }
+    }
+
+    // Fallback: if we actually loaded teams with players
+    if (scrambleTeams && Array.isArray(scrambleTeams)) {
+      return scrambleTeams.some(
+        (t: any) => Array.isArray(t.players) && t.players.length > 0
+      );
+    }
+
+    return false;
+  }, [teams, scrambleTeams]);
+
+    const showTeamScoreboard =
+    scrambleTeams &&
+    Array.isArray(scrambleTeams) &&
+    scrambleTeams.some(
+      (t: any) => Array.isArray(t.players) && t.players.length > 0
+    );
+
   // ------------------- COURSE VIEW UI -------------------------
   return (
     <View style={S.container}>
@@ -2439,7 +2469,7 @@ const refreshScoreboard = React.useCallback(async () => {
         </View>
       </Modal>
       
-      {/* Scoreboard moved to bottom of the screen */}
+     {/* Scoreboard moved to bottom of the screen */}
       {scoreboard.length > 0 && (
         <View
           style={[
@@ -2459,23 +2489,20 @@ const refreshScoreboard = React.useCallback(async () => {
           ]}
         >
           <View style={S.sbGrid}>
-            {scrambleTeams && Array.isArray(scrambleTeams) && scrambleTeams.length > 0 ? (
-              scrambleTeams.map((team: any, idx: number) => {
-
-                // find the team scoreboard entry
-                const sbTeam = scoreboard.find(s => s.player_id === team.team_id);
+            {showTeamScoreboard ? (
+              scrambleTeams!.map((team: any, idx: number) => {
+                const sbTeam = scoreboard.find((s: any) => s.player_id === team.team_id);
 
                 const strokes = sbTeam?.strokes ?? 0;
                 const toPar = sbTeam?.toPar ?? 0;
                 const toParDisplay = toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : `${toPar}`;
 
-                // get member profiles
-                const members = team.players
-                  .map((pid: string) => scoreboard.find(p => p.player_id === pid))
-                  .filter(Boolean) as ScoreboardItem[];
+                const members = (team.players || [])
+                  .map((pid: string) => scoreboard.find((p: any) => p.player_id === pid))
+                  .filter(Boolean) as any[];
 
                 const combinedName = members
-                  .map(m => m.name.split(" ")[0])
+                  .map(m => (m.name || "").split(" ")[0])
                   .join(" & ");
 
                 return (
@@ -2486,23 +2513,22 @@ const refreshScoreboard = React.useCallback(async () => {
                       setActiveTeam({
                         team_id: team.team_id,
                         name: combinedName,
-                        players: members.map(m => m.player_id)
+                        players: members.map(m => m.player_id),
                       });
                       setTempScore(0);
                       setTempPutts(0);
                       setScoreModalVisible(true);
                     }}
                   >
-                    {/* avatars */}
                     <View style={{ flexDirection: "row" }}>
-                      {members.slice(0, 2).map((m: ScoreboardItem, i: number) =>
+                      {members.slice(0, 2).map((m: any, i: number) =>
                         m.avatar_url ? (
                           <Image
                             key={i}
                             source={{ uri: m.avatar_url }}
                             style={[
                               S.sbAvatarCircleImg,
-                              { marginLeft: i === 0 ? 0 : -12, borderWidth: 2, borderColor: "#111" }
+                              { marginLeft: i === 0 ? 0 : -12, borderWidth: 2, borderColor: "#111" },
                             ]}
                           />
                         ) : (
@@ -2510,23 +2536,21 @@ const refreshScoreboard = React.useCallback(async () => {
                             key={i}
                             style={[
                               S.sbAvatarCircle,
-                              { marginLeft: i === 0 ? 0 : -12, borderWidth: 2, borderColor: "#111" }
+                              { marginLeft: i === 0 ? 0 : -12, borderWidth: 2, borderColor: "#111" },
                             ]}
                           >
                             <Text style={S.sbAvatarCircleText}>
-                              {m.name.trim().slice(0, 1).toUpperCase()}
+                              {(m.name || "").trim().slice(0, 1).toUpperCase()}
                             </Text>
                           </View>
                         )
                       )}
                     </View>
 
-                    {/* team name */}
                     <Text style={S.sbPlayerName} numberOfLines={1}>
-                      {combinedName}
+                      {combinedName || team.name || `Team ${idx + 1}`}
                     </Text>
 
-                    {/* combined score */}
                     <Text style={S.sbScoreText}>
                       {strokes} ({toParDisplay})
                     </Text>
@@ -2534,7 +2558,6 @@ const refreshScoreboard = React.useCallback(async () => {
                 );
               })
             ) : (
-              // INDIVIDUAL SCOREBOARD (unchanged)
               scoreboard.map((p: any) => {
                 const first = (p.name || "").trim().split(" ")[0] || "Player";
                 const initials = first.slice(0, 1).toUpperCase();
@@ -2571,8 +2594,8 @@ const refreshScoreboard = React.useCallback(async () => {
               })
             )}
           </View>
-        </View>        
-      )}               
+        </View>
+      )}
             
       {/* Small Find My Location button */}
       <Pressable

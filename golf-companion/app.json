@@ -2,7 +2,7 @@
   "expo": {
     "name": "Golf Companion",
     "slug": "golf-companion",
-    "version": "1.0.19",
+    "version": "1.0.20",
     "orientation": "portrait",
     "icon": "./assets/images/golf-logo.png",
     "assetBundlePatterns": [
@@ -13,7 +13,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "20",
+      "buildNumber": "21",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice chat.",
         "NSCameraUsageDescription": "This app may need access to your camera for video features.",
@@ -22,7 +22,7 @@
       "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
-      "versionCode": 20,
+      "versionCode": 21,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/golf-logo.png",
         "backgroundColor": "#003b23"

@@ -84,7 +84,7 @@ export default function HomeScreen() {
             <ThemedView style={[styles(palette).headerRow, { paddingTop: insets.top }]}>
               <View style={styles(palette).logoContainer}>
                 <Image
-                  source={require('@/assets/images/golf-logo.png')}
+                  source={require('@/assets/images/MullyLogo.png')}
                   style={styles(palette).logo}
                   contentFit="contain"
                 />
@@ -118,11 +118,13 @@ export default function HomeScreen() {
           <ThemedView style={[styles(palette).headerRow, { paddingTop: insets.top }]}>
             <View style={styles(palette).logoContainer}>
               <Image
-                source={require('@/assets/images/golf-logo.png')}
+                source={require('@/assets/images/MullyLogo.png')}
                 style={styles(palette).logo}
                 contentFit="contain"
               />
             </View>
+            <View style={styles(palette).divider} />
+            {/*
             <View style={styles(palette).rotatingTextContainer}>
               <ThemedText style={[styles(palette).text]} type="title">Golf</ThemedText>
               <RotatingText
@@ -130,6 +132,7 @@ export default function HomeScreen() {
                 rotationInterval={2000}
               />
             </View>
+            */}
           </ThemedView>
         }
       >
@@ -157,13 +160,16 @@ export default function HomeScreen() {
                 </ThemedText>
               </Pressable>
 
+              <View style={styles(palette).divider} />
+              {/* no longer required
               <Pressable
                 style={styles(palette).authButton}
                 onPress={() => router.push('/course-view')}
               >
                 <ThemedText style={styles(palette).authButtonText}>Go to Course View</ThemedText>
               </Pressable>
-
+              */}
+              {/* think we should just get rid of this and start again
               <Pressable
                 style={({ pressed }) => [
                   styles(palette).startGameButton,
@@ -281,6 +287,8 @@ export default function HomeScreen() {
                 </ThemedText>
               </Pressable>
             </>
+            */}
+            </>
           ) : (
             <>
               <ThemedText type="subtitle" style={styles(palette).authTitle}>Get Started</ThemedText>
@@ -301,15 +309,18 @@ export default function HomeScreen() {
             </>
           )}
         </ThemedView>
+        <ThemedText type="subtitle" style={styles(palette).authTitle}>Feed</ThemedText>
 
+        
         {/* Feature Cards */}
+        {/*
         <ThemedView style={styles(palette).featureCard}>
           <ThemedText type="subtitle" style={styles(palette).featureTitle}>{featureCards[currentCardIndex].title}</ThemedText>
           <ThemedText style={styles(palette).featureText}>
             {featureCards[currentCardIndex].description}
           </ThemedText>
         </ThemedView>
-        
+        */}
         {/* Add version display at the bottom */}
         <ThemedView style={styles(palette).versionContainer}>
           <ThemedText style={styles(palette).versionText}>
@@ -350,46 +361,44 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     paddingBottom: 20,
   },
   headerRow: {
-    backgroundColor: palette.main,
-    flexDirection: 'row',
+    backgroundColor: palette.background,
+    //flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingLeft: 80,
-    paddingTop: 10,
+    //justifyContent: 'center',
+    //paddingLeft: 80,
     paddingHorizontal: 16,
-    flex: 1, // Add this to ensure it fills the header space
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+    paddingTop: 0,
+    paddingLeft: 0,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 5,
-    gap:8,
+  // titleContainer: {
+  //   flexDirection: 'row',
+  //   alignItems: 'center',
+  //   justifyContent: 'center',
+  //   marginVertical: 5,
+  //   gap:8,
+  //   backgroundColor: palette.main,
+  // },
+  // stepContainer: {
+  //   marginTop:0,
+  //   gap: 8,
+  //   marginBottom: 8,
     
-  },
-  stepContainer: {
-    marginTop:0,
-    gap: 8,
-    marginBottom: 8,
     
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  // },
   logoContainer: {
-    width: 120,
-    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    paddingTop: 0,
+    height:100,
+    
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 300,
+    height: 300,
+    //justifyContent: 'center',
+
   },
   golfTextContainer: {
     justifyContent: 'center',
@@ -464,14 +473,15 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     marginVertical: 20,
     alignItems: 'center',
     paddingVertical: 16,
-    paddingHorizontal: 32,
+    //paddingHorizontal: 32,
     elevation: 8,
-    shadowColor: '#000',
+    //shadowColor: palette.shadow,
     shadowOpacity: 0.25,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     transform: [{ scale: 1 }],
     transitionDuration: '200ms',
+    width: '100%'
   },
   startGameButtonPressed: {
     backgroundColor: palette.third,
@@ -521,4 +531,11 @@ const styles = (palette: PaletteType) => StyleSheet.create({
     fontWeight: '500',
     opacity: 0.7,
   },
+  divider: {
+  width: '90%',
+  height: 1,
+  backgroundColor: palette.textLight,
+  alignSelf: 'center',
+  marginTop: 10,
+},
 });

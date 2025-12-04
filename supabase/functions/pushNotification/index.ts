@@ -1,11 +1,41 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { GoogleAuth } from "https://esm.sh/google-auth-library@9.0.0";
 
-serve(async (req) => {
-  try {
-    const { token, title, body } = await req.json();
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!token) {
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*" } });
+  }
+
+  try {
+    const { userId, token, title, body, data } = await req.json();
+
+    let fcmToken = token;
+    if (userId && !token) {
+      const supabaseResponse = await fetch(
+        `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=expo_push_token`,
+        {
+          headers: {
+            apikey: supabaseServiceKey,
+            Authorization: `Bearer ${supabaseServiceKey}`,
+          },
+        }
+      );
+
+      const profiles = await supabaseResponse.json();
+      if (profiles.length > 0 && profiles[0].expo_push_token) {
+        fcmToken = profiles[0].expo_push_token;
+      } else {
+        return new Response(
+          JSON.stringify({ error: "User not found or has no push token" }),
+          { status: 404, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    if (!fcmToken) {
       return new Response(JSON.stringify({ error: "Missing FCM token" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -27,12 +57,18 @@ serve(async (req) => {
     const client = await auth.getClient();
     const projectId = serviceAccount.project_id;
 
+    // 🆕 GAME-SPECIFIC METADATA
     const messagePayload = {
       message: {
-        token,
+        token: fcmToken,
         notification: {
           title: title || "⛳ Golf Companion",
           body: body || "You received a new notification!",
+        },
+        data: {
+          ...(data || {}),
+          timestamp: new Date().toISOString(),
+          source: "golf-companion",
         },
       },
     };
@@ -43,12 +79,24 @@ serve(async (req) => {
       data: messagePayload,
     });
 
-    console.log("✅ Push notification sent:", res.data);
-
-    return new Response(JSON.stringify({ success: true, response: res.data }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
+    console.log("✅ Push notification sent:", {
+      messageId: res.data.name,
+      title,
+      recipientToken: fcmToken.substring(0, 20) + "...",
+      gameId: data?.gameId || "N/A",
     });
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        messageId: res.data.name,
+        token: fcmToken.substring(0, 20) + "...",
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (err) {
     console.error("❌ Error:", err);
     return new Response(JSON.stringify({ error: err.message }), {

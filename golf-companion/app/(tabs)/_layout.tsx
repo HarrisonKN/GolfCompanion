@@ -13,6 +13,7 @@ import { Tabs } from "expo-router";
 import { supabase } from "@/components/supabase";
 import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
+import { registerForPushNotificationsAsync } from "@/lib/PushNotifications";
 
 export default function TabsLayout() {
   const { palette } = useTheme();
@@ -27,6 +28,8 @@ export default function TabsLayout() {
         console.log("✅ Existing session found");
         setUser(session.user);
         setAuthReady(true);
+        // Register for push notifications
+        await registerForPushNotificationsAsync(session.user.id);
         return;
       }
       const accessToken = await SecureStore.getItemAsync("supabase_access_token");
@@ -37,7 +40,11 @@ export default function TabsLayout() {
           refresh_token: refreshToken,
         });
         if (error) console.log("Restore session error:", error.message);
-        if (data.session) setUser(data.session.user);
+        if (data.session) {
+          setUser(data.session.user);
+          // Register for push notifications
+          await registerForPushNotificationsAsync(data.session.user.id);
+        }
       }
       setAuthReady(true);
     };
@@ -47,6 +54,8 @@ export default function TabsLayout() {
       if (event === "SIGNED_IN" && session) {
         console.log("🟢 SIGNED_IN event detected, setting user");
         setUser(session.user);
+        // Register for push notifications
+        registerForPushNotificationsAsync(session.user.id);
       } else if (event === "SIGNED_OUT") {
         console.log("🔴 SIGNED_OUT event detected, redirecting to login");
         setUser(null);

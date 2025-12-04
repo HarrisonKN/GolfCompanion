@@ -3,36 +3,52 @@ import * as Device from "expo-device";
 import { supabase } from "@/components/supabase";
 
 export async function registerForPushNotificationsAsync(userId) {
+  if (!userId) {
+    console.warn("⚠️ No userId provided for push notifications");
+    return null;
+  }
+
   if (!Device.isDevice) {
     alert("Must use physical device for Push Notifications");
-    return;
+    console.warn("⚠️ Push notifications only work on physical devices");
+    return null;
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+
+
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== "granted") {
+      alert("Permission not granted for notifications");
+      console.warn("⚠️ Permission not granted for notifications");
+      return null;
+    }
+
+    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    console.log("Obtained Push token:", token);
+
+    //save to supabase
+    const { error } = await supabase
+      .from("profiles")
+      .update({ expo_push_token: token })
+      .eq("id", userId);
+
+    if (error) {
+      console.error("❌ Failed to save token to Supabase", error);
+      return null
+    }
+
+    console.log("✅ Push token saved to Supabase");
+    return token;
   }
-
-  if (finalStatus !== "granted") {
-    alert("Permission not granted for notifications");
-    return;
+  catch (error) {
+    console.error("❌ Error during push notification registration", error);
+    return null;
   }
-
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
-  console.log("Push token:", token);
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({ expo_push_token: token })
-    .eq("id", userId);
-
-  if (error) {
-    console.error("❌ Failed to save token to Supabase", error);
-  } else {
-    console.log("✅ Push token saved to Supabase:", token);
-  }
-
-  return token;
 }

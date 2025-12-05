@@ -3087,15 +3087,15 @@ iconText: {
     },
     sbGrid: {
       flexDirection: "row",
-      flexWrap: "nowrap",
-      justifyContent:"center",
+      flexWrap: "wrap",
+      justifyContent: "center",
       backgroundColor: palette.background,
     },
     sbTile: {
-      width: 160,
+      width: "25%",        // <-- responsive, fits 4 players
       alignItems: "center",
       marginVertical: 3,
-      marginHorizontal: 5,
+      marginHorizontal: 0, // tighter spacing keeps layout clean
       backgroundColor: palette.background,
     },
     sbAvatarCircle: {

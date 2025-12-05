@@ -58,19 +58,20 @@ function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: 
   onCancel?: () => void;
   confirmButtons?: boolean;
 }) {
+  const { palette } = useTheme();
   if (!visible) return null;
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={{
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: palette.background,
         justifyContent: "center",
         alignItems: "center",
         zIndex: 3000,
       }}>
         <View style={{
           minWidth: 220,
-          backgroundColor: "#111",
+          backgroundColor: palette.background,
           borderRadius: 20,
           paddingVertical: 24,
           paddingHorizontal: 32,
@@ -78,7 +79,7 @@ function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: 
           elevation: 10,
         }}>
           <Text style={{
-            color: "#fff",
+            color: palette.textLight,
             fontWeight: "bold",
             fontSize: 18,
             textAlign: "center"
@@ -89,9 +90,9 @@ function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: 
             <View style={{ flexDirection: "row", marginTop: 24, gap: 18 }}>
               <Pressable
                 onPress={onCancel}
-                style={({ pressed }) => [{ backgroundColor: "#444", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20, marginRight: 8, opacity: pressed ? 0.7 : 1 }]}
+                style={({ pressed }) => [{ backgroundColor: palette.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20, marginRight: 8, opacity: pressed ? 0.7 : 1 }]}
               >
-                <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>No</Text>
+                <Text style={{ color: palette.textLight, fontWeight: "bold", fontSize: 16 }}>No</Text>
               </Pressable>
               <Pressable
                 onPress={onConfirm}
@@ -2481,7 +2482,7 @@ const refreshScoreboard = React.useCallback(async () => {
               width: `${Math.min(92, Math.max(50, Math.round(70 * sbScale)))}%`,
               minHeight: mul(70),
               zIndex: 4000,
-              backgroundColor: "#111",
+              backgroundColor: palette.background,
               paddingVertical: mul(6),
               paddingBottom: insets.bottom - 20,
               borderRadius: mul(12),
@@ -2631,7 +2632,7 @@ const refreshScoreboard = React.useCallback(async () => {
           width: 38,
           height: 38,
           borderRadius: 19,
-          backgroundColor: buttonPressed ? "#333" : "#111", // darker when pressed
+          backgroundColor: buttonPressed ? palette.background : palette.background, // darker when pressed
           transform: [{ scale: buttonPressed ? 0.9 : 1 }], // scale effect
           alignItems: "center",
           justifyContent: "center",
@@ -2861,7 +2862,7 @@ const styles = (palette: any) =>
     },
     actionButton: {
       //backgroundColor: palette.primary,
-      backgroundColor: '#111',
+      backgroundColor: palette.background,
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderRadius: 8,
@@ -2872,7 +2873,7 @@ const styles = (palette: any) =>
       opacity: 0.6, // dim when pressed
     },
     actionButtonText: {
-      color: palette.white,
+      color: palette.textLight,
       fontWeight: "600",
       textAlign: "center",
     },
@@ -2980,7 +2981,7 @@ containerCompact: {
 textCompact: {
   fontSize: 14,
   lineHeight: 18,
-  color: palette.textDark,
+  color: palette.textLight,
 },
 placeholderCompact: {
   fontSize: 14,
@@ -3003,14 +3004,14 @@ iconText: {
     zIndex: 1000,
   },
   distanceBanner: {
-    backgroundColor: "#111",
+    backgroundColor: palette.background,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 6,
     elevation: 5,
   },
   distanceBannerText: {
-    color: "#fff",
+    color: palette.textLight,
     fontWeight: "bold",
     fontSize: 18,
   },
@@ -3019,7 +3020,7 @@ iconText: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      backgroundColor: "#111",
+      backgroundColor: palette.background,
       paddingHorizontal: 16,
       paddingVertical: 8,
       borderRadius: 20,
@@ -3034,19 +3035,22 @@ iconText: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
+      color: palette.textLight,
+      backgroundColor: palette.background,
     },
     bannerCourse: {
       fontSize: 16,
       fontWeight: "600",
-      color: palette.white,
+      color: palette.textLight,
     },
     bannerInfo: {
       fontSize: 14,
-      color: palette.white,
+      color: palette.textLight,
       marginTop: 2,
     },
     arrowButton: {
       padding: 12,
+      color: palette.textLight
     },
     arrowButtonPressed: {
       opacity: 0.6,
@@ -3054,16 +3058,16 @@ iconText: {
     arrowText: {
       fontSize: 20,
       fontWeight: "bold",
-      color: palette.white,
+      color: palette.textLight,
     },
     FinishText: {
       fontSize: 16,
       fontWeight: "bold",
-      color: palette.white,
+      color: palette.textLight,
     },
     sbContainer: {
       marginTop: 10,
-      backgroundColor: "#111",
+      backgroundColor: palette.background,
       paddingHorizontal: 6,
       paddingVertical: 8,
       borderRadius: 14,
@@ -3079,17 +3083,20 @@ iconText: {
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: 6,
+      backgroundColor: palette.background,
     },
     sbGrid: {
       flexDirection: "row",
       flexWrap: "nowrap",
-      justifyContent:"center"
+      justifyContent:"center",
+      backgroundColor: palette.background,
     },
     sbTile: {
       width: 160,
       alignItems: "center",
       marginVertical: 3,
       marginHorizontal: 5,
+      backgroundColor: palette.background,
     },
     sbAvatarCircle: {
       width: 36,
@@ -3113,7 +3120,7 @@ iconText: {
     },
     sbPlayerName: {
       marginTop: 4,
-      color: palette.white,
+      color: palette.textLight,
       fontWeight: "600",
       fontSize: 11,
       textAlign: "center",
@@ -3121,7 +3128,7 @@ iconText: {
     },
     sbScoreText: {
       marginTop: 6,
-      color: palette.white,
+      color: palette.textLight,
       fontWeight: "700",
       fontSize: 12,
     },
@@ -3157,7 +3164,7 @@ iconText: {
       borderRadius: 10,
       alignItems: "center",
     },
-    sbBadgeText: { color: "#fff", fontWeight: "700" },
+    sbBadgeText: { color: palette.textLight, fontWeight: "700" },
     sbBadgeUnder: { backgroundColor: "#16a34a" }, // under par = green
     sbBadgeOver: { backgroundColor: "#ef4444" },  // over par = red
     sbBadgeEven: { backgroundColor: "#4b5563" },  // even = gray

@@ -54,7 +54,8 @@ export const PALETTES = {
     main: '#111',
     sand: '#F5E9D3',
     teal: '#DFF7F4',
-    shadow:'#111'
+    shadow:'#111',
+    transparent: "rgba(96, 153, 102, 0.6)"
   },
   dark: {
     // primary: "#10B981",  
@@ -100,6 +101,7 @@ export const PALETTES = {
     error: "#EF4444",
     main: "#111",
     shadow: "#2ED9C3"
+    
   },
   alt1: { // Forest & Charcoal
     primary: "#295F2D",

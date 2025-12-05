@@ -1628,7 +1628,7 @@ const styles = (palette: any) => StyleSheet.create({
   fontWeight: '600',
   },
   text: {
-  color: palette.textDark,
+  color: palette.textLight,
   },
   listItemLabel: {
   color: palette.textDark,

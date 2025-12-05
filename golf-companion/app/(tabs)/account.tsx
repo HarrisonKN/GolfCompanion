@@ -14,6 +14,7 @@ import { getAppVersion, getBuildInfo } from '@/utils/version';
 import * as ImagePicker from 'expo-image-picker';
 import { decode as atob } from 'base-64';
 import * as FileSystem from 'expo-file-system';
+import { TestNotifications } from '@/components/TestNotifications';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -63,6 +64,7 @@ export default function AccountsScreen() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [hideInviteBanner, setHideInviteBanner] = useState(false);
   const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
+  const [showTestNotifications, setShowTestNotifications] = useState(false);
 
   const { palette } = useTheme();
   const [toast, setToast] = useState<string | null>(null);
@@ -1331,6 +1333,32 @@ const inviteChannel = supabase
           </View>
         </Modal>
       </View>
+
+      <SectionDivider />
+
+      {/* Test Notifications Section */}
+      <View style={styles(palette).friendsSection}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: SCREEN_WIDTH * 0.05 }}>
+          <ThemedText type="subtitle" style={[styles(palette).sectionTitle, { marginHorizontal: 0 }]}>
+            🧪 Test Notifications
+          </ThemedText>
+          <Pressable
+            style={[
+              styles(palette).createButton,
+              { backgroundColor: showTestNotifications ? palette.error : palette.primary }
+            ]}
+            onPress={() => setShowTestNotifications(!showTestNotifications)}
+          >
+            <ThemedText style={styles(palette).createButtonText}>
+              {showTestNotifications ? 'Hide Tests' : 'Show Tests'}
+            </ThemedText>
+          </Pressable>
+        </View>
+        {showTestNotifications && user?.id && (
+          <TestNotifications currentUserId={user.id} palette={palette} />
+        )}
+      </View>
+
       {(pendingInvites.length > 0) && !hideInviteBanner && (
         <View style={styles(palette).notificationBanner}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>

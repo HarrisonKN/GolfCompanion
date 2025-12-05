@@ -8,6 +8,7 @@ import { useAuth } from '@/components/AuthContext';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import RotatingText from '@/components/RotatingText';
 import { ThemedText } from '@/components/ThemedText';
+import { TextInput } from "react-native";
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/components/ThemeContext';
 import { Image } from 'expo-image';
@@ -17,7 +18,6 @@ import { Pressable, StyleSheet, View, ScrollView } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { getAppVersion } from '@/utils/version';
 import { registerForPushNotificationsAsync } from '@/lib/PushNotifications';
-import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from '@/lib/supabaseClient';
 
@@ -27,8 +27,121 @@ export default function HomeScreen() {
   const { palette } = useTheme();
   const { displayVersion } = getAppVersion(); // Add this line
   const insets = useSafeAreaInsets();
+  const [targetUserId, setTargetUserId] = useState("");
+  const [friends, setFriends] = useState<any[]>([]);
 
- 
+  useEffect(() => {
+    const loadFriends = async () => {
+      if (!user) return;
+      const { data, error } = await supabase
+        .from("friends")
+        .select(`friend_id, profiles:profiles!friends_friend_id_profiles_fkey(id, full_name)`)
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("❌ Error loading friends for notification test:", error);
+        return;
+      }
+
+      setFriends(data || []);
+    };
+
+    loadFriends();
+  }, [user]);
+
+ const testNotification = async () => {
+  if (!user) {
+    Toast.show({
+      type: 'error',
+      text1: 'Not logged in',
+      text2: 'Please log in first'
+    });
+    return;
+  }
+
+  try {
+    console.log("🧪 Testing notification for user:", user.id);
+    
+    const { data, error } = await supabase.functions.invoke("pushNotification", {
+      body: {
+        userId: user.id,
+        title: "🧪 Test Notification",
+        body: "If you see this, push notifications are working!",
+        data: { test: "true", route: "index" },
+      },
+    });
+    
+    if (error) {
+      console.error("❌ Test notification failed:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Test failed',
+        text2: error.message
+      });
+    } else {
+      console.log("✅ Test notification sent:", data);
+      Toast.show({
+        type: 'success',
+        text1: '✅ Test sent!',
+        text2: 'Check for notification in a few seconds'
+      });
+    }
+  } catch (e: any) {
+    console.error("❌ Exception:", e);
+    Toast.show({
+      type: 'error',
+      text1: 'Error',
+      text2: e.message || 'Unknown error'
+    });
+  }
+};
+
+const sendNotificationToOtherUser = async () => {
+  if (!targetUserId.trim()) {
+    Toast.show({
+      type: "error",
+      text1: "Missing target user",
+      text2: "Paste a user ID to send to",
+    });
+    return;
+  }
+
+  try {
+    console.log("📤 Sending cross-device test to:", targetUserId);
+
+    const { data, error } = await supabase.functions.invoke("pushNotification", {
+      body: {
+        userId: targetUserId.trim(),
+        title: "📱 Cross-device test",
+        body: "This notification was sent from another device.",
+        data: { test: "cross-device", route: "index" },
+      },
+    });
+
+    if (error) {
+      console.error("❌ Cross-device test failed:", error);
+      Toast.show({
+        type: "error",
+        text1: "Send failed",
+        text2: error.message,
+      });
+    } else {
+      console.log("✅ Cross-device notification sent:", data);
+      Toast.show({
+        type: "success",
+        text1: "✅ Sent to other device",
+        text2: "Check that device for a notification",
+      });
+    }
+  } catch (e: any) {
+    console.error("❌ Exception sending cross-device test:", e);
+    Toast.show({
+      type: "error",
+      text1: "Error",
+      text2: e.message || "Unknown error",
+    });
+  }
+};
 
 //----------------------------------------------------------------
 // Adding to make it so there is only 1 feature card at a time on the home screen
@@ -161,133 +274,6 @@ export default function HomeScreen() {
               </Pressable>
 
               <View style={styles(palette).divider} />
-              {/* no longer required
-              <Pressable
-                style={styles(palette).authButton}
-                onPress={() => router.push('/course-view')}
-              >
-                <ThemedText style={styles(palette).authButtonText}>Go to Course View</ThemedText>
-              </Pressable>
-              */}
-              {/* think we should just get rid of this and start again
-              <Pressable
-                style={({ pressed }) => [
-                  styles(palette).startGameButton,
-                  pressed && styles(palette).startGameButtonPressed,
-                ]}
-                onPress={async () => {
-                  try {
-                    const tokenResponse = await Notifications.getDevicePushTokenAsync();
-                    //const fcmToken = tokenResponse.data;
-                    const fcmToken = tokenResponse.data + "_" + Math.floor(Math.random() * 1000);
-                    console.log('✅ FCM Token:', fcmToken);
-
-                    const supabaseUser = user?.id;
-                    console.log("👤 Supabase user:", supabaseUser);
-                    if (!fcmToken || !supabaseUser) throw new Error("Missing token or user ID");
-
-                    // 🔧 Ensure Supabase client knows about the current session before querying
-                    if (user?.access_token && user?.refresh_token) {
-                      console.log("🔄 Forcing Supabase session sync before update");
-                      await supabase.auth.setSession({
-                        access_token: user.access_token,
-                        refresh_token: user.refresh_token,
-                      });
-                    }
-
-                    // 🔄 Forcing Supabase client to re-sync after login
-                    console.log("🔄 Forcing Supabase client to re-sync after login");
-                    await supabase.auth.refreshSession();
-
-                    const {
-                      data: { session },
-                    } = await supabase.auth.getSession();
-                    console.log("🧠 Auth UID from Supabase:", session?.user?.id);
-
-                    const { data, error } = await supabase
-                      .from("profiles")
-                      .update({ fcm_token: fcmToken })
-                      .eq("id", supabaseUser)
-                      .select();
-
-                    if (error) {
-                      console.error("❌ Supabase error:", error.message, error.details, error.hint);
-                      Toast.show({
-                        type: 'error',
-                        text1: 'Error saving token',
-                        text2: error.message,
-                      });
-                    } else {
-                      console.log("✅ Supabase update success:", data);
-                      Toast.show({
-                        type: 'success',
-                        text1: 'Push token saved!',
-                        text2: fcmToken,
-                      });
-
-                      // 🔔 Send push notifications to all friends
-                      const { data: friends, error: friendsError } = await supabase
-                        .from("friends")
-                        .select(`
-                          friend_id,
-                          profiles:profiles!friends_friend_id_profiles_fkey(id, full_name, fcm_token)
-                        `)
-                        .eq("user_id", supabaseUser);
-                      console.log("👥 Friends found:", friends);
-
-                      if (friendsError) {
-                        console.error("❌ Error fetching friends:", friendsError);
-                        Toast.show({
-                          type: 'error',
-                          text1: 'Failed to fetch friends',
-                          text2: friendsError.message,
-                        });
-                      } else if (friends && friends.length > 0) {
-                        for (const friend of friends) {
-                          const friendToken = friend.profiles?.[0]?.fcm_token;
-                          console.log(`🔔 Sending to ${friend.profiles?.[0]?.full_name} (${friend.friend_id})`);
-                          if (!friendToken) continue;
-                          const { error: notifError } = await supabase.functions.invoke("pushNotification", {
-                            body: {
-                              token: friendToken,
-                              title: "Golf Invite 🏌️‍♂️",
-                              body: "Your friend just invited you for a round!",
-                            },
-                          });
-                          if (notifError) {
-                            console.error("❌ Push error:", notifError);
-                          } else {
-                            console.log(`✅ Push sent to ${friend.profiles?.[0]?.full_name} (${friendToken})`);
-                          }
-                        }
-                        Toast.show({
-                          type: 'success',
-                          text1: 'Push notifications sent to all friends!',
-                        });
-                      } else {
-                        Toast.show({
-                          type: 'info',
-                          text1: 'No friends found to send notifications',
-                        });
-                      }
-                      // --- end friends notification block ---
-                    }
-                  } catch (err: any) {
-                    Toast.show({
-                      type: 'error',
-                      text1: 'Error saving token, do something different bozo',
-                      text2: err.message,
-                    });
-                    console.log(err.message)
-                  }
-                }}
-              >
-                <ThemedText style={styles(palette).startGameButtonText}>
-                  Test Push Notifications
-                </ThemedText>
-              </Pressable>
-            </>
-            */}
             </>
           ) : (
             <>
@@ -310,6 +296,86 @@ export default function HomeScreen() {
           )}
         </ThemedView>
         <ThemedText type="subtitle" style={styles(palette).authTitle}>Feed</ThemedText>
+
+        {user && (
+          <View style={styles(palette).authContainer}>
+            {/* Existing self-test button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles(palette).authButton,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={testNotification}
+            >
+              <ThemedText style={styles(palette).authButtonText}>
+                🧪 Test Push Notification
+              </ThemedText>
+            </Pressable>
+
+            {/* New cross-device test controls */}
+            <View style={{ marginTop: 16, width: "100%", alignItems: "center" }}>
+              <ThemedText style={{ color: palette.textLight, marginBottom: 8 }}>
+                Send to one of your friends:
+              </ThemedText>
+
+              <ScrollView
+                style={{ maxHeight: 120, width: "100%" }}
+                contentContainerStyle={{ alignItems: "stretch" }}
+              >
+                {friends.length === 0 ? (
+                  <ThemedText style={{ color: palette.textLight }}>
+                    No friends found. Add a friend to test cross-device notifications.
+                  </ThemedText>
+                ) : (
+                  friends.map((f) => {
+                    const friendProfile = f.profiles?.[0] ?? f.profiles;
+                    const name = friendProfile?.full_name || f.friend_id;
+                    const isSelected = targetUserId === friendProfile?.id;
+                    return (
+                      <Pressable
+                        key={friendProfile?.id || f.friend_id}
+                        onPress={() => setTargetUserId(friendProfile?.id || f.friend_id)}
+                        style={({ pressed }) => [
+                          {
+                            paddingVertical: 10,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
+                            marginBottom: 8,
+                            borderWidth: isSelected ? 2 : 1,
+                            borderColor: isSelected ? palette.primary : palette.textLight,
+                            backgroundColor: pressed ? palette.secondary : palette.background,
+                          },
+                        ]}
+                      >
+                        <ThemedText style={{ color: palette.textDark }}>
+                          {name}
+                        </ThemedText>
+                        <ThemedText style={{ color: palette.textLight, fontSize: 12 }}>
+                          {friendProfile?.id}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })
+                )}
+              </ScrollView>
+
+              {friends.length > 0 && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles(palette).authButton,
+                    { width: "100%", marginTop: 8, alignItems: "center" },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  onPress={sendNotificationToOtherUser}
+                >
+                  <ThemedText style={styles(palette).authButtonText}>
+                    📤 Send to Selected Friend
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
 
         
         {/* Feature Cards */}

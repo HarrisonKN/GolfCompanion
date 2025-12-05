@@ -49,13 +49,14 @@ export default function TabsLayout() {
       setAuthReady(true);
     };
     initAuth();
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state change:", event);
       if (event === "SIGNED_IN" && session) {
-        console.log("🟢 SIGNED_IN event detected, setting user");
+        console.log("🟢 SIGNED_IN event detected");
         setUser(session.user);
-        // Register for push notifications
-        registerForPushNotificationsAsync(session.user.id);
+        
+        // Register for push notifications on first login
+        await registerForPushNotificationsAsync(session.user.id);
       } else if (event === "SIGNED_OUT") {
         console.log("🔴 SIGNED_OUT event detected, redirecting to login");
         setUser(null);

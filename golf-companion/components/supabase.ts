@@ -4,8 +4,12 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Environment variables pulled from app.json extra
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl;
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey;
+const expoExtra = Constants.expoConfig?.extra;
+const manifestExtra = (Constants as any)?.manifestExtra;
+const legacyManifestExtra = (Constants.manifest as any)?.extra;
+const extra = expoExtra ?? manifestExtra ?? legacyManifestExtra ?? {};
+const supabaseUrl = extra.supabaseUrl;
+const supabaseAnonKey = extra.supabaseAnonKey;
 
 // Enhanced debugging
 console.log('=== SUPABASE DEBUG INFO ===');

@@ -1,67 +1,91 @@
 import { useEffect } from "react";
-import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import messaging from '@react-native-firebase/messaging';
 
 import { AuthProvider } from "@/components/AuthContext";
 import { ThemeProvider } from "@/components/ThemeContext";
 import { VoiceProvider } from '@/components/VoiceContext';
 import { GlobalVoiceBar } from '@/components/GlobalVoiceBar';
 
-// Configure how notifications are displayed
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
 export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    // Listen for notifications when app is in foreground
-    const subscription = Notifications.addNotificationReceivedListener((notification) => {
-      console.log("📬 Notification received:", notification);
+    // 🔥 FCM: Handle background message (when app is closed or killed)
+    // This must be set at the very top level and OUTSIDE of useEffect for Android
+    messaging().setBackgroundMessageHandler(async (remoteMessage) => {
+      console.log('🛌 FCM Background message (app closed/killed):', remoteMessage);
+      console.log('Title:', remoteMessage.notification?.title);
+      console.log('Body:', remoteMessage.notification?.body);
+      console.log('Data:', remoteMessage.data);
+      // The notification will automatically be shown in the system tray
+      // Navigation will happen when user taps the notification
+      return Promise.resolve();
     });
 
-    // 🆕 LISTEN FOR USER TAPPING ON NOTIFICATION
-    const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log("👆 User tapped notification:", response);
+    // 🔥 FCM: Handle foreground notifications
+    const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+      console.log('📬 FCM Foreground notification:', remoteMessage);
       
-      const { data } = response.notification.request.content;
-      
-      // Handle game invitation taps
-      if (data?.route === "gameModes" && data?.gameId) {
-        console.log("🎮 Navigating to game:", data.gameId);
-        router.push({
-          pathname: "/gameModes" as any,
-          params: {
-            gameId: data.gameId as string,
-            courseId: data.courseId as string,
-            courseName: data.courseName as string,
-            isJoiningExistingGame: "1",
-          },
-        });
-      }
-      // Handle other routes as needed
-      else if (data?.route) {
-        router.push(data.route as any);
-      }
+      // You can display a custom UI or use a notification library here
+      // The notification will automatically show in the system tray on Android
+      console.log('Title:', remoteMessage.notification?.title);
+      console.log('Body:', remoteMessage.notification?.body);
+      console.log('Data:', remoteMessage.data);
     });
+
+    // 🔥 FCM: Handle notification taps (when app is in background or quit)
+    const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp((remoteMessage) => {
+      console.log('👆 FCM: User tapped notification (background):', remoteMessage);
+      handleNotificationNavigation(remoteMessage.data);
+    });
+
+    // 🔥 FCM: Handle notification that opened the app from quit state
+    messaging()
+      .getInitialNotification()
+      .then((remoteMessage) => {
+        if (remoteMessage) {
+          console.log('🚀 FCM: App opened from quit state by notification:', remoteMessage);
+          handleNotificationNavigation(remoteMessage.data);
+        }
+      });
 
     return () => {
-      subscription.remove();
-      responseSubscription.remove();
+      unsubscribeForeground();
+      unsubscribeNotificationOpened();
     };
   }, [router]);
+
+  // Helper function to handle navigation from notification data
+  const handleNotificationNavigation = (data: any) => {
+    if (!data) return;
+
+    console.log('🧭 Processing notification navigation:', data);
+
+    // Handle game invitation taps
+    if (data.route === "gameModes" && data.gameId) {
+      console.log("🎮 Navigating to game:", data.gameId);
+      router.push({
+        pathname: "/gameModes" as any,
+        params: {
+          gameId: data.gameId,
+          courseId: data.courseId || '',
+          courseName: data.courseName || '',
+          isJoiningExistingGame: "1",
+        },
+      });
+    }
+    // Handle other routes
+    else if (data.route) {
+      console.log('📍 Navigating to route:', data.route);
+      router.push(data.route as any);
+    }
+  };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

@@ -9,6 +9,7 @@ export async function sendNotificationToUser(
   try {
     console.log(`📤 Sending notification to user ${userId}...`);
 
+    // Just invoke the function - token should already exist in database
     const { data: response, error } = await supabase.functions.invoke(
       "pushNotification",
       {
@@ -44,7 +45,7 @@ export async function sendNotificationToMultipleUsers(
     const results = await Promise.all(
       userIds.map((id) => sendNotificationToUser(id, title, body, data))
     );
-    console.log("✅ Batch notifications sent:", results);
+    console.log("✅ Batch notifications sent");
     return results;
   } catch (err) {
     console.error("❌ Error sending batch notifications:", err);

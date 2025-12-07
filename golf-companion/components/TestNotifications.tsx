@@ -56,17 +56,14 @@ export function TestNotifications({ currentUserId, palette }: TestNotificationsP
     try {
       const { data, error } = await supabase
         .from('friends')
-        .select(`
-          friend_id,
-          profiles:profiles!friends_friend_id_profiles_fkey(id, full_name, avatar_url, fcm_token)
-        `)
+        .select('friend_id, profiles:friend_id(id, full_name, avatar_url, fcm_token)')
         .eq('user_id', currentUserId);
 
       if (error) throw error;
 
       const friendsList: Friend[] =
         data
-          ?.map((item: any) => item.profiles?.[0])
+          ?.map((item: any) => item.profiles)
           .filter((p: any) => p?.id) || [];
 
       setFriends(friendsList);
@@ -339,7 +336,7 @@ export function TestNotifications({ currentUserId, palette }: TestNotificationsP
               </Text>
               
               <Pressable
-                style={[styles.testButton, { backgroundColor: palette.primary }]}
+                style={({ pressed }) => [styles.testButton, { backgroundColor: pressed ? '#8b8b8bff' : '#c5c5c5ff' }]}
                 onPress={() => sendTestNotification(selectedFriend.id, 'simple')}
                 disabled={sending || !selectedFriend.fcm_token}
               >
@@ -347,7 +344,7 @@ export function TestNotifications({ currentUserId, palette }: TestNotificationsP
               </Pressable>
 
               <Pressable
-                style={[styles.testButton, { backgroundColor: palette.third }]}
+                style={({ pressed }) => [styles.testButton, { backgroundColor: pressed ? '#8b8b8bff' : '#c5c5c5ff' }]}
                 onPress={() => sendTestNotification(selectedFriend.id, 'game')}
                 disabled={sending || !selectedFriend.fcm_token}
               >
@@ -355,7 +352,7 @@ export function TestNotifications({ currentUserId, palette }: TestNotificationsP
               </Pressable>
 
               <Pressable
-                style={[styles.testButton, { backgroundColor: palette.secondary }]}
+                style={({ pressed }) => [styles.testButton, { backgroundColor: pressed ? '#8b8b8bff' : '#c5c5c5ff' }]}
                 onPress={() => sendTestNotification(selectedFriend.id, 'friend-request')}
                 disabled={sending || !selectedFriend.fcm_token}
               >
@@ -427,31 +424,47 @@ const styles = StyleSheet.create({
   },
   smallButton: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 10,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2.5,
+    elevation: 4,
   },
   testButton: {
-    padding: 14,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   buttonText: {
     color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
+    fontWeight: '700',
+    fontSize: 15,
+    letterSpacing: 0.5,
   },
   friendsList: {
     marginTop: 12,
     gap: 8,
   },
   friendItem: {
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 3,
   },
   friendName: {
     fontSize: 16,

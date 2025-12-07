@@ -68,6 +68,60 @@ export default function GameModesScreen() {
 
   useEffect(() => {
     const load = async () => {
+      // 🆕 IF JOINING AN EXISTING GAME, FETCH PARTICIPANTS FROM DATABASE
+      if (joiningExistingGame && gameId && !parsedIds.length) {
+        console.log("🔄 Fetching game participants for game:", gameId);
+        setLoadingPlayers(true);
+        try {
+          const { data: participants, error: partError } = await supabase
+            .from('game_participants')
+            .select('user_id')
+            .eq('game_id', gameId);
+
+          if (partError) {
+            console.error("Failed to fetch participants:", partError);
+            setLoadingPlayers(false);
+            return;
+          }
+
+          if (!participants || participants.length === 0) {
+            console.warn("No participants found for game:", gameId);
+            setLoadingPlayers(false);
+            return;
+          }
+
+          const participantIds = participants.map(p => p.user_id);
+          console.log("✅ Found participants:", participantIds);
+
+          // Fetch their profiles
+          const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url, handicap')
+            .in('id', participantIds);
+
+          if (!profileError && profiles) {
+            const ordered = participantIds.map(id => {
+              const found = profiles.find(p => p.id === id);
+              return {
+                id,
+                name: found?.full_name || 'Unknown',
+                avatar_url: found?.avatar_url || null,
+                handicap: found?.handicap ?? null,
+              };
+            });
+            setPlayers(ordered);
+            setUnassigned(ordered.map(p => p.id));
+            console.log("✅ Players loaded:", ordered.length);
+          }
+        } catch (err) {
+          console.error("Error loading game participants:", err);
+        } finally {
+          setLoadingPlayers(false);
+        }
+        return;
+      }
+
+      // ORIGINAL FLOW: Load from parsed player IDs
       if (!parsedIds.length) return;
       setLoadingPlayers(true);
       try {
@@ -94,7 +148,7 @@ export default function GameModesScreen() {
       }
     };
     load();
-  }, [parsedIds]);
+  }, [parsedIds, joiningExistingGame, gameId]);
 
   const handleStart = async () => {
     if (!courseId || !parsedIds.length || creating) return;

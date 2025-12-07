@@ -21,6 +21,7 @@ import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
 import { PALETTES } from '@/constants/theme';
 import { useTheme } from '@/components/ThemeContext';
 import { sendNotificationToMultipleUsers } from "@/lib/sendNotification";
+import { notifyGameInvite } from '@/lib/NotificationTriggers';
 
 const COMPACT_H = 36;
 
@@ -384,18 +385,11 @@ export default function StartGameScreen() {
       try {
         console.log("📤 Sending game invitations to:", invitedPlayerIds);
         
-        await sendNotificationToMultipleUsers(
-          invitedPlayerIds,
-          "⛳ Game Invitation!",
-          `${user.user_metadata?.full_name || 'A friend'} invited you to play at ${courseName}`,
-          {
-            route: "gameModes",
-            gameId: gid,
-            courseId: course as string,
-            courseName: courseName,
-            isJoiningExistingGame: "1",
-          }
-        );
+        // Send notifications to each invited player
+        const inviterName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'A friend';
+        for (const invitedId of invitedPlayerIds) {
+          await notifyGameInvite(invitedId, inviterName, courseName, gid);
+        }
         
         console.log("✅ Game invitations sent successfully!");
       } catch (notifErr) {

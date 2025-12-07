@@ -1,15 +1,29 @@
 import { supabase } from "@/components/supabase";
 
+export interface NotificationPayload {
+  screen?: string; // 'scorecard' | 'account' | 'gameModes' | 'home' | etc.
+  gameId?: string;
+  courseId?: string;
+  courseName?: string;
+  [key: string]: string | undefined; // Additional custom data
+}
+
+/**
+ * Send a notification to a specific user
+ * @param userId - Supabase user ID
+ * @param title - Notification title
+ * @param body - Notification body
+ * @param payload - Navigation and custom data
+ */
 export async function sendNotificationToUser(
   userId: string,
   title: string,
   body: string,
-  data?: Record<string, string>
+  payload?: NotificationPayload
 ) {
   try {
     console.log(`📤 Sending notification to user ${userId}...`);
 
-    // Just invoke the function - token should already exist in database
     const { data: response, error } = await supabase.functions.invoke(
       "pushNotification",
       {
@@ -17,7 +31,7 @@ export async function sendNotificationToUser(
           userId,
           title,
           body,
-          data,
+          data: payload || {},
         },
       }
     );
@@ -35,15 +49,22 @@ export async function sendNotificationToUser(
   }
 }
 
+/**
+ * Send a notification to multiple users
+ * @param userIds - Array of Supabase user IDs
+ * @param title - Notification title
+ * @param body - Notification body
+ * @param payload - Navigation and custom data
+ */
 export async function sendNotificationToMultipleUsers(
   userIds: string[],
   title: string,
   body: string,
-  data?: Record<string, string>
+  payload?: NotificationPayload
 ) {
   try {
     const results = await Promise.all(
-      userIds.map((id) => sendNotificationToUser(id, title, body, data))
+      userIds.map((id) => sendNotificationToUser(id, title, body, payload))
     );
     console.log("✅ Batch notifications sent");
     return results;

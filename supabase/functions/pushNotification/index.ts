@@ -179,14 +179,22 @@ serve(async (req) => {
           timestamp: new Date().toISOString(),
           source: "golf-companion",
         },
-        // Android-specific config for guaranteed delivery when app is killed
+        // Android-specific config for heads-up display and guaranteed delivery
         android: {
           priority: "high",
-          ttl: "86400s", // 24 hours
+          ttl: "86400s",
+          direct_boot_ok: true,
           notification: {
             sound: "default",
-            channel_id: "golf-companion-notifications",
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
+            channel_id: "golf-companion-alerts",
+            color: "#609966",
+            icon: "ic_launcher",
+            tag: "golf_companion_notification",
+            priority: "PRIORITY_MAX", // correct enum for FCM v1 AndroidNotification
+            visibility: "PUBLIC",
+            default_sound: true,
+            default_vibrate_timings: true,
+            default_light_settings: true,
           },
         },
       },

@@ -23,6 +23,7 @@ import { useAuth } from '@/components/AuthContext';
 import { useRouter } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { MaterialIcons } from '@expo/vector-icons';
+import { notifyGroupInvite } from '@/lib/NotificationTriggers';
 
 const mockTrack = {
   title: 'Green on the Fairway',
@@ -399,12 +400,23 @@ export default function GolfHubScreen() {
   }, [user]);
 
   const inviteFriend = async (friendId: string, groupId: string) => {
-    await supabase.from('hubroom_invites').insert({
-      group_id: groupId,
-      invited_user_id: friendId,
-      inviter_user_id: user.id,
-    });
-    // Optionally show a toast
+    try {
+      await supabase.from('hubroom_invites').insert({
+        group_id: groupId,
+        invited_user_id: friendId,
+        inviter_user_id: user.id,
+      });
+
+      // 📬 Send notification to invited friend
+      const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A user';
+      const groupName = groups.find(g => g.id === groupId)?.name || 'a group';
+      await notifyGroupInvite(friendId, inviterName, groupName, groupId);
+
+      showToast('Invite sent!');
+    } catch (error) {
+      console.error('Error sending invite:', error);
+      showToast('Error sending invite');
+    }
   };
 
   useEffect(() => {

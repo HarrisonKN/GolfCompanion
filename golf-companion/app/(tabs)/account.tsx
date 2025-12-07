@@ -15,6 +15,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode as atob } from 'base-64';
 import * as FileSystem from 'expo-file-system';
 import { TestNotifications } from '@/components/TestNotifications';
+import Toast from 'react-native-toast-message';
+import { notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/NotificationTriggers';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -490,6 +492,10 @@ export default function AccountsScreen() {
       });
   
       if (error) throw error;
+
+      // 📬 Send notification to recipient
+      const requesterName = user.full_name || user.email?.split('@')[0] || 'A user';
+      await notifyFriendRequest(friendId, requesterName);
   
       Alert.alert(
         'Success!', 
@@ -1391,6 +1397,10 @@ const inviteChannel = supabase
                   // Update friend request status
                   await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', request.id);
                   
+                  // 📬 Send notification to friend request sender
+                  const acceptorName = user.full_name || user.email?.split('@')[0] || 'A user';
+                  await notifyFriendRequestAccepted(request.requester_user_id, acceptorName);
+                  
                   showToast('Friend Added!');
                   
                   // Remove the request from pending list immediately
@@ -1505,6 +1515,7 @@ const inviteChannel = supabase
       </View>
       
     </ScrollView>
+    <Toast />
     </>
   );
 }

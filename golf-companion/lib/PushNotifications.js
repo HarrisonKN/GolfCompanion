@@ -1,20 +1,18 @@
 // lib/PushNotifications.js
 import * as Device from "expo-device";
+import * as Notifications from 'expo-notifications';
 import { supabase } from "@/components/supabase";
 import messaging from '@react-native-firebase/messaging';
-import notifee from '@react-native-firebase/app';
+import { setupAndroidNotificationChannel } from './NotificationService';
 
-// 🔧 Create Android notification channel for reliable delivery
+// 🔧 Create Android notification channel for reliable delivery with heads-up display
 async function createNotificationChannel() {
   try {
-    // Import the necessary module for Android
     if (Device.isDevice && Device.osName === 'Android') {
-      // For Firebase, we need to create the channel through React Native Firebase
-      const firebaseApp = require('@react-native-firebase/app').default;
-      // Channel ID must match the one in the edge function and Android config
-      console.log('📢 Android notification channel configured for: golf-companion-notifications');
+      await setupAndroidNotificationChannel();
     }
   } catch (error) {
+    // Channel creation is non-critical, as Firebase creates a default one
     console.log('ℹ️ Notification channel setup (non-critical):', error?.message || '');
   }
 }
@@ -33,6 +31,19 @@ export async function registerForPushNotificationsAsync(userId) {
   }
 
   try {
+    // STEP 0: Request OS notification permission (Android 13+)
+    console.log('📝 Step 0: Requesting OS notification permission...');
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      console.warn('⚠️ Notification permission denied at OS level');
+      return null;
+    }
+
     // STEP 0: Create notification channel (Android requirement for API 26+)
     await createNotificationChannel();
 

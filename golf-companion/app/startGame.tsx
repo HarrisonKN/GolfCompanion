@@ -20,6 +20,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { opacity } from 'react-native-reanimated/lib/typescript/Colors';
 import { PALETTES } from '@/constants/theme';
 import { useTheme } from '@/components/ThemeContext';
+import { sendNotificationToMultipleUsers } from "@/lib/sendNotification";
+import { notifyGameInvite } from '@/lib/NotificationTriggers';
 
 const COMPACT_H = 36;
 
@@ -365,12 +367,39 @@ export default function StartGameScreen() {
       return;
     }
 
+    console.log("✅ Game created with ID:", gid);
+
     await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({ ids, course, gameId: gid }));
 
     await startSharingLocation(course as string, 1);
 
+    // 🆕 GET THE COURSE NAME FOR THE NOTIFICATION
+    const courseName = courseItems.find((c: any) => c.value === course)?.label || 'a course';
+
+    // 🆕 SEND INVITATIONS TO ALL SELECTED PLAYERS (excluding the host)
+    const invitedPlayerIds = selectedPlayers
+      .filter(p => p.id !== user.id) // Don't send to yourself
+      .map(p => p.id);
+
+    if (invitedPlayerIds.length > 0) {
+      try {
+        console.log("📤 Sending game invitations to:", invitedPlayerIds);
+        
+        // Send notifications to each invited player
+        const inviterName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'A friend';
+        for (const invitedId of invitedPlayerIds) {
+          await notifyGameInvite(invitedId, inviterName, courseName, gid);
+        }
+        
+        console.log("✅ Game invitations sent successfully!");
+      } catch (notifErr) {
+        console.warn("⚠️ Failed to send game invitations (game still created):", notifErr);
+        // Don't fail the whole game creation if notifications fail
+      }
+    }
+
     router.push({
-      pathname: '/gameModes',
+      pathname: '/gameModes' as any,
       params: {
         courseId: String(course),
         gameId: gid,

@@ -14,6 +14,9 @@ import { getAppVersion, getBuildInfo } from '@/utils/version';
 import * as ImagePicker from 'expo-image-picker';
 import { decode as atob } from 'base-64';
 import * as FileSystem from 'expo-file-system';
+import { TestNotifications } from '@/components/TestNotifications';
+import Toast from 'react-native-toast-message';
+import { notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/NotificationTriggers';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -63,6 +66,7 @@ export default function AccountsScreen() {
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [hideInviteBanner, setHideInviteBanner] = useState(false);
   const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
+  const [showTestNotifications, setShowTestNotifications] = useState(false);
 
   const { palette } = useTheme();
   const [toast, setToast] = useState<string | null>(null);
@@ -488,6 +492,10 @@ export default function AccountsScreen() {
       });
   
       if (error) throw error;
+
+      // 📬 Send notification to recipient
+      const requesterName = user.full_name || user.email?.split('@')[0] || 'A user';
+      await notifyFriendRequest(friendId, requesterName);
   
       Alert.alert(
         'Success!', 
@@ -1331,6 +1339,32 @@ const inviteChannel = supabase
           </View>
         </Modal>
       </View>
+
+      <SectionDivider />
+
+      {/* Test Notifications Section */}
+      <View style={styles(palette).friendsSection}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: SCREEN_WIDTH * 0.05 }}>
+          <ThemedText type="subtitle" style={[styles(palette).sectionTitle, { marginHorizontal: 0 }]}>
+            🧪 Test Notifications
+          </ThemedText>
+          <Pressable
+            style={[
+              styles(palette).createButton,
+              { backgroundColor: showTestNotifications ? palette.error : palette.primary }
+            ]}
+            onPress={() => setShowTestNotifications(!showTestNotifications)}
+          >
+            <ThemedText style={styles(palette).createButtonText}>
+              {showTestNotifications ? 'Hide Tests' : 'Show Tests'}
+            </ThemedText>
+          </Pressable>
+        </View>
+        {showTestNotifications && user?.id && (
+          <TestNotifications currentUserId={user.id} palette={palette} />
+        )}
+      </View>
+
       {(pendingInvites.length > 0) && !hideInviteBanner && (
         <View style={styles(palette).notificationBanner}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
@@ -1362,6 +1396,10 @@ const inviteChannel = supabase
 
                   // Update friend request status
                   await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', request.id);
+                  
+                  // 📬 Send notification to friend request sender
+                  const acceptorName = user.full_name || user.email?.split('@')[0] || 'A user';
+                  await notifyFriendRequestAccepted(request.requester_user_id, acceptorName);
                   
                   showToast('Friend Added!');
                   
@@ -1477,6 +1515,7 @@ const inviteChannel = supabase
       </View>
       
     </ScrollView>
+    <Toast />
     </>
   );
 }

@@ -62,6 +62,7 @@ import { useRouter } from 'expo-router';
 import { useVoice } from '@/components/VoiceContext';
 import { Audio } from 'expo-av';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { notifyGroupInvite, notifyGroupMessage } from '@/lib/NotificationTriggers';
 
 // ===== Section: Utilities =====
 const playSound = async (soundFile: any) => {
@@ -239,6 +240,12 @@ export default function HubRoomScreen() {
       });
 
       if (error) throw error;
+
+      // 📬 Send notification to invited friend
+      const inviterName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A user';
+      const groupName = roomName || 'a group';
+      await notifyGroupInvite(friendId, inviterName, groupName, roomId);
+
       showToast('Invite sent!');
       setInviteModalVisible(false);
     } catch (error) {
@@ -259,6 +266,29 @@ export default function HubRoomScreen() {
       });
 
       if (error) throw error;
+
+      // 📬 Send notifications to other group members about the message
+      const messagePreview = chatInput.trim();
+      const senderName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A user';
+      
+      // Get other group members to notify
+      try {
+        const { data: members } = await supabase
+          .from('voice_group_members')
+          .select('user_id')
+          .eq('group_id', roomId)
+          .neq('user_id', user?.id); // Exclude sender
+
+        if (members && members.length > 0) {
+          for (const member of members) {
+            await notifyGroupMessage(member.user_id, senderName, roomName || 'Group', messagePreview, roomId);
+          }
+        }
+      } catch (notifErr) {
+        console.warn('Failed to send message notifications:', notifErr);
+        // Don't fail message sending if notifications fail
+      }
+
       setChatInput('');
     } catch (error) {
       console.error('Error sending message:', error);

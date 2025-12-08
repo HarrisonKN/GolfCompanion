@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/components/supabase';
 import { PALETTES } from '@/constants/theme';
 import { useTheme } from '@/components/ThemeContext';
+import { sendNotificationToUser } from "@/lib/sendNotification";
 
 const PLAYER_AVATAR_SIZE = 50; // was 72
 const GRID_COLS = 4;
@@ -38,7 +39,7 @@ const gameModesData = [
 
 export default function GameModesScreen() {
   const router = useRouter();
-  const { courseId, tee, playerIds, playerNames } = useLocalSearchParams();
+  const { courseId, tee, playerIds, playerNames, gameId, isJoiningExistingGame } = useLocalSearchParams();
   const [players, setPlayers] = useState<any[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [selectedMode, setSelectedMode] = useState<any | null>(null);
@@ -55,6 +56,9 @@ export default function GameModesScreen() {
 
   const { palette } = useTheme();
 
+  // 🆕 DETECT IF USER IS JOINING AN EXISTING GAME
+  const joiningExistingGame = String(isJoiningExistingGame) === '1';
+
   const parsedIds: string[] = useMemo(() => {
     try { return playerIds ? JSON.parse(String(playerIds)) : []; } catch { return []; }
   }, [playerIds]);
@@ -64,6 +68,60 @@ export default function GameModesScreen() {
 
   useEffect(() => {
     const load = async () => {
+      // 🆕 IF JOINING AN EXISTING GAME, FETCH PARTICIPANTS FROM DATABASE
+      if (joiningExistingGame && gameId && !parsedIds.length) {
+        console.log("🔄 Fetching game participants for game:", gameId);
+        setLoadingPlayers(true);
+        try {
+          const { data: participants, error: partError } = await supabase
+            .from('game_participants')
+            .select('user_id')
+            .eq('game_id', gameId);
+
+          if (partError) {
+            console.error("Failed to fetch participants:", partError);
+            setLoadingPlayers(false);
+            return;
+          }
+
+          if (!participants || participants.length === 0) {
+            console.warn("No participants found for game:", gameId);
+            setLoadingPlayers(false);
+            return;
+          }
+
+          const participantIds = participants.map(p => p.user_id);
+          console.log("✅ Found participants:", participantIds);
+
+          // Fetch their profiles
+          const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url, handicap')
+            .in('id', participantIds);
+
+          if (!profileError && profiles) {
+            const ordered = participantIds.map(id => {
+              const found = profiles.find(p => p.id === id);
+              return {
+                id,
+                name: found?.full_name || 'Unknown',
+                avatar_url: found?.avatar_url || null,
+                handicap: found?.handicap ?? null,
+              };
+            });
+            setPlayers(ordered);
+            setUnassigned(ordered.map(p => p.id));
+            console.log("✅ Players loaded:", ordered.length);
+          }
+        } catch (err) {
+          console.error("Error loading game participants:", err);
+        } finally {
+          setLoadingPlayers(false);
+        }
+        return;
+      }
+
+      // ORIGINAL FLOW: Load from parsed player IDs
       if (!parsedIds.length) return;
       setLoadingPlayers(true);
       try {
@@ -90,56 +148,109 @@ export default function GameModesScreen() {
       }
     };
     load();
-  }, [parsedIds]);
+  }, [parsedIds, joiningExistingGame, gameId]);
 
   const handleStart = async () => {
     if (!courseId || !parsedIds.length || creating) return;
     setCreating(true);
-    const { data: gid, error } = await supabase.rpc('start_game', {
-      course: String(courseId),
-      participant_ids: parsedIds,
-    });
-    if (error || !gid) {
-      console.warn('Game creation failed', error);
-      setCreating(false);
-      return;
-    }
-    await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({
-      ids: parsedIds,
-      course: courseId,
-      gameId: gid,
-      mode: selectedMode?.id || null,
-    }));
-    await AsyncStorage.setItem('scrambleTeams', JSON.stringify(teams));
 
-    const { data: teamRows, error: teamErr } = await supabase
-  .from("game_teams")
-  .insert(
-    teams.map((t, i) => ({
-      game_id: gid,
-      team_number: t.id,
-      name: t.name || `Team ${t.id}`,
-      players: t.players,
-    }))
-  )
-  .select();
+    try {
+      // 🆕 IF JOINING EXISTING GAME, USE THE PROVIDED GAME ID
+      let gid = gameId ? String(gameId) : null;
 
-  await AsyncStorage.setItem('scrambleTeamRows', JSON.stringify(teamRows));
+      if (!gid) {
+        const { data: newGid, error } = await supabase.rpc('start_game', {
+          course: String(courseId),
+          participant_ids: parsedIds,
+        });
+        if (error || !newGid) {
+          console.warn('Game creation failed', error);
+          setCreating(false);
+          return;
+        }
+        gid = newGid;
+      } else {
+        console.log("✅ Joining existing game:", gid);
+      }
 
-    router.push({
-      pathname: '/(tabs)/scorecard',
-      params: {
-        courseId: String(courseId),
+      await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({
+        ids: parsedIds,
+        course: courseId,
         gameId: gid,
-        playerIds: JSON.stringify(parsedIds),
-        playerNames: JSON.stringify(players.map(p => p.name)),
-        playerAvatars: JSON.stringify(players.map(p => p.avatar_url || null)),
-        gameMode: selectedMode?.id || '',
-        tee: tee || '',
-        newGame: '1',
-        teams: JSON.stringify(teams),
-      },
-    });
+        mode: selectedMode?.id || null,
+      }));
+      await AsyncStorage.setItem('scrambleTeams', JSON.stringify(teams));
+
+      const { data: teamRows, error: teamErr } = await supabase
+        .from("game_teams")
+        .insert(
+          teams.map((t, i) => ({
+            game_id: gid,
+            team_number: t.id,
+            name: t.name || `Team ${t.id}`,
+            players: t.players,
+          }))
+        )
+        .select();
+
+      if (!teamErr) {
+        await AsyncStorage.setItem('scrambleTeamRows', JSON.stringify(teamRows));
+      }
+
+      // 🆕 IF JOINING, NOTIFY THE GAME HOST THAT YOU'VE JOINED
+      if (joiningExistingGame && gid) {
+        try {
+          const currentUser = await supabase.auth.getUser();
+          const currentUserProfile = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', currentUser.data.user?.id)
+            .single();
+
+          const userName = currentUserProfile.data?.full_name || 'A player';
+
+          // Get the game creator (first participant or from game metadata)
+          const { data: gameData } = await supabase
+            .from('games')
+            .select('created_by')
+            .eq('id', gid)
+            .single();
+
+          if (gameData?.created_by) {
+            await sendNotificationToUser(
+              gameData.created_by,
+              "✅ Player Joined!",
+              `${userName} joined your game!`,
+              {
+                route: "gameModes",
+                gameId: gid,
+              }
+            );
+            console.log("✅ Join notification sent to game host");
+          }
+        } catch (notifErr) {
+          console.warn("Failed to send join notification:", notifErr);
+        }
+      }
+
+      router.push({
+        pathname: '/(tabs)/scorecard',
+        params: {
+          courseId: String(courseId),
+          gameId: gid,
+          playerIds: JSON.stringify(parsedIds),
+          playerNames: JSON.stringify(players.map(p => p.name)),
+          playerAvatars: JSON.stringify(players.map(p => p.avatar_url || null)),
+          gameMode: selectedMode?.id || '',
+          tee: tee || '',
+          newGame: joiningExistingGame ? '0' : '1',
+          teams: JSON.stringify(teams),
+        },
+      });
+    } catch (err) {
+      console.error("Error starting game:", err);
+      setCreating(false);
+    }
   };
 
   return (

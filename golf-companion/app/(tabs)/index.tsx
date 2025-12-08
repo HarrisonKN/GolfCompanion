@@ -6,106 +6,22 @@
 // ------------------- IMPORTS -------------------------
 import { useAuth } from '@/components/AuthContext';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
-import RotatingText from '@/components/RotatingText';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/components/ThemeContext';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View, ScrollView } from 'react-native';
-import Toast from 'react-native-toast-message';
+import React from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { getAppVersion } from '@/utils/version';
-import { registerForPushNotificationsAsync } from '@/lib/PushNotifications';
-import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from '@/lib/supabaseClient';
 
 // ------------------- HOME SCREEN LOGIC -------------------------
 export default function HomeScreen() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const { palette } = useTheme();
-  const { displayVersion } = getAppVersion(); // Add this line
+  const { displayVersion } = getAppVersion();
   const insets = useSafeAreaInsets();
-
- 
-
-//----------------------------------------------------------------
-// Adding to make it so there is only 1 feature card at a time on the home screen
-  const featureCards = [
-    { title: '🏌️‍♂️ Your Ultimate Golf Companion',
-      description: 'Connect with friends, track scores, and make your golf rounds more fun, social and smart ',
-    },
-    {
-      title: '📋 Digital Scorecard',
-      description: `Track every stroke with our intuitive Scorecard screen. Add players, input scores, and get instant feedback on your game.`,
-    },
-    {
-      title: '🗺️ Course View',
-      description: `Visualize each hole with satellite course maps, layouts, and AI-powered club suggestions based on distance and your play style.`,
-    },
-    {
-      title: '🎙️ Group Voice Chat',
-      description: `Form a party with your friends and stay connected through real-time voice chat even when you're on different holes.`,
-    },
-    {
-      title: '🎵 Sync Music with Spotify',
-      description: `Start a shared Spotify session so your group can listen to the same music together.`,
-    },
-    {
-      title: '📊 Stats and Analytics',
-      description: `Get detailed insights into your game with stats on strokes, putts, fairways hit, and more.`,
-    },
-    {
-      title: '🏆 Achievements and Leaderboards',
-      description: `Compete with friends and track your progress with achievements and leaderboards.`,
-    },    
-  ];
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
-   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentCardIndex((prev) => (prev + 1) % featureCards.length);
-    }, 5000); // rotate every 5 seconds
-
-    return () => clearInterval(interval); // cleanup on unmount
-  }, []);
-
-//------------------------------------------------------------------------------
-
-  // Show loading state while checking auth
-  if (loading) {
-    return (
-      <ThemedView style={[styles(palette).container]}>
-        <ParallaxScrollView
-          style={styles(palette).scrollRoot}
-          contentContainerStyle={styles(palette).scrollContent}
-          headerBackgroundColor={{ light: palette.background, dark: palette.background }}
-          headerImage={
-            <ThemedView style={[styles(palette).headerRow, { paddingTop: insets.top }]}>
-              <View style={styles(palette).logoContainer}>
-                <Image
-                  source={require('@/assets/images/MullyLogo.png')}
-                  style={styles(palette).logo}
-                  contentFit="contain"
-                />
-              </View>
-              <View style={styles(palette).rotatingTextContainer}>
-                <ThemedText style={[styles(palette).text]} type="title">Golf</ThemedText>
-                <RotatingText
-                  texts={['Companion', 'Banter', 'Scores', 'Games', 'Beers!']}
-                  rotationInterval={2000}
-                />
-              </View>
-            </ThemedView>
-          }
-        >
-          <ThemedView style={styles(palette).authContainer}>
-            <ThemedText type="subtitle" style={styles(palette).authTitle}>Loading...</ThemedText>
-          </ThemedView>
-        </ParallaxScrollView>
-      </ThemedView>
-    );
-  }
 
   // ------------------- UI Setup -------------------------
   return (
@@ -161,133 +77,6 @@ export default function HomeScreen() {
               </Pressable>
 
               <View style={styles(palette).divider} />
-              {/* no longer required
-              <Pressable
-                style={styles(palette).authButton}
-                onPress={() => router.push('/course-view')}
-              >
-                <ThemedText style={styles(palette).authButtonText}>Go to Course View</ThemedText>
-              </Pressable>
-              */}
-              {/* think we should just get rid of this and start again
-              <Pressable
-                style={({ pressed }) => [
-                  styles(palette).startGameButton,
-                  pressed && styles(palette).startGameButtonPressed,
-                ]}
-                onPress={async () => {
-                  try {
-                    const tokenResponse = await Notifications.getDevicePushTokenAsync();
-                    //const fcmToken = tokenResponse.data;
-                    const fcmToken = tokenResponse.data + "_" + Math.floor(Math.random() * 1000);
-                    console.log('✅ FCM Token:', fcmToken);
-
-                    const supabaseUser = user?.id;
-                    console.log("👤 Supabase user:", supabaseUser);
-                    if (!fcmToken || !supabaseUser) throw new Error("Missing token or user ID");
-
-                    // 🔧 Ensure Supabase client knows about the current session before querying
-                    if (user?.access_token && user?.refresh_token) {
-                      console.log("🔄 Forcing Supabase session sync before update");
-                      await supabase.auth.setSession({
-                        access_token: user.access_token,
-                        refresh_token: user.refresh_token,
-                      });
-                    }
-
-                    // 🔄 Forcing Supabase client to re-sync after login
-                    console.log("🔄 Forcing Supabase client to re-sync after login");
-                    await supabase.auth.refreshSession();
-
-                    const {
-                      data: { session },
-                    } = await supabase.auth.getSession();
-                    console.log("🧠 Auth UID from Supabase:", session?.user?.id);
-
-                    const { data, error } = await supabase
-                      .from("profiles")
-                      .update({ fcm_token: fcmToken })
-                      .eq("id", supabaseUser)
-                      .select();
-
-                    if (error) {
-                      console.error("❌ Supabase error:", error.message, error.details, error.hint);
-                      Toast.show({
-                        type: 'error',
-                        text1: 'Error saving token',
-                        text2: error.message,
-                      });
-                    } else {
-                      console.log("✅ Supabase update success:", data);
-                      Toast.show({
-                        type: 'success',
-                        text1: 'Push token saved!',
-                        text2: fcmToken,
-                      });
-
-                      // 🔔 Send push notifications to all friends
-                      const { data: friends, error: friendsError } = await supabase
-                        .from("friends")
-                        .select(`
-                          friend_id,
-                          profiles:profiles!friends_friend_id_profiles_fkey(id, full_name, fcm_token)
-                        `)
-                        .eq("user_id", supabaseUser);
-                      console.log("👥 Friends found:", friends);
-
-                      if (friendsError) {
-                        console.error("❌ Error fetching friends:", friendsError);
-                        Toast.show({
-                          type: 'error',
-                          text1: 'Failed to fetch friends',
-                          text2: friendsError.message,
-                        });
-                      } else if (friends && friends.length > 0) {
-                        for (const friend of friends) {
-                          const friendToken = friend.profiles?.[0]?.fcm_token;
-                          console.log(`🔔 Sending to ${friend.profiles?.[0]?.full_name} (${friend.friend_id})`);
-                          if (!friendToken) continue;
-                          const { error: notifError } = await supabase.functions.invoke("pushNotification", {
-                            body: {
-                              token: friendToken,
-                              title: "Golf Invite 🏌️‍♂️",
-                              body: "Your friend just invited you for a round!",
-                            },
-                          });
-                          if (notifError) {
-                            console.error("❌ Push error:", notifError);
-                          } else {
-                            console.log(`✅ Push sent to ${friend.profiles?.[0]?.full_name} (${friendToken})`);
-                          }
-                        }
-                        Toast.show({
-                          type: 'success',
-                          text1: 'Push notifications sent to all friends!',
-                        });
-                      } else {
-                        Toast.show({
-                          type: 'info',
-                          text1: 'No friends found to send notifications',
-                        });
-                      }
-                      // --- end friends notification block ---
-                    }
-                  } catch (err: any) {
-                    Toast.show({
-                      type: 'error',
-                      text1: 'Error saving token, do something different bozo',
-                      text2: err.message,
-                    });
-                    console.log(err.message)
-                  }
-                }}
-              >
-                <ThemedText style={styles(palette).startGameButtonText}>
-                  Test Push Notifications
-                </ThemedText>
-              </Pressable>
-            </>
-            */}
             </>
           ) : (
             <>
@@ -311,6 +100,15 @@ export default function HomeScreen() {
         </ThemedView>
         <ThemedText type="subtitle" style={styles(palette).authTitle}>Feed</ThemedText>
 
+        {/* Future feed content will go here */}
+        <ThemedView style={styles(palette).authContainer}>
+          <ThemedText style={styles(palette).welcomeText}>
+            Stay tuned for activity updates from your golf community!
+
+            Quick Test Add
+          </ThemedText>
+        </ThemedView>
+
         
         {/* Feature Cards */}
         {/*
@@ -327,8 +125,7 @@ export default function HomeScreen() {
             Golf Companion {displayVersion}
           </ThemedText>
         </ThemedView>
-      </ParallaxScrollView>  
-      <Toast/>
+      </ParallaxScrollView>
     </ThemedView>
   );
 }

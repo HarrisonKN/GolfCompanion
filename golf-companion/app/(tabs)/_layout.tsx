@@ -5,6 +5,7 @@
 // app/(tabs)/_layout.tsx
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
+import { View } from "react-native";
 import { CourseProvider } from "@/components/CourseContext";
 import { useTheme } from "@/components/ThemeContext";
 import { IconSymbol } from "@/components/ui/IconSymbol";
@@ -13,11 +14,15 @@ import { Tabs } from "expo-router";
 import { supabase } from "@/components/supabase";
 import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
+import { registerForPushNotificationsAsync } from "@/lib/PushNotifications";
+import { NotificationCenter } from "@/components/NotificationCenter";
+import { getUnreadNotificationCount } from "@/lib/NotificationHistory";
 
 export default function TabsLayout() {
   const { palette } = useTheme();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -27,6 +32,8 @@ export default function TabsLayout() {
         console.log("✅ Existing session found");
         setUser(session.user);
         setAuthReady(true);
+        // Register for push notifications
+        await registerForPushNotificationsAsync(session.user.id);
         return;
       }
       const accessToken = await SecureStore.getItemAsync("supabase_access_token");
@@ -37,16 +44,23 @@ export default function TabsLayout() {
           refresh_token: refreshToken,
         });
         if (error) console.log("Restore session error:", error.message);
-        if (data.session) setUser(data.session.user);
+        if (data.session) {
+          setUser(data.session.user);
+          // Register for push notifications
+          await registerForPushNotificationsAsync(data.session.user.id);
+        }
       }
       setAuthReady(true);
     };
     initAuth();
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state change:", event);
       if (event === "SIGNED_IN" && session) {
-        console.log("🟢 SIGNED_IN event detected, setting user");
+        console.log("🟢 SIGNED_IN event detected");
         setUser(session.user);
+        
+        // Register for push notifications on first login
+        await registerForPushNotificationsAsync(session.user.id);
       } else if (event === "SIGNED_OUT") {
         console.log("🔴 SIGNED_OUT event detected, redirecting to login");
         setUser(null);
@@ -62,6 +76,29 @@ export default function TabsLayout() {
   useEffect(() => {
     if (authReady && user) {
       console.log("✅ Auth ready with user:", user.email);
+      // Load unread notification count
+      loadUnreadCount();
+      
+      // Subscribe to notification history changes
+      const channel = supabase
+        .channel(`notification_history:user_id=eq.${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notification_history',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            loadUnreadCount();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     } else if (authReady && !user) {
       console.log("⚠️ Auth ready but no user — likely signed out");
       // Only redirect here if truly signed out and not during INITIAL_SESSION noise
@@ -75,36 +112,54 @@ export default function TabsLayout() {
         }
       });
     }
-  }, [authReady]);
+  }, [authReady, user?.id]);
+
+  const loadUnreadCount = async () => {
+    if (user?.id) {
+      const count = await getUnreadNotificationCount(user.id);
+      setUnreadCount(count);
+    }
+  };
 
   if (!authReady) return null;
 
   return (
     <CourseProvider>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: "rgba(0, 0, 0, 0.8)",
-            borderTopWidth: 0,
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            elevation: 10,
-          },
-          tabBarActiveTintColor: "#fff",
-          tabBarInactiveTintColor: "#aaa",
-          tabBarShowLabel: true,
-          tabBarLabelStyle: { fontWeight: "700", fontSize: 13 },
-        }}
-      >
-        <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} /> }} />
-        <Tabs.Screen name="scorecard" options={{ title: "Scorecard", tabBarIcon: ({ color }) => <MaterialIcons name="view-list" size={28} color={color} /> }} />
-        <Tabs.Screen name="course-view" options={{ title: "Course View", tabBarIcon: ({ color }) => <MaterialIcons name="golf-course" size={28} color={color} /> }} />
-        <Tabs.Screen name="golfHub" options={{ title: "GolfHub", tabBarIcon: ({ color }) => <MaterialIcons name="audiotrack" size={28} color={color} /> }} />
-        <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color }) => <MaterialIcons name="account-circle" size={28} color={color} /> }} />
-      </Tabs>
+      <View style={{ flex: 1 }}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarStyle: {
+              backgroundColor: "rgba(0, 0, 0, 0.8)",
+              borderTopWidth: 0,
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              elevation: 10,
+            },
+            tabBarActiveTintColor: "#fff",
+            tabBarInactiveTintColor: "#aaa",
+            tabBarShowLabel: true,
+            tabBarLabelStyle: { fontWeight: "700", fontSize: 13 },
+          }}
+        >
+          <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} /> }} />
+          <Tabs.Screen name="scorecard" options={{ title: "Scorecard", tabBarIcon: ({ color }) => <MaterialIcons name="view-list" size={28} color={color} /> }} />
+          <Tabs.Screen name="course-view" options={{ title: "Course View", tabBarIcon: ({ color }) => <MaterialIcons name="golf-course" size={28} color={color} /> }} />
+          <Tabs.Screen name="golfHub" options={{ title: "GolfHub", tabBarIcon: ({ color }) => <MaterialIcons name="audiotrack" size={28} color={color} /> }} />
+          <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color }) => <MaterialIcons name="account-circle" size={28} color={color} /> }} />
+        </Tabs>
+        
+        {/* Notification Center - Always visible on main pages */}
+        {user && (
+          <NotificationCenter
+            userId={user.id}
+            unreadCount={unreadCount}
+            onUnreadChange={setUnreadCount}
+          />
+        )}
+      </View>
     </CourseProvider>
   );
 }

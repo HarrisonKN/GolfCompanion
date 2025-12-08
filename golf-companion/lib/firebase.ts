@@ -1,13 +1,12 @@
 import { initializeApp } from "firebase/app";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA2DRwI0ht9w0on0ZpwwlMRuvaxxZZerSc",
-  authDomain: "golfcompanion-41cf9.firebaseapp.com",
-  projectId: "golfcompanion-41cf9",
-  storageBucket: "golfcompanion-41cf9.firebasestorage.app",
-  messagingSenderId: "732200427793",
-  appId: "1:732200427793:web:cd6565c453a2629ad22cb0",
-  measurementId: "G-1E38VPLSZJ"
+  apiKey: "AIzaSyDc_Fjev9H5OlUY228wrGz8q4x2y_kMX4k",
+  authDomain: "golfcompanion-465805.firebaseapp.com",
+  projectId: "golfcompanion-465805",
+  storageBucket: "golfcompanion-465805.firebasestorage.app",
+  messagingSenderId: "10951197248",
+  appId: "1:10951197248:android:b162e48fdf481fb2a555a5",
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);

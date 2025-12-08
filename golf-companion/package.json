@@ -25,17 +25,18 @@
     "bump-build:patch": "node scripts/updateBuildNumber.js patch && cd android && gradlew.bat assembleRelease",
     "bump-build:minor": "node scripts/updateBuildNumber.js minor && cd android && gradlew.bat assembleRelease",
     "bump-build:major": "node scripts/updateBuildNumber.js major && cd android && gradlew.bat assembleRelease",
-
     "updateandbuild": "node scripts/bump-and-build.js patch"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "^1.24.0",
+    "@react-native-firebase/app": "^23.5.0",
+    "@react-native-firebase/messaging": "^23.5.0",
     "@react-native-picker/picker": "^2.11.1",
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
-    "@react-navigation/native": "^7.1.6",
-    "@supabase/supabase-js": "^2.50.3",
+    "@react-navigation/native": "^7.1.24",
+    "@supabase/supabase-js": "^2.86.2",
     "agora-access-token": "^2.0.4",
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",

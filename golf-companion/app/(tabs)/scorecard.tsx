@@ -36,6 +36,23 @@ import {
 import DropDownPicker from 'react-native-dropdown-picker';
 import { captureRef } from 'react-native-view-shot';
 
+// ---- Color Utilities ----
+function lighten(color: string, amount: number): string {
+  // Works for HEX colors like #000000
+  try {
+    const hex = color.replace("#", "");
+    const num = parseInt(hex, 16);
+
+    const r = Math.min(255, ((num >> 16) & 0xff) + amount);
+    const g = Math.min(255, ((num >> 8) & 0xff) + amount);
+    const b = Math.min(255, (num & 0xff) + amount);
+
+    return `rgb(${r}, ${g}, ${b})`;
+  } catch {
+    return color; // fallback if palette color isn't hex
+  }
+}
+
 // ------------------- CONSTANTS & TYPES -------------------------
 
 // You can adjust this value for your needs
@@ -94,6 +111,7 @@ export default function Scorecard() {
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
   const [selectedCell, setSelectedCell] = useState<{ playerIndex?: number; teamId?: string; holeIndex: number } | null>(null);
   const [teamScores, setTeamScores] = useState<Record<string, string[]>>({});
+  const [viewMode, setViewMode] = useState<'table' | 'chips'>('chips');
 
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
@@ -732,10 +750,28 @@ useEffect(() => {
         <View style={styles(palette).scorecardTitleWrap}>
           <Text style={styles(palette).scorecardTitle}>Scorecard</Text>
         </View>
+        <Text
+          style={{
+            color: palette.textLight,
+            fontSize: 18,
+            fontWeight: '700',
+            letterSpacing: 0.5,
+            marginTop: -2,
+            marginBottom: 0,
+            textAlign: 'center',
+          }}
+        >
+          {(() => {
+            const course = courses.find(c => c.id === selectedCourse);
+            const totalPar = parValues.reduce((a, b) => (a ?? 0) + (b ?? 0), 0);
+            return `${course?.name || ''} — Par ${totalPar}`;
+          })()}
+        </Text>
       </View>
+      <View style={styles(palette).divider} />
 
       {/* Course Dropdown */}
-      <View style={styles(palette).dropdownCard}>
+     {/* <View style={styles(palette).dropdownCard}>
         <DropDownPicker
           placeholder="Select a course…"
           open={courseOpen}
@@ -760,356 +796,475 @@ useEffect(() => {
           listItemLabelStyle={styles(palette).listItemLabel}
           zIndex={2000}
         />
-      </View>
+      </View> */}
 
       {/* Scorecard Table - Glassy Card */}
-      <View style={styles(palette).cardWrapper}>
-        <ScrollView
-          horizontal
-          style={styles(palette).horizontalScroll}
-          contentContainerStyle={{ minWidth: Dimensions.get('window').width + 400 }}
-          showsHorizontalScrollIndicator={false}
-        >
-          <View style={styles(palette).tableContainer} ref={scorecardRef}>
-            {/* --- Combined Header Section --- */}
-            <View style={styles(palette).headerUnified}>
-              {/* Header Row: Hole Numbers */}
-              <View style={styles(palette).headerRow}>
-                <View style={styles(palette).headerNameCell}>
-                  <Text style={styles(palette).headerText}>Hole</Text>
-                </View>
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <View key={i} style={styles(palette).headerHoleCell}>
-                    <Text style={styles(palette).headerText}>{i + 1}</Text>
-                  </View>
-                ))}
-                <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).headerText}>IN</Text>
-                </View>
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <View key={i + 9} style={styles(palette).headerHoleCell}>
-                    <Text style={styles(palette).headerText}>{i + 10}</Text>
-                  </View>
-                ))}
-                <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).headerText}>OUT</Text>
-                </View>
-                <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).headerText}>TOTAL</Text>
-                </View>
-                <View style={styles(palette).headerEmptyCell} />
-              </View>
-
-              {/* Divider */}
-              <View style={styles(palette).headerSubDivider} />
-
-              {/* Header Row: Par Values */}
-              <View style={styles(palette).headerRow}>
-                <View style={styles(palette).headerNameCell}>
-                  <Text style={styles(palette).headerText}>Par</Text>
-                </View>
-                {parValues.slice(0, 9).map((par, i) => (
-                  <View key={i} style={styles(palette).headerCell}>
-                    <Text style={styles(palette).headerText}>{par !== null && par !== undefined ? par : '-'}</Text>
-                  </View>
-                ))}
-                <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).headerText}>
-                    {parValues.slice(0, 9).reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
-                  </Text>
-                </View>
-                {parValues.slice(9, 18).map((par, i) => (
-                  <View key={i + 9} style={styles(palette).headerCell}>
-                    <Text style={styles(palette).headerText}>{par !== null && par !== undefined ? par : '-'}</Text>
-                  </View>
-                ))}
-                <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).headerText}>
-                    {parValues.slice(9, 18).reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
-                  </Text>
-                </View>
-                <View style={styles(palette).headerInOutCell}>
-                  <Text style={styles(palette).headerText}>
-                    {parValues.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
-                  </Text>
-                </View>
-                <View style={styles(palette).headerEmptyCell} />
-              </View>
+      {/* Scorecard Table - Glassy Card */}
+<View style={styles(palette).cardWrapper}>
+  {viewMode === 'table' || isScramble ? (
+    <ScrollView
+      horizontal
+      style={styles(palette).horizontalScroll}
+      contentContainerStyle={{ minWidth: Dimensions.get('window').width + 400 }}
+      showsHorizontalScrollIndicator={false}
+    >
+      <View style={styles(palette).tableContainer} ref={scorecardRef}>
+        {/* --- Combined Header Section --- */}
+        <View style={styles(palette).headerUnified}>
+          {/* Header Row: Hole Numbers */}
+          <View style={styles(palette).headerRow}>
+            <View style={styles(palette).headerNameCell}>
+              <Text style={styles(palette).headerText}>Hole</Text>
             </View>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <View key={i} style={styles(palette).headerHoleCell}>
+                <Text style={styles(palette).headerText}>{i + 1}</Text>
+              </View>
+            ))}
+            <View style={styles(palette).headerInOutCell}>
+              <Text style={styles(palette).headerText}>IN</Text>
+            </View>
+            {Array.from({ length: 9 }).map((_, i) => (
+              <View key={i + 9} style={styles(palette).headerHoleCell}>
+                <Text style={styles(palette).headerText}>{i + 10}</Text>
+              </View>
+            ))}
+            <View style={styles(palette).headerInOutCell}>
+              <Text style={styles(palette).headerText}>OUT</Text>
+            </View>
+            <View style={styles(palette).headerInOutCell}>
+              <Text style={styles(palette).headerText}>TOTAL</Text>
+            </View>
+            <View style={styles(palette).headerEmptyCell} />
+          </View>
 
-            {/* --- Players Section --- */}
-            {
-              // 1) SCRAMBLE MODE WITH TEAMS → show one row per team, scores from teamScores
-              isScramble && scrambleTeams && scrambleTeams.length > 0 ? (
-                scrambleTeams.map((team: any, teamIndex: number) => {
-                  const realTeam = dbTeams.find(t => t.team_number === team.team_number);
-                  const teamId = realTeam?.id; // UUID from database
-                  const scoresForTeam = teamScores[teamId] || Array(holeCount).fill('');
-                  const { inScore, outScore, totalScore } = calculateInOutTotals(scoresForTeam);
+          {/* Divider */}
+          <View style={styles(palette).headerSubDivider} />
 
-                  return (
-                    <View key={teamIndex} style={styles(palette).playerCard}>
-                      <View style={styles(palette).row}>
-                        {/* Team Display */}
-                        <View style={styles(palette).nameCell}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                            {team.players.map((pid: string, i: number) => {
-                              const pIndex = players.findIndex(pl => pl.id === pid);
-                              if (pIndex === -1) return null;
-                              const p = players[pIndex];
-                              return (
-                                <Image
-                                  key={pid}
-                                  source={p.avatar_url ? { uri: p.avatar_url } : undefined}
-                                  style={{
-                                    width: 36,
-                                    height: 36,
-                                    borderRadius: 18,
-                                    marginLeft: i === 0 ? 0 : -10,
-                                    borderWidth: 2,
-                                    borderColor: '#fff',
-                                  }}
-                                />
-                              );
-                            })}
-                          </View>
+          {/* Header Row: Par Values */}
+          <View style={styles(palette).headerRow}>
+            <View style={styles(palette).headerNameCell}>
+              <Text style={styles(palette).headerText}>Par</Text>
+            </View>
+            {parValues.slice(0, 9).map((par, i) => (
+              <View key={i} style={styles(palette).headerCell}>
+                <Text style={styles(palette).headerText}>
+                  {par !== null && par !== undefined ? par : '-'}
+                </Text>
+              </View>
+            ))}
+            <View style={styles(palette).headerInOutCell}>
+              <Text style={styles(palette).headerText}>
+                {parValues.slice(0, 9).reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
+              </Text>
+            </View>
+            {parValues.slice(9, 18).map((par, i) => (
+              <View key={i + 9} style={styles(palette).headerCell}>
+                <Text style={styles(palette).headerText}>
+                  {par !== null && par !== undefined ? par : '-'}
+                </Text>
+              </View>
+            ))}
+            <View style={styles(palette).headerInOutCell}>
+              <Text style={styles(palette).headerText}>
+                {parValues.slice(9, 18).reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
+              </Text>
+            </View>
+            <View style={styles(palette).headerInOutCell}>
+              <Text style={styles(palette).headerText}>
+                {parValues.reduce((a, b) => (a ?? 0) + (b ?? 0), 0)}
+              </Text>
+            </View>
+            <View style={styles(palette).headerEmptyCell} />
+          </View>
+        </View>
 
-                          <Text style={{ color: palette.white, fontWeight: '700', marginTop: 4 }}>
-                            {realTeam?.name ?? team.name ?? `Team ${team.team_number}`}
-                          </Text>
-                        </View>
+        {/* --- Players Section --- */}
+        {
+          // 1) SCRAMBLE MODE WITH TEAMS → show one row per team, scores from teamScores
+          isScramble && scrambleTeams && scrambleTeams.length > 0 ? (
+            scrambleTeams.map((team: any, teamIndex: number) => {
+              const realTeam = dbTeams.find(t => t.team_number === team.team_number);
+              const teamId = realTeam?.id; // UUID from database
+              const scoresForTeam = teamScores[teamId] || Array(holeCount).fill('');
+              const { inScore, outScore, totalScore } = calculateInOutTotals(scoresForTeam);
 
-                        {/* Scramble Cells 1–9 */}
-                        {scoresForTeam.slice(0, 9).map((val, holeIdx) => {
-                          const [scoreStr, puttsStr] = (val || '').split('/');
-                          const cls = classifyScore(val || '', parValues[holeIdx]);
+              return (
+                <View key={teamIndex} style={styles(palette).playerCard}>
+                  <View style={styles(palette).row}>
+                    {/* Team Display */}
+                    <View style={styles(palette).nameCell}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        {team.players.map((pid: string, i: number) => {
+                          const pIndex = players.findIndex(pl => pl.id === pid);
+                          if (pIndex === -1) return null;
+                          const p = players[pIndex];
                           return (
-                            <TouchableOpacity
-                              key={holeIdx}
-                              style={styles(palette).cellTouchable}
-                              activeOpacity={0.7}
-                              onPress={() => {
-                                setSelectedCell({ teamId, holeIndex: holeIdx });
-                                setScoreModalVisible(true);
+                            <Image
+                              key={pid}
+                              source={p.avatar_url ? { uri: p.avatar_url } : undefined}
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 18,
+                                marginLeft: i === 0 ? 0 : -10,
+                                borderWidth: 2,
+                                borderColor: '#fff',
                               }}
-                            >
-                              <View
-                                style={[
-                                  styles(palette).cell,
-                                  holeIdx % 2 === 1 && styles(palette).cellAlt,
-                                  cls === 'birdie' && styles(palette).birdieCell,
-                                  cls === 'par' && styles(palette).parCell,
-                                  cls === 'bogey' && styles(palette).bogeyCell,
-                                ]}
-                              >
-                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
-                                {puttsStr !== undefined && puttsStr !== '' && (
-                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
-                                )}
-                              </View>
-                            </TouchableOpacity>
+                            />
                           );
                         })}
-
-                        {/* IN total for team */}
-                        <View style={styles(palette).inOutCell}>
-                          <Text style={styles(palette).cellText}>{inScore}</Text>
-                        </View>
-
-                        {/* Scramble Cells 10–18 */}
-                        {scoresForTeam.slice(9, 18).map((val, holeIdx) => {
-                          const absoluteHole = holeIdx + 9;
-                          const [scoreStr, puttsStr] = (val || '').split('/');
-                          const cls = classifyScore(val || '', parValues[absoluteHole]);
-                          return (
-                            <TouchableOpacity
-                              key={absoluteHole}
-                              style={styles(palette).cellTouchable}
-                              activeOpacity={0.7}
-                              onPress={() => {
-                                setSelectedCell({ teamId, holeIndex: absoluteHole });
-                                setScoreModalVisible(true);
-                              }}
-                            >
-                              <View
-                                style={[
-                                  styles(palette).cell,
-                                  holeIdx % 2 === 1 && styles(palette).cellAlt,
-                                  cls === 'birdie' && styles(palette).birdieCell,
-                                  cls === 'par' && styles(palette).parCell,
-                                  cls === 'bogey' && styles(palette).bogeyCell,
-                                ]}
-                              >
-                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
-                                {puttsStr !== undefined && puttsStr !== '' && (
-                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-
-                        {/* OUT and TOTAL for team */}
-                        <View style={styles(palette).inOutCell}>
-                          <Text style={styles(palette).cellText}>{outScore}</Text>
-                        </View>
-                        <View style={styles(palette).inOutCell}>
-                          <Text style={styles(palette).cellText}>{totalScore}</Text>
-                        </View>
-
-                        {/* Remove button left as-is */}
-                        <View style={styles(palette).removeCell}>
-                          <Text style={styles(palette).removeText}>✕</Text>
-                        </View>
                       </View>
-                    </View>
-                  );
-                })
 
-              // 2) SOLO MODE (default) → show full player rows (unchanged)
-              ) : (
-                players.map((player, playerIndex) => {
-                  const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
-                  return (
-                    <View key={playerIndex} style={styles(palette).playerCard}>
-                      <View style={styles(palette).row}>
-                        {/* Name + Avatar */}
-                        <View style={styles(palette).nameCell}>
+                      <Text
+                        style={{
+                          color: palette.white,
+                          fontWeight: '700',
+                          marginTop: 4,
+                        }}
+                      >
+                        {realTeam?.name ?? team.name ?? `Team ${team.team_number}`}
+                      </Text>
+                    </View>
+
+                    {/* Scramble Cells 1–9 */}
+                    {scoresForTeam.slice(0, 9).map((val, holeIdx) => {
+                      const [scoreStr, puttsStr] = (val || '').split('/');
+                      const cls = classifyScore(val || '', parValues[holeIdx]);
+                      return (
+                        <TouchableOpacity
+                          key={holeIdx}
+                          style={styles(palette).cellTouchable}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setSelectedCell({ teamId, holeIndex: holeIdx });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles(palette).cell,
+                              holeIdx % 2 === 1 && styles(palette).cellAlt,
+                              cls === 'birdie' && styles(palette).birdieCell,
+                              cls === 'par' && styles(palette).parCell,
+                              cls === 'bogey' && styles(palette).bogeyCell,
+                            ]}
+                          >
+                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                            {puttsStr !== undefined && puttsStr !== '' && (
+                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    {/* IN total for team */}
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{inScore}</Text>
+                    </View>
+
+                    {/* Scramble Cells 10–18 */}
+                    {scoresForTeam.slice(9, 18).map((val, holeIdx) => {
+                      const absoluteHole = holeIdx + 9;
+                      const [scoreStr, puttsStr] = (val || '').split('/');
+                      const cls = classifyScore(val || '', parValues[absoluteHole]);
+                      return (
+                        <TouchableOpacity
+                          key={absoluteHole}
+                          style={styles(palette).cellTouchable}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setSelectedCell({ teamId, holeIndex: absoluteHole });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles(palette).cell,
+                              holeIdx % 2 === 1 && styles(palette).cellAlt,
+                              cls === 'birdie' && styles(palette).birdieCell,
+                              cls === 'par' && styles(palette).parCell,
+                              cls === 'bogey' && styles(palette).bogeyCell,
+                            ]}
+                          >
+                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                            {puttsStr !== undefined && puttsStr !== '' && (
+                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    {/* OUT and TOTAL for team */}
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{outScore}</Text>
+                    </View>
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{totalScore}</Text>
+                    </View>
+
+                    {/* Remove button left as-is */}
+                    <View style={styles(palette).removeCell}>
+                      <Text style={styles(palette).removeText}>✕</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+
+          // 2) SOLO MODE (default) → full table rows
+          ) : (
+            players.map((player, playerIndex) => {
+              const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
+              return (
+                <View key={playerIndex} style={styles(palette).playerCard}>
+                  <View style={styles(palette).row}>
+                    {/* Name + Avatar */}
+                    <View style={styles(palette).nameCell}>
+                      <View
+                        style={{
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        {player.avatar_url ? (
+                          <Image
+                            source={{ uri: player.avatar_url }}
+                            style={{ width: 40, height: 40, borderRadius: 20 }}
+                          />
+                        ) : (
                           <View
                             style={{
-                              flexDirection: 'column',
-                              alignItems: 'center',
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              backgroundColor: palette.third,
                               justifyContent: 'center',
-                              gap: 4,
+                              alignItems: 'center',
                             }}
                           >
-                            {player.avatar_url ? (
-                              <Image
-                                source={{ uri: player.avatar_url }}
-                                style={{ width: 40, height: 40, borderRadius: 20 }}
-                              />
-                            ) : (
-                              <View
-                                style={{
-                                  width: 40,
-                                  height: 40,
-                                  borderRadius: 20,
-                                  backgroundColor: palette.third,
-                                  justifyContent: 'center',
-                                  alignItems: 'center',
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    color: palette.white,
-                                    fontWeight: '700',
-                                    fontSize: 12,
-                                  }}
-                                >
-                                  {player.name?.[0]?.toUpperCase() || '?'}
-                                </Text>
-                              </View>
-                            )}
-
-                            <Text style={styles(palette).playerNameText}>{player.name}</Text>
+                            <Text
+                              style={{
+                                color: palette.white,
+                                fontWeight: '700',
+                                fontSize: 12,
+                              }}
+                            >
+                              {player.name?.[0]?.toUpperCase() || '?'}
+                            </Text>
                           </View>
-                        </View>
+                        )}
 
-                        {/* HOLES 1–9 */}
-                        {player.scores.slice(0, 9).map((score, holeIndex) => {
-                          const cls = classifyScore(score, parValues[holeIndex]);
-                          const [scoreStr, puttsStr] = score.split('/');
-                          return (
-                            <TouchableOpacity
-                              key={holeIndex}
-                              style={styles(palette).cellTouchable}
-                              activeOpacity={0.7}
-                              onPress={() => {
-                                setSelectedCell({ playerIndex, holeIndex });
-                                setScoreModalVisible(true);
-                              }}
-                            >
-                              <View
-                                style={[
-                                  styles(palette).cell,
-                                  holeIndex % 2 === 1 && styles(palette).cellAlt,
-                                  cls === 'birdie' && styles(palette).birdieCell,
-                                  cls === 'par' && styles(palette).parCell,
-                                  cls === 'bogey' && styles(palette).bogeyCell,
-                                ]}
-                              >
-                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
-                                {puttsStr !== undefined && (
-                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-
-                        {/* IN */}
-                        <View style={styles(palette).inOutCell}>
-                          <Text style={styles(palette).cellText}>{inScore}</Text>
-                        </View>
-
-                        {/* HOLES 10–18 */}
-                        {player.scores.slice(9, 18).map((score, holeIndex) => {
-                          const cls = classifyScore(score, parValues[holeIndex + 9]);
-                          const [scoreStr, puttsStr] = score.split('/');
-                          return (
-                            <TouchableOpacity
-                              key={holeIndex + 9}
-                              style={styles(palette).cellTouchable}
-                              activeOpacity={0.7}
-                              onPress={() => {
-                                setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
-                                setScoreModalVisible(true);
-                              }}
-                            >
-                              <View
-                                style={[
-                                  styles(palette).cell,
-                                  holeIndex % 2 === 1 && styles(palette).cellAlt,
-                                  cls === 'birdie' && styles(palette).birdieCell,
-                                  cls === 'par' && styles(palette).parCell,
-                                  cls === 'bogey' && styles(palette).bogeyCell,
-                                ]}
-                              >
-                                <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
-                                {puttsStr !== undefined && (
-                                  <Text style={styles(palette).puttText}>{puttsStr}</Text>
-                                )}
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-
-                        {/* OUT */}
-                        <View style={styles(palette).inOutCell}>
-                          <Text style={styles(palette).cellText}>{outScore}</Text>
-                        </View>
-
-                        {/* TOTAL */}
-                        <View style={styles(palette).inOutCell}>
-                          <Text style={styles(palette).cellText}>{totalScore}</Text>
-                        </View>
-
-                        {/* REMOVE */}
-                        <TouchableOpacity
-                          style={styles(palette).removeCell}
-                          onPress={() => setConfirmRemoveIndex(playerIndex)}
-                        >
-                          <Text style={styles(palette).removeText}>✕</Text>
-                        </TouchableOpacity>
+                        <Text style={styles(palette).playerNameText}>{player.name}</Text>
                       </View>
                     </View>
-                  );
-                })
-              )
-            }
-          </View>
-        </ScrollView>
+
+                    {/* HOLES 1–9 */}
+                    {player.scores.slice(0, 9).map((score, holeIndex) => {
+                      const cls = classifyScore(score, parValues[holeIndex]);
+                      const [scoreStr, puttsStr] = score.split('/');
+                      return (
+                        <TouchableOpacity
+                          key={holeIndex}
+                          style={styles(palette).cellTouchable}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setSelectedCell({ playerIndex, holeIndex });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles(palette).cell,
+                              holeIndex % 2 === 1 && styles(palette).cellAlt,
+                              cls === 'birdie' && styles(palette).birdieCell,
+                              cls === 'par' && styles(palette).parCell,
+                              cls === 'bogey' && styles(palette).bogeyCell,
+                            ]}
+                          >
+                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                            {puttsStr !== undefined && (
+                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    {/* IN */}
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{inScore}</Text>
+                    </View>
+
+                    {/* HOLES 10–18 */}
+                    {player.scores.slice(9, 18).map((score, holeIndex) => {
+                      const cls = classifyScore(score, parValues[holeIndex + 9]);
+                      const [scoreStr, puttsStr] = score.split('/');
+                      return (
+                        <TouchableOpacity
+                          key={holeIndex + 9}
+                          style={styles(palette).cellTouchable}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles(palette).cell,
+                              holeIndex % 2 === 1 && styles(palette).cellAlt,
+                              cls === 'birdie' && styles(palette).birdieCell,
+                              cls === 'par' && styles(palette).parCell,
+                              cls === 'bogey' && styles(palette).bogeyCell,
+                            ]}
+                          >
+                            <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
+                            {puttsStr !== undefined && (
+                              <Text style={styles(palette).puttText}>{puttsStr}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                    {/* OUT */}
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{outScore}</Text>
+                    </View>
+
+                    {/* TOTAL */}
+                    <View style={styles(palette).inOutCell}>
+                      <Text style={styles(palette).cellText}>{totalScore}</Text>
+                    </View>
+
+                    {/* REMOVE */}
+                    <TouchableOpacity
+                      style={styles(palette).removeCell}
+                      onPress={() => setConfirmRemoveIndex(playerIndex)}
+                    >
+                      <Text style={styles(palette).removeText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )
+        }
       </View>
+    </ScrollView>
+  ) : (
+    <ScrollView
+      style={styles(palette).chipScroll}
+      contentContainerStyle={styles(palette).chipScrollContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles(palette).chipTableContainer} ref={scorecardRef}>
+        {players.map((player, playerIndex) => {
+          const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
+          return (
+            <View key={playerIndex} style={styles(palette).chipPlayerCard}>
+              {/* Header row for player card */}
+              <View style={styles(palette).chipHeaderRow}>
+                <View style={styles(palette).chipHeaderLeft}>
+                  {player.avatar_url ? (
+                    <Image
+                      source={{ uri: player.avatar_url }}
+                      style={{ width: 40, height: 40, borderRadius: 20 }}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 20,
+                        backgroundColor: palette.third,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: palette.white,
+                          fontWeight: '700',
+                          fontSize: 12,
+                        }}
+                      >
+                        {player.name?.[0]?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles(palette).chipPlayerName}>{player.name}</Text>
+                </View>
+                <View style={styles(palette).chipHeaderTotals}>
+                  <Text style={styles(palette).chipHeaderTotalsText}>IN {inScore}</Text>
+                  <Text style={styles(palette).chipHeaderTotalsText}>OUT {outScore}</Text>
+                  <Text style={styles(palette).chipHeaderTotalsText}>TOTAL {totalScore}</Text>
+                </View>
+              </View>
+
+              {/* Chip grid 9x2 */}
+              <View style={styles(palette).chipGrid}>
+                {player.scores.map((score, holeIndex) => {
+                  const cls = classifyScore(score, parValues[holeIndex]);
+                  const [scoreStr] = score.split('/');
+                  return (
+                    <TouchableOpacity
+                      key={holeIndex}
+                      style={styles(palette).chipCellTouchable}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setSelectedCell({ playerIndex, holeIndex });
+                        setScoreModalVisible(true);
+                      }}
+                    >
+                      <View
+                        style={[
+                          styles(palette).chip,
+                          cls === 'birdie' && styles(palette).chipBirdie,
+                          cls === 'par' && styles(palette).chipPar,
+                          cls === 'bogey' && styles(palette).chipBogey,
+                        ]}
+                      >
+                        <Text style={styles(palette).chipText}>
+                          {scoreStr || String(holeIndex + 1)}
+                        </Text>
+
+                        {/* Putts display */}
+                        {(() => {
+                          const [, puttsStr] = score.split('/');
+                          return puttsStr ? (
+                            <Text
+                              style={{
+                                position: 'absolute',
+                                bottom: 4,
+                                right: 5,
+                                fontSize: 8,
+                                color: palette.textLight,
+                                opacity: 0.8,
+                                fontWeight: '600',
+                              }}
+                            >
+                              {puttsStr}
+                            </Text>
+                          ) : null;
+                        })()}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  )}
+</View>
 
       {/* Add Player Button - floating */}
       <View style={styles(palette).addPlayerButtonContainer}>
@@ -1271,24 +1426,27 @@ const styles = (palette: any) => StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scorecardTitleWrap: {
-    backgroundColor: palette.backgroundV2,
+    backgroundColor: 'rgba(255,255,255,0.10)',
     borderRadius: 24,
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 4,
     alignSelf: 'center',
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.35,
-    shadowRadius: 32,
-    elevation: 45,
-    marginBottom: 24,
+    shadowColor: '#FFFFFF',
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 20,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.20)',
   },
   scorecardTitle: {
-  color: palette.primary,
-  fontSize: 28,
-  fontWeight: '800',
-  letterSpacing: 0.5,
-  textAlign: 'center',
-  textShadowColor: 'transparent',
+    color: palette.textLight,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+    textShadowColor: 'rgba(255,255,255,0.3)',
+    textShadowRadius: 6,
   },
   titleUnderline: {
     width: 120,
@@ -1311,30 +1469,31 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: 0,
   },
   tableContainer: {
-    backgroundColor: palette.backgroundV2,
-    padding: 24,
-    marginVertical: 12,
-    marginBottom: 8,
-    minWidth: 900,
-    overflow: 'hidden',
-    shadowColor: palette.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 48,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 50,
-    borderRadius: 32,
-  },
+  backgroundColor: palette.background,
+  padding: 24,
+  marginVertical: 12,
+  marginBottom: 8,
+  minWidth: 900,
+  borderRadius: 32,
+  borderWidth: 0,
+  borderColor: 'transparent',
+  shadowOpacity: 0,
+  shadowRadius: 0,
+  shadowOffset: { width: 0, height: 0 },
+  elevation: 0,
+  overflow: 'hidden',
+},
   headerUnified: {
-    backgroundColor: palette.primary,
+    backgroundColor: palette.background,
     borderRadius: 24,
     borderWidth: 0,
+    borderColor: 'transparent',
     marginBottom: 12,
     overflow: 'hidden',
-    shadowColor: palette.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 40,
+    shadowOpacity: 0,
+    shadowRadius: 0,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 40,
+    elevation: 0,
   },
   headerDivider: {
     height: 1,
@@ -1349,27 +1508,29 @@ const styles = (palette: any) => StyleSheet.create({
     borderRadius: 1,
   },
   headerRow: {
-  flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   headerCell: {
-  backgroundColor: 'transparent',
-  minWidth: CELL_WIDTH,
-  height: 40,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderRightWidth: 1,
-  borderColor: '#FFFFFF33',
-  flex: 1,
+    backgroundColor: 'transparent',
+    minWidth: CELL_WIDTH,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: 'rgba(255,255,255,0.20)',
+    flex: 1,
   },
   headerHoleCell: {
-  backgroundColor: 'transparent',
-  minWidth: CELL_WIDTH,
-  height: 40,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderRightWidth: 1,
-  borderColor: '#FFFFFF33',
-  flex: 1,
+    backgroundColor: 'transparent',
+    minWidth: CELL_WIDTH,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: 'rgba(255,255,255,0.20)',
+    flex: 1,
   },
   headerNameCell: { 
   backgroundColor: 'transparent',
@@ -1381,14 +1542,14 @@ const styles = (palette: any) => StyleSheet.create({
   borderColor: '#FFFFFF33',
   },
   headerInOutCell: {
-  backgroundColor: 'transparent',
-  minWidth: CELL_WIDTH,
-  height: 40,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderRightWidth: 1,
-  borderColor: '#FFFFFF33',
-  flex: 1,
+    backgroundColor: 'transparent',
+    minWidth: CELL_WIDTH,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    flex: 1,
   },
   headerEmptyCell: {
     width: 40,
@@ -1404,29 +1565,33 @@ const styles = (palette: any) => StyleSheet.create({
   height: 60,
   },
   nameCell: {
-  backgroundColor: palette.primary,
-  minWidth: 120,
-  height: 70,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderTopLeftRadius: 12,
-  borderBottomLeftRadius: 12,
-  borderTopRightRadius: 0,
-  borderBottomRightRadius: 0,
-  marginHorizontal: 0,
-  borderWidth: 0,
+    backgroundColor: lighten(palette.background, 15),
+    minWidth: 120,
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    marginHorizontal: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
   },
   cell: {
-  backgroundColor: palette.white,
-  minWidth: CELL_WIDTH,
-  height: 70,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderRightWidth: 1,
-  borderColor: '#00000012',
-  flex: 1,
-  position: 'relative', // <-- this enables the absolute child
-  borderRadius: 0,
+    backgroundColor: lighten(palette.background, 18),
+    minWidth: CELL_WIDTH,
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 0,
+    borderColor: 'transparent',
+    flex: 1,
+    position: 'relative',
+    borderRadius: 14,
   },
   cellTouchable: {
     minWidth: CELL_WIDTH,
@@ -1443,15 +1608,15 @@ const styles = (palette: any) => StyleSheet.create({
   letterSpacing: 0.2,
   },
   playerCard: {
-    backgroundColor: 'transparent',
+    backgroundColor: lighten(palette.background, 8),
     borderRadius: 20,
     marginVertical: 8,
-    shadowColor: palette.white,
-    shadowOpacity: 0.35,
-    shadowRadius: 36,
+    shadowOpacity: 0,
+    shadowRadius: 0,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 35,
+    elevation: 0,
     borderWidth: 0,
+    borderColor: 'transparent',
     height: 70,
   },
   playerNameText: {
@@ -1467,14 +1632,14 @@ const styles = (palette: any) => StyleSheet.create({
     letterSpacing: 1,
   },
   inOutCell: {
-  backgroundColor: palette.primary,
-  minWidth: CELL_WIDTH,
-  height: 70,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderRightWidth: 1,
-  borderColor: palette.black,
-  flex: 1,
+    backgroundColor: lighten(palette.background, 12),
+    minWidth: CELL_WIDTH,
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 0,
+    borderColor: 'transparent',
+    flex: 1,
   },
   emptyCell: {
     width: 40,
@@ -1628,7 +1793,7 @@ const styles = (palette: any) => StyleSheet.create({
   fontWeight: '600',
   },
   text: {
-  color: palette.textDark,
+  color: palette.textLight,
   },
   listItemLabel: {
   color: palette.textDark,
@@ -1658,6 +1823,102 @@ const styles = (palette: any) => StyleSheet.create({
   },
   bogeyCell: {
     backgroundColor: '#fde0e0', // light red
+  },
+  divider: {
+  width: '90%',
+  height: 1,
+  backgroundColor: palette.textLight,
+  alignSelf: 'center',
+  marginTop: 4,
+},
+  // --- Compact chip layout styles ---
+  chipScroll: {
+    width: '100%',
+    marginTop: 12,
+  },
+  chipScrollContent: {
+    paddingBottom: 16,
+  },
+  chipTableContainer: {
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
+  },
+  chipPlayerCard: {
+    backgroundColor: lighten(palette.background, 10),
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginVertical: 6,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
+  },
+  chipHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  chipHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  chipPlayerName: {
+    color: palette.textLight,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  chipHeaderTotals: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  chipHeaderTotalsText: {
+    color: palette.textLight,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 0,
+  },
+  chipCellTouchable: {
+  width: '11%',      // ensures exactly 9 per row
+  aspectRatio: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginVertical: 4, // vertical spacing only
+},
+  chip: {
+    minWidth: 34,
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: lighten(palette.background, 20),
+  },
+  chipText: {
+    color: palette.textLight,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  chipBirdie: {
+    backgroundColor: '#d4fcd4',
+  },
+  chipPar: {
+    backgroundColor: '#e0e0e0',
+  },
+  chipBogey: {
+    backgroundColor: '#fde0e0',
   },
 });
 

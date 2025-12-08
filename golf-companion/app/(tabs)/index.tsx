@@ -104,8 +104,6 @@ export default function HomeScreen() {
         <ThemedView style={styles(palette).authContainer}>
           <ThemedText style={styles(palette).welcomeText}>
             Stay tuned for activity updates from your golf community!
-
-            Quick Test Add
           </ThemedText>
         </ThemedView>
 

@@ -801,7 +801,7 @@ useEffect(() => {
       {/* Scorecard Table - Glassy Card */}
       {/* Scorecard Table - Glassy Card */}
 <View style={styles(palette).cardWrapper}>
-  {viewMode === 'table' || isScramble ? (
+  {viewMode === 'table' ? (
     <ScrollView
       horizontal
       style={styles(palette).horizontalScroll}
@@ -1164,103 +1164,189 @@ useEffect(() => {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles(palette).chipTableContainer} ref={scorecardRef}>
-        {players.map((player, playerIndex) => {
-          const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
-          return (
-            <View key={playerIndex} style={styles(palette).chipPlayerCard}>
-              {/* Header row for player card */}
-              <View style={styles(palette).chipHeaderRow}>
-                <View style={styles(palette).chipHeaderLeft}>
-                  {player.avatar_url ? (
-                    <Image
-                      source={{ uri: player.avatar_url }}
-                      style={{ width: 40, height: 40, borderRadius: 20 }}
-                    />
-                  ) : (
-                    <View
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
-                        backgroundColor: palette.third,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: palette.white,
-                          fontWeight: '700',
-                          fontSize: 12,
-                        }}
-                      >
-                        {player.name?.[0]?.toUpperCase() || '?'}
+        {isScramble && scrambleTeams && scrambleTeams.length > 0
+          ? scrambleTeams.map((team: any, teamIndex: number) => {
+              const realTeam = dbTeams.find(t => t.team_number === team.team_number);
+              const teamId = realTeam?.id;
+              const scoresForTeam = teamScores[teamId] || Array(holeCount).fill('');
+              const { inScore, outScore, totalScore } = calculateInOutTotals(scoresForTeam);
+
+              return (
+                <View key={teamIndex} style={styles(palette).chipPlayerCard}>
+                  <View style={styles(palette).chipHeaderRow}>
+                    <View style={styles(palette).chipHeaderLeft}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: -6 }}>
+                        {team.players.map((pid: string, i: number) => {
+                          const pIndex = players.findIndex(pl => pl.id === pid);
+                          if (pIndex === -1) return null;
+                          const p = players[pIndex];
+                          return (
+                            <Image
+                              key={pid}
+                              source={p.avatar_url ? { uri: p.avatar_url } : undefined}
+                              style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 20,
+                                marginLeft: i === 0 ? 0 : -14,
+                                borderWidth: 2,
+                                borderColor: '#fff',
+                              }}
+                            />
+                          );
+                        })}
+                      </View>
+                      <Text style={styles(palette).chipPlayerName}>
+                        {realTeam?.name ?? team.name ?? `Team ${team.team_number}`}
                       </Text>
                     </View>
-                  )}
-                  <Text style={styles(palette).chipPlayerName}>{player.name}</Text>
-                </View>
-                <View style={styles(palette).chipHeaderTotals}>
-                  <Text style={styles(palette).chipHeaderTotalsText}>IN {inScore}</Text>
-                  <Text style={styles(palette).chipHeaderTotalsText}>OUT {outScore}</Text>
-                  <Text style={styles(palette).chipHeaderTotalsText}>TOTAL {totalScore}</Text>
-                </View>
-              </View>
 
-              {/* Chip grid 9x2 */}
-              <View style={styles(palette).chipGrid}>
-                {player.scores.map((score, holeIndex) => {
-                  const cls = classifyScore(score, parValues[holeIndex]);
-                  const [scoreStr] = score.split('/');
-                  return (
-                    <TouchableOpacity
-                      key={holeIndex}
-                      style={styles(palette).chipCellTouchable}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        setSelectedCell({ playerIndex, holeIndex });
-                        setScoreModalVisible(true);
-                      }}
-                    >
-                      <View
-                        style={[
-                          styles(palette).chip,
-                          cls === 'birdie' && styles(palette).chipBirdie,
-                          cls === 'par' && styles(palette).chipPar,
-                          cls === 'bogey' && styles(palette).chipBogey,
-                        ]}
-                      >
-                        <Text style={styles(palette).chipText}>
-                          {scoreStr || String(holeIndex + 1)}
-                        </Text>
+                    <View style={styles(palette).chipHeaderTotals}>
+                      <Text style={styles(palette).chipHeaderTotalsText}>IN {inScore}</Text>
+                      <Text style={styles(palette).chipHeaderTotalsText}>OUT {outScore}</Text>
+                      <Text style={styles(palette).chipHeaderTotalsText}>TOTAL {totalScore}</Text>
+                    </View>
+                  </View>
 
-                        {/* Putts display */}
-                        {(() => {
-                          const [, puttsStr] = score.split('/');
-                          return puttsStr ? (
-                            <Text
-                              style={{
-                                position: 'absolute',
-                                bottom: 4,
-                                right: 5,
-                                fontSize: 8,
-                                color: palette.textLight,
-                                opacity: 0.8,
-                                fontWeight: '600',
-                              }}
-                            >
-                              {puttsStr}
+                  <View style={styles(palette).chipGrid}>
+                    {scoresForTeam.map((val, holeIndex) => {
+                      const cls = classifyScore(val, parValues[holeIndex]);
+                      const [scoreStr, puttsStr] = (val || '').split('/');
+                      return (
+                        <TouchableOpacity
+                          key={holeIndex}
+                          style={styles(palette).chipCellTouchable}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setSelectedCell({ teamId, holeIndex });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles(palette).chip,
+                              cls === 'birdie' && styles(palette).chipBirdie,
+                              cls === 'par' && styles(palette).chipPar,
+                              cls === 'bogey' && styles(palette).chipBogey,
+                            ]}
+                          >
+                            <Text style={styles(palette).chipText}>
+                              {scoreStr || String(holeIndex + 1)}
                             </Text>
-                          ) : null;
-                        })()}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })}
+                            {puttsStr ? (
+                              <Text
+                                style={{
+                                  position: 'absolute',
+                                  bottom: 4,
+                                  right: 5,
+                                  fontSize: 8,
+                                  color: palette.textLight,
+                                  opacity: 0.8,
+                                  fontWeight: '600',
+                                }}
+                              >
+                                {puttsStr}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })
+          : players.map((player, playerIndex) => {
+              const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
+              return (
+                <View key={playerIndex} style={styles(palette).chipPlayerCard}>
+                  <View style={styles(palette).chipHeaderRow}>
+                    <View style={styles(palette).chipHeaderLeft}>
+                      {player.avatar_url ? (
+                        <Image
+                          source={{ uri: player.avatar_url }}
+                          style={{ width: 40, height: 40, borderRadius: 20 }}
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 20,
+                            backgroundColor: palette.third,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: palette.white,
+                              fontWeight: '700',
+                              fontSize: 12,
+                            }}
+                          >
+                            {player.name?.[0]?.toUpperCase() || '?'}
+                          </Text>
+                        </View>
+                      )}
+                      <Text style={styles(palette).chipPlayerName}>{player.name}</Text>
+                    </View>
+
+                    <View style={styles(palette).chipHeaderTotals}>
+                      <Text style={styles(palette).chipHeaderTotalsText}>IN {inScore}</Text>
+                      <Text style={styles(palette).chipHeaderTotalsText}>OUT {outScore}</Text>
+                      <Text style={styles(palette).chipHeaderTotalsText}>TOTAL {totalScore}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles(palette).chipGrid}>
+                    {player.scores.map((score, holeIndex) => {
+                      const cls = classifyScore(score, parValues[holeIndex]);
+                      const [scoreStr, puttsStr] = score.split('/');
+                      return (
+                        <TouchableOpacity
+                          key={holeIndex}
+                          style={styles(palette).chipCellTouchable}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            setSelectedCell({ playerIndex, holeIndex });
+                            setScoreModalVisible(true);
+                          }}
+                        >
+                          <View
+                            style={[
+                              styles(palette).chip,
+                              cls === 'birdie' && styles(palette).chipBirdie,
+                              cls === 'par' && styles(palette).chipPar,
+                              cls === 'bogey' && styles(palette).chipBogey,
+                            ]}
+                          >
+                            <Text style={styles(palette).chipText}>
+                              {scoreStr || String(holeIndex + 1)}
+                            </Text>
+                            {puttsStr ? (
+                              <Text
+                                style={{
+                                  position: 'absolute',
+                                  bottom: 4,
+                                  right: 5,
+                                  fontSize: 8,
+                                  color: palette.textLight,
+                                  opacity: 0.8,
+                                  fontWeight: '600',
+                                }}
+                              >
+                                {puttsStr}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
       </View>
     </ScrollView>
   )}

@@ -130,7 +130,8 @@ type Hole = {
 };
 
 type ScoreboardItem = {
-  player_id: string;
+  player_id: string | null;
+  team_id: string | null; 
   name: string;
   avatar_url?: string | null;
   strokes: number;
@@ -1262,7 +1263,8 @@ const refreshScoreboard = React.useCallback(async () => {
             }
 
             return {
-              player_id: tid,
+              team_id: tid,
+              player_id: null,
               name: 'Team',
               avatar_url: null,
               strokes,
@@ -1288,6 +1290,7 @@ const refreshScoreboard = React.useCallback(async () => {
         }
 
         return {
+          team_id: null,
           player_id: pid,
           name: 'Unknown',
           avatar_url: null,
@@ -2369,6 +2372,7 @@ const refreshScoreboard = React.useCallback(async () => {
             onPress={() => {
               // Reuse the modal-based enter flow
               setActivePlayer({
+                team_id: null,
                 player_id: user?.id ?? "",
                 name: "You",
                 avatar_url: null,
@@ -2492,7 +2496,7 @@ const refreshScoreboard = React.useCallback(async () => {
           <View style={S.sbGrid}>
             {showTeamScoreboard ? (
               scrambleTeams!.map((team: any, idx: number) => {
-                const sbTeam = scoreboard.find((s: any) => s.player_id === team.team_id);
+                const sbTeam = scoreboard.find((s: any) => s.team_id === team.team_id);
 
                 const strokes = sbTeam?.strokes ?? 0;
                 const toPar = sbTeam?.toPar ?? 0;

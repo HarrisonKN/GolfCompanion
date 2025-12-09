@@ -109,7 +109,7 @@ export default function Scorecard() {
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
 
   const [scoreModalVisible, setScoreModalVisible] = useState(false);
-  const [selectedCell, setSelectedCell] = useState<{ playerIndex?: number; teamId?: string; holeIndex: number } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ playerIndex?: number; teamId?: string; teamNumber?: number; holeIndex: number } | null>(null);
   const [teamScores, setTeamScores] = useState<Record<string, string[]>>({});
   const [viewMode, setViewMode] = useState<'table' | 'chips'>('chips');
 
@@ -433,14 +433,14 @@ useEffect(() => {
       if (isScramble && scrambleTeams && scrambleTeams.length > 0) {
         (async () => {
           const gid = Array.isArray(gameId) ? gameId[0] : gameId;
-          if (!gid) return;
+          if (!gid || dbTeams.length === 0) return;
 
           const teamIds = scrambleTeams
             .map((t: any) => {
               const realTeam = dbTeams.find(dt => dt.team_number === t.team_number);
-              return realTeam?.id;
+              return realTeam?.id || t.team_id || null;
             })
-            .filter(Boolean);
+            .filter((id): id is string => !!id);
           if (teamIds.length === 0) return;
 
           const { data: scoreData, error: fetchError } = await supabase
@@ -480,8 +480,14 @@ useEffect(() => {
         if (players.length === 0) return;
 
         (async () => {
-          const playerIdsList = players.map(p => p.id).filter(Boolean);
-          if (playerIdsList.length === 0) return;
+          const playerIdsList = players
+            .map(p => p.id || user?.id || null)
+            .filter((id): id is string => !!id);
+
+          if (playerIdsList.length === 0) {
+            console.warn("⚠ No valid player IDs found for solo sync");
+            return;
+          }
 
           const { data: scoreData, error: fetchError } = await supabase
             .from('scores')
@@ -515,7 +521,7 @@ useEffect(() => {
           });
         })();
       }
-    }, [selectedCourse, players, isScramble, scrambleTeams, gameId])
+    }, [selectedCourse, players, isScramble, scrambleTeams, gameId, dbTeams])
   );
 
   const addPlayer = () => {
@@ -937,7 +943,7 @@ useEffect(() => {
                           style={styles(palette).cellTouchable}
                           activeOpacity={0.7}
                           onPress={() => {
-                            setSelectedCell({ teamId, holeIndex: holeIdx });
+                            setSelectedCell({ teamId, teamNumber: team.team_number, holeIndex: holeIdx });
                             setScoreModalVisible(true);
                           }}
                         >
@@ -975,7 +981,7 @@ useEffect(() => {
                           style={styles(palette).cellTouchable}
                           activeOpacity={0.7}
                           onPress={() => {
-                            setSelectedCell({ teamId, holeIndex: absoluteHole });
+                            setSelectedCell({ teamId, teamNumber: team.team_number, holeIndex: absoluteHole });
                             setScoreModalVisible(true);
                           }}
                         >
@@ -1218,7 +1224,7 @@ useEffect(() => {
                           style={styles(palette).chipCellTouchable}
                           activeOpacity={0.8}
                           onPress={() => {
-                            setSelectedCell({ teamId, holeIndex });
+                            setSelectedCell({ teamId, teamNumber: team.team_number, holeIndex });
                             setScoreModalVisible(true);
                           }}
                         >
@@ -1457,25 +1463,36 @@ useEffect(() => {
 
           // Team-based cell in scramble mode
           if (selectedCell.teamId) {
-            const teamId = selectedCell.teamId;
-            const holeIndex = selectedCell.holeIndex;
+            // Resolve a guaranteed valid teamId
+            let resolvedTeamId = selectedCell.teamId;
 
-            // Update local teamScores state for immediate UI feedback
-            setTeamScores(prev => {
-              const existing = prev[teamId] || Array(holeCount).fill('');
-              const next = [...existing];
-              next[holeIndex] = value;
-              return { ...prev, [teamId]: next };
-            });
+            if (!resolvedTeamId && scrambleTeams && dbTeams.length > 0) {
+              const match = dbTeams.find(t => t.team_number === selectedCell.teamNumber);
+              if (match?.id) resolvedTeamId = match.id;
+            }
 
-            await persistTeamHoleScore(teamId, holeIndex, value);
+            if (resolvedTeamId) {
+              const holeIndex = selectedCell.holeIndex;
+
+              // Update local UI immediately
+              setTeamScores(prev => {
+                const existing = prev[resolvedTeamId] || Array(holeCount).fill('');
+                const next = [...existing];
+                next[holeIndex] = value;
+                return { ...prev, [resolvedTeamId]: next };
+              });
+
+              await persistTeamHoleScore(resolvedTeamId, holeIndex, value);
+            }
           }
           // Player-based cell (stroke/solo mode)
           else if (selectedCell.playerIndex !== undefined && selectedCell.playerIndex !== null) {
             const pIndex = selectedCell.playerIndex;
             updateScore(pIndex, selectedCell.holeIndex, value);
 
-            const pid = players[pIndex]?.id;
+            // ALWAYS resolve a valid playerId for Supabase writes
+            const pid = players[pIndex]?.id || user?.id;
+
             if (pid) {
               await persistHoleScore(pid, selectedCell.holeIndex, value);
               // Course View listens to Realtime on 'scores' and will refresh automatically

@@ -1342,156 +1342,121 @@ const inviteChannel = supabase
 
       <SectionDivider />
 
-      {/* Test Notifications Section */}
-      <View style={styles(palette).friendsSection}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: SCREEN_WIDTH * 0.05 }}>
-          <ThemedText type="subtitle" style={[styles(palette).sectionTitle, { marginHorizontal: 0 }]}>
-            🧪 Test Notifications
+      {/* Pending Notifications Section */}
+      {(pendingInvites.length > 0 || pendingFriendRequests.length > 0) && (
+        <>
+          <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
+            📬 Pending Invitations
           </ThemedText>
-          <Pressable
-            style={[
-              styles(palette).createButton,
-              { backgroundColor: showTestNotifications ? palette.error : palette.primary }
-            ]}
-            onPress={() => setShowTestNotifications(!showTestNotifications)}
-          >
-            <ThemedText style={styles(palette).createButtonText}>
-              {showTestNotifications ? 'Hide Tests' : 'Show Tests'}
-            </ThemedText>
-          </Pressable>
-        </View>
-        {showTestNotifications && user?.id && (
-          <TestNotifications currentUserId={user.id} palette={palette} />
-        )}
-      </View>
+          
+          {/* Friend Requests */}
+          {pendingFriendRequests.map(request => (
+            <View key={request.id} style={styles(palette).inviteCard}>
+              <View style={styles(palette).inviteHeader}>
+                <ThemedText style={styles(palette).inviteTitle}>Friend Request</ThemedText>
+              </View>
+              <ThemedText style={styles(palette).inviteMessage}>
+                Incoming friend request
+              </ThemedText>
+              <View style={styles(palette).inviteActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles(palette).acceptInviteButton,
+                    pressed && { backgroundColor: '#2563EB', transform: [{ scale: 0.95 }] }
+                  ]}
+                  onPress={async () => {
+                    try {
+                      const { error: friendsError } = await supabase.from('friends').insert([
+                        { user_id: user.id, friend_id: request.requester_user_id },
+                        { user_id: request.requester_user_id, friend_id: user.id }
+                      ]);
 
-      {(pendingInvites.length > 0) && !hideInviteBanner && (
-        <View style={styles(palette).notificationBanner}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <ThemedText style={styles(palette).notificationText}>
-              You have {pendingInvites.length} group invite{pendingInvites.length > 1 ? 's' : ''}!
-            </ThemedText>
-            <Pressable onPress={() => setHideInviteBanner(true)}>
-              <MaterialIcons name="close" size={22} color={palette.white} />
-            </Pressable>
-          </View>
-        </View>
+                      if (friendsError) throw friendsError;
+
+                      await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', request.id);
+                      
+                      const acceptorName = user.full_name || user.email?.split('@')[0] || 'A user';
+                      await notifyFriendRequestAccepted(request.requester_user_id, acceptorName);
+                      
+                      showToast('Friend Added!');
+                      setPendingFriendRequests(prev => prev.filter(req => req.id !== request.id));
+                      
+                      const { data: updatedFriends } = await supabase
+                        .from('friends')
+                        .select('friend_id, profiles:friend_id(full_name, email, avatar_url)')
+                        .eq('user_id', user.id);
+                      setFriends(updatedFriends || []);
+                      
+                    } catch (err) {
+                      console.error('Friend acceptance error:', err);
+                      showToast('Error adding friend');
+                    }
+                  }}
+                >
+                  <ThemedText style={styles(palette).acceptInviteButtonText}>
+                    Accept
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles(palette).declineInviteButton,
+                    pressed && { backgroundColor: '#B91C1C', transform: [{ scale: 0.95 }] }
+                  ]}
+                  onPress={async () => {
+                    await supabase.from('friend_requests').update({ status: 'declined' }).eq('id', request.id);
+                    showToast('Request Declined');
+                    setPendingFriendRequests(prev => prev.filter(req => req.id !== request.id));
+                  }}
+                >
+                  <ThemedText style={styles(palette).declineInviteButtonText}>Decline</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+
+          {/* Group Invites */}
+          {pendingInvites.map(invite => (
+            <View key={invite.id} style={styles(palette).inviteCard}>
+              <View style={styles(palette).inviteHeader}>
+                <ThemedText style={styles(palette).inviteTitle}>Group Invitation</ThemedText>
+              </View>
+              <ThemedText style={styles(palette).inviteMessage}>
+                You've been invited to join "{invite.voice_groups?.name || 'a group'}"
+              </ThemedText>
+              <View style={styles(palette).inviteActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles(palette).acceptInviteButton,
+                    pressed && { backgroundColor: '#2563EB', transform: [{ scale: 0.95 }] }
+                  ]}
+                  onPress={() => acceptInvite(invite.id, invite.group_id)}
+                >
+                  <ThemedText style={styles(palette).acceptInviteButtonText}>
+                    Accept & Join
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles(palette).declineInviteButton,
+                    pressed && { backgroundColor: '#B91C1C', transform: [{ scale: 0.95 }] }
+                  ]}
+                  onPress={async () => {
+                    await supabase.from('hubroom_invites').update({ status: 'declined' }).eq('id', invite.id);
+                    showToast('Invite Declined');
+                    setPendingInvites(prev => prev.filter(i => i.id !== invite.id));
+                  }}
+                >
+                  <ThemedText style={styles(palette).declineInviteButtonText}>
+                    Decline
+                  </ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+
+          <SectionDivider />
+        </>
       )}
-      {/* If you add friend requests: */}
-      {pendingFriendRequests.map(request => (
-        <View key={request.id}>
-          <ThemedText>Friend request from {request.requester_user_id}</ThemedText>
-          <View style={{ flexDirection: 'row' }}>
-            <Pressable
-              style={styles(palette).acceptInviteButton}
-              onPress={async () => {
-                try {
-                  // Insert friendship in both directions with proper structure
-                  const { error: friendsError } = await supabase.from('friends').insert([
-                    { user_id: user.id, friend_id: request.requester_user_id },
-                    { user_id: request.requester_user_id, friend_id: user.id }
-                  ]);
-
-                  if (friendsError) throw friendsError;
-
-                  // Update friend request status
-                  await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', request.id);
-                  
-                  // 📬 Send notification to friend request sender
-                  const acceptorName = user.full_name || user.email?.split('@')[0] || 'A user';
-                  await notifyFriendRequestAccepted(request.requester_user_id, acceptorName);
-                  
-                  showToast('Friend Added!');
-                  
-                  // Remove the request from pending list immediately
-                  setPendingFriendRequests(prev => prev.filter(req => req.id !== request.id));
-                  
-                  // Optionally refresh friends list immediately
-                  const { data: updatedFriends } = await supabase
-                    .from('friends')
-                    .select('friend_id, profiles:friend_id(full_name, email, avatar_url)')
-                    .eq('user_id', user.id);
-                  setFriends(updatedFriends || []);
-                  
-                } catch (err) {
-                  console.error('Friend acceptance error:', err);
-                  showToast('Error adding friend');
-                }
-              }}
-            >
-              <ThemedText style={styles(palette).acceptInviteButtonText}>Accept Request</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles(palette).declineInviteButton}
-              onPress={async () => {
-                await supabase.from('friend_requests').update({ status: 'declined' }).eq('id', request.id);
-                Alert.alert('Request Declined', 'Friend request declined.');
-                onRefresh();
-              }}
-            >
-              <ThemedText style={styles(palette).declineInviteButtonText}>Decline Request</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      ))}
-      {pendingInvites.map(invite => (
-        <View key={invite.id} style={{
-          backgroundColor: palette.white,
-          padding: 16,
-          marginHorizontal: 16,
-          marginVertical: 8,
-          borderRadius: 12,
-          shadowColor: palette.primary,
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: 2,
-        }}>
-          <ThemedText style={{
-            fontSize: 16,
-            fontWeight: '600',
-            color: palette.primary,
-            marginBottom: 4
-          }}>
-            Group Invitation
-          </ThemedText>
-          <ThemedText style={{
-            fontSize: 14,
-            color: palette.textDark,
-            marginBottom: 12
-          }}>
-            You've been invited to join "{invite.voice_groups?.name || 'a group'}"
-          </ThemedText>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              style={({ pressed }) => [
-                styles(palette).acceptInviteButton,
-                pressed && { backgroundColor: '#2563EB', transform: [{ scale: 0.95 }] } // Use hardcoded darker blue
-              ]}
-              onPress={() => acceptInvite(invite.id, invite.group_id)}
-            >
-              <ThemedText style={styles(palette).acceptInviteButtonText}>
-                Accept & Join
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles(palette).declineInviteButton,
-                pressed && { backgroundColor: '#B91C1C', transform: [{ scale: 0.95 }] }
-              ]}
-              onPress={async () => {
-                await supabase.from('hubroom_invites').update({ status: 'declined' }).eq('id', invite.id);
-                showToast('Invite Declined');
-                setPendingInvites(prev => prev.filter(i => i.id !== invite.id));
-              }}
-            >
-              <ThemedText style={styles(palette).declineInviteButtonText}>
-                Decline
-              </ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      ))}
       <SectionDivider />
       
       <View style={styles(palette).appInfoSection}>
@@ -1512,6 +1477,33 @@ const inviteChannel = supabase
             <ThemedText style={styles(palette).appInfoValue}>{buildInfo.isDevice ? 'Physical Device' : 'Simulator'}</ThemedText>
           </View>
         </View>
+      </View>
+
+      <SectionDivider />
+
+      {/* Test Notifications Section - Bottom of page */}
+      <View style={styles(palette).testNotificationsSection}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <ThemedText type="subtitle" style={[styles(palette).sectionTitle, { marginHorizontal: 0 }]}>
+            🧪 Test Notifications
+          </ThemedText>
+          <Pressable
+            style={[
+              styles(palette).testToggleButton,
+              { backgroundColor: showTestNotifications ? palette.error : palette.primary }
+            ]}
+            onPress={() => setShowTestNotifications(!showTestNotifications)}
+          >
+            <ThemedText style={styles(palette).testToggleButtonText}>
+              {showTestNotifications ? 'Hide' : 'Show'}
+            </ThemedText>
+          </Pressable>
+        </View>
+        {showTestNotifications && user?.id && (
+          <View style={styles(palette).testNotificationsContent}>
+            <TestNotifications currentUserId={user.id} palette={palette} />
+          </View>
+        )}
       </View>
       
     </ScrollView>
@@ -1566,54 +1558,73 @@ const styles = (palette: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SCREEN_WIDTH * 0.05,
-    paddingTop: SCREEN_HEIGHT * 0.04, // Move higher up
-    paddingBottom: SCREEN_HEIGHT * 0.01, // More condensed
-    backgroundColor: palette.background,
-    borderBottomWidth: 0, // Remove bottom border for cleaner look
+    paddingTop: SCREEN_HEIGHT * 0.04,
+    paddingBottom: SCREEN_HEIGHT * 0.01,
+    backgroundColor: palette.white,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.primary + '12',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
 
   headerTitleSmall: {
-    fontSize: SCREEN_WIDTH * 0.05, // Slightly smaller
-    fontWeight: '700',
+    fontSize: SCREEN_WIDTH * 0.05,
+    fontWeight: '800',
     color: palette.primary,
+    letterSpacing: 0.3,
   },
 
   accountDescContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: SCREEN_WIDTH * 0.05,
-    paddingTop: SCREEN_HEIGHT * 0.005, // Minimal top padding
-    paddingBottom: SCREEN_HEIGHT * 0.015, // Reduced bottom padding
-    backgroundColor: palette.background,
+    paddingVertical: SCREEN_HEIGHT * 0.02,
+    backgroundColor: palette.white,
     borderBottomWidth: 1,
-    borderBottomColor: palette.grey,
+    borderBottomColor: palette.primary + '12',
+    marginBottom: SCREEN_HEIGHT * 0.01,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
 
   avatarCircle: {
-    width: SCREEN_WIDTH * 0.12, // Slightly smaller avatar
+    width: SCREEN_WIDTH * 0.12,
     height: SCREEN_WIDTH * 0.12,
     borderRadius: (SCREEN_WIDTH * 0.12) / 2,
     backgroundColor: palette.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
 
   avatarText: {
     color: palette.white,
-    fontSize: SCREEN_WIDTH * 0.055, // Smaller text to match smaller avatar
-    fontWeight: '700',
+    fontSize: SCREEN_WIDTH * 0.055,
+    fontWeight: '800',
   },
 
   accountName: {
-    fontSize: SCREEN_WIDTH * 0.045, // Slightly smaller name
-    fontWeight: '700',
+    fontSize: SCREEN_WIDTH * 0.047,
+    fontWeight: '800',
     color: palette.primary,
-    marginBottom: 2, // Add small margin for better spacing
+    marginBottom: 3,
+    letterSpacing: 0.2,
   },
 
   accountEmail: {
-    fontSize: SCREEN_WIDTH * 0.035, // Smaller email text
+    fontSize: SCREEN_WIDTH * 0.035,
     color: palette.textLight,
+    fontWeight: '500',
   },
   container: {
     paddingHorizontal: SCREEN_WIDTH * 0.08,
@@ -1622,10 +1633,11 @@ const styles = (palette: any) => StyleSheet.create({
   sectionTitle: {
     paddingTop: SCREEN_HEIGHT * 0.015,
     marginHorizontal: SCREEN_WIDTH * 0.05,
-    fontSize: SCREEN_WIDTH * 0.055,
-    fontWeight: '700',
+    fontSize: SCREEN_WIDTH * 0.052,
+    fontWeight: '800',
     marginBottom: SCREEN_HEIGHT * 0.015,
     color: palette.primary,
+    letterSpacing: 0.3,
   },
   infoLabel: {
     fontSize: SCREEN_WIDTH * 0.035,
@@ -1688,22 +1700,31 @@ const styles = (palette: any) => StyleSheet.create({
   },
   statTile: {
     width: SCREEN_WIDTH * 0.28,
-    backgroundColor: palette.secondary,
-    borderRadius: 12,
+    backgroundColor: palette.white,
+    borderRadius: 14,
     padding: SCREEN_WIDTH * 0.04,
     marginBottom: SCREEN_HEIGHT * 0.015,
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: palette.primary + '20',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   statLabel: {
-    fontSize: SCREEN_WIDTH * 0.035,
+    fontSize: SCREEN_WIDTH * 0.032,
     color: palette.textLight,
     fontWeight: '600',
-    marginBottom: SCREEN_HEIGHT * 0.005,
+    marginBottom: SCREEN_HEIGHT * 0.008,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   statValue: {
-    fontSize: SCREEN_WIDTH * 0.045,
+    fontSize: SCREEN_WIDTH * 0.048,
     color: palette.primary,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   roundsScroll: {
     marginTop: SCREEN_HEIGHT * 0.015,
@@ -1716,36 +1737,41 @@ const styles = (palette: any) => StyleSheet.create({
   roundTile: {
     width: SCREEN_WIDTH * 0.8,
     height: SCREEN_HEIGHT * 0.40,
-    backgroundColor: palette.background,
+    backgroundColor: palette.white,
     borderRadius: 16,
     padding: SCREEN_WIDTH * 0.045,
     marginRight: SCREEN_WIDTH * 0.05,
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.35,
-    shadowRadius: 32,
-    elevation: 45,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
   roundCourse: {
-    fontSize: SCREEN_WIDTH * 0.045,
-    fontWeight: '700',
+    fontSize: SCREEN_WIDTH * 0.048,
+    fontWeight: '800',
     color: palette.primary,
-    marginBottom: SCREEN_HEIGHT * 0.005,
+    marginBottom: SCREEN_HEIGHT * 0.008,
   },
   roundDate: {
-    fontSize: SCREEN_WIDTH * 0.035,
+    fontSize: SCREEN_WIDTH * 0.032,
     color: palette.textLight,
-    marginBottom: SCREEN_HEIGHT * 0.008,
+    marginBottom: SCREEN_HEIGHT * 0.012,
+    fontWeight: '500',
   },
   roundScore: {
-    fontSize: SCREEN_WIDTH * 0.04,
-    color: palette.error,
-    fontWeight: '700',
-    marginBottom: SCREEN_HEIGHT * 0.008,
+    fontSize: SCREEN_WIDTH * 0.045,
+    color: palette.primary,
+    fontWeight: '800',
+    marginBottom: SCREEN_HEIGHT * 0.012,
   },
   roundStat: {
-    fontSize: SCREEN_WIDTH * 0.035,
+    fontSize: SCREEN_WIDTH * 0.033,
     color: palette.textLight,
-    marginBottom: SCREEN_HEIGHT * 0.002,
+    marginBottom: SCREEN_HEIGHT * 0.004,
+    fontWeight: '500',
   },
   scorecardTable: {
     flexDirection: 'column',
@@ -1806,16 +1832,22 @@ const styles = (palette: any) => StyleSheet.create({
   },
   createButton: {
     backgroundColor: palette.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
     marginBottom: 8,
     alignItems: 'center',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   createButtonText: {
     color: palette.white,
-    fontWeight: '700',
-    fontSize: 18,
+    fontWeight: '800',
+    fontSize: 16,
+    letterSpacing: 0.3,
   },
   leaveButton: {
     backgroundColor: palette.error,
@@ -1890,63 +1922,76 @@ const styles = (palette: any) => StyleSheet.create({
     marginTop: 8,
   },
   friendTile: {
-    width: 90,
-    height: 90,
-    backgroundColor: palette.background,
-    borderRadius: 14,
+    width: 100,
+    height: 110,
+    backgroundColor: palette.white,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
-    //borderWidth: 1,
-    //borderColor: palette.grey,
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.35,
-    shadowRadius: 32,
-    elevation: 45,
-    padding: 6,
+    borderWidth: 1.5,
+    borderColor: palette.primary + '15',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+    padding: 8,
   },
   friendAvatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: palette.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   friendAvatarText: {
     color: palette.white,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 18,
   },
   friendTileName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: palette.primary,
     textAlign: 'center',
-    marginBottom: 2,
-    maxWidth: 80,
+    marginBottom: 3,
+    maxWidth: 90,
   },
   friendTileEmail: {
-    fontSize: 10,
+    fontSize: 11,
     color: palette.textLight,
     textAlign: 'center',
-    maxWidth: 80,
+    maxWidth: 90,
+    fontWeight: '500',
   },
   logoutButton: {
     backgroundColor: palette.error,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
+    shadowColor: palette.error,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   logoutButtonPressed: {
-    backgroundColor: '#B91C1C', // darker red
+    backgroundColor: '#B91C1C',
     transform: [{ scale: 0.95 }],
   },
   logoutButtonText: {
     color: palette.white,
     fontWeight: '700',
     fontSize: 14,
+    letterSpacing: 0.2,
   },
   // Add these styles to your existing styles function:
 
@@ -1958,25 +2003,25 @@ modalOverlay: {
 },
 modalContainer: {
   backgroundColor: palette.background,
-  borderRadius: 20,
-  width: '95%', // Increased from 90% to 95%
-  height: '85%', // Changed from maxHeight to fixed height
-  shadowColor: palette.black,
+  borderRadius: 24,
+  width: '95%',
+  height: '85%',
+  shadowColor: palette.primary,
   shadowOpacity: 0.15,
-  shadowRadius: 15,
-  shadowOffset: { width: 0, height: 5 },
-  elevation: 8,
-  flexDirection: 'column', // Ensure column layout
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 10,
+  flexDirection: 'column',
 },
 modalHeader: {
   flexDirection: 'row',
   justifyContent: 'space-between',
   alignItems: 'center',
-  paddingHorizontal: 20,
-  paddingVertical: 16,
+  paddingHorizontal: 22,
+  paddingVertical: 18,
   borderBottomWidth: 1,
-  borderBottomColor: palette.grey,
-  flexShrink: 0, // Don't shrink this section
+  borderBottomColor: palette.primary + '12',
+  flexShrink: 0,
 },
 searchContainer: {
   padding: 20,
@@ -2016,18 +2061,23 @@ userResultTile: {
   elevation: 2,
 },
 userResultAvatar: {
-  width: 40, // Slightly larger for better visibility
-  height: 40,
-  borderRadius: 20,
+  width: 44,
+  height: 44,
+  borderRadius: 22,
   backgroundColor: palette.primary,
   justifyContent: 'center',
   alignItems: 'center',
-  marginRight: 12,
+  marginRight: 14,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.2,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
 },
 userResultAvatarText: {
   color: palette.white,
-  fontSize: 16,
-  fontWeight: '700',
+  fontSize: 18,
+  fontWeight: '800',
 },
 userResultName: {
   fontSize: 15,
@@ -2064,15 +2114,15 @@ searchResultsCount: {
   fontWeight: '500',
 },
 modalTitle: {
-  fontSize: 20,
-  fontWeight: '700',
+  fontSize: 22,
+  fontWeight: '800',
   color: palette.primary,
+  letterSpacing: 0.3,
 },
-
 modalCloseButton: {
   padding: 8,
-  borderRadius: 12,
-  backgroundColor: palette.background,
+  borderRadius: 10,
+  backgroundColor: palette.primary + '10',
 },
 
 searchInputContainer: {
@@ -2143,21 +2193,24 @@ appInfoSection: {
   paddingHorizontal: 8,
 },
 appInfoContainer: {
-  backgroundColor: palette.background,
-  borderRadius: 12,
-  padding: 16,
+  backgroundColor: palette.white,
+  borderRadius: 16,
+  padding: 18,
   marginHorizontal: SCREEN_WIDTH * 0.05,
-  shadowColor: palette.shadow,
-  shadowOpacity: 0.35,
-  shadowRadius: 32,
-  elevation: 45,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 4,
   marginBottom: 24,
+  borderWidth: 1,
+  borderColor: palette.primary + '15',
 },
 appInfoRow: {
   flexDirection: 'row',
   justifyContent: 'space-between',
   alignItems: 'center',
-  paddingVertical: 8,
+  paddingVertical: 12,
   borderBottomWidth: 1,
   borderBottomColor: palette.grey + '20',
 },
@@ -2165,10 +2218,87 @@ appInfoLabel: {
   fontSize: 14,
   color: palette.textLight,
   fontWeight: '600',
+  letterSpacing: 0.3,
 },
 appInfoValue: {
   fontSize: 14,
-  color: palette.textLight,
+  color: palette.primary,
+  fontWeight: '700',
+},
+inviteCard: {
+  backgroundColor: palette.white,
+  padding: 16,
+  marginHorizontal: 12,
+  marginBottom: 12,
+  borderRadius: 16,
+  borderLeftWidth: 5,
+  borderLeftColor: palette.primary,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.09,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 3,
+},
+inviteHeader: {
+  marginBottom: 10,
+},
+inviteTitle: {
+  fontSize: 16,
+  fontWeight: '800',
+  color: palette.primary,
+  letterSpacing: 0.3,
+},
+inviteMessage: {
+  fontSize: 14,
+  color: palette.textDark,
+  marginBottom: 14,
+  lineHeight: 21,
   fontWeight: '500',
+},
+inviteActions: {
+  flexDirection: 'row',
+  gap: 10,
+},
+testNotificationsSection: {
+  marginTop: 20,
+  marginBottom: 24,
+  paddingHorizontal: 12,
+  backgroundColor: palette.white,
+  marginHorizontal: 12,
+  borderRadius: 16,
+  padding: 16,
+  borderLeftWidth: 5,
+  borderLeftColor: palette.primary,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.08,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 3,
+},
+testToggleButton: {
+  paddingHorizontal: 16,
+  paddingVertical: 8,
+  borderRadius: 10,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.15,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
+},
+testToggleButtonText: {
+  color: palette.white,
+  fontWeight: '700',
+  fontSize: 13,
+},
+testNotificationsContent: {
+  marginTop: 14,
+  backgroundColor: palette.background,
+  borderRadius: 12,
+  padding: 14,
+  shadowColor: palette.black,
+  shadowOpacity: 0.04,
+  shadowRadius: 6,
+  shadowOffset: { width: 0, height: 1 },
+  elevation: 1,
 },
 });

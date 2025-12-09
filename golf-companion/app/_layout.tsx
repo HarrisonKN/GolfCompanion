@@ -11,7 +11,9 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider } from "@/components/AuthContext";
 import { ThemeProvider } from "@/components/ThemeContext";
 import { VoiceProvider } from '@/components/VoiceContext';
+import { SpotifyProvider } from '@/components/SpotifyContext';
 import { GlobalVoiceBar } from '@/components/GlobalVoiceBar';
+import { GlobalNotificationPanel } from '@/components/GlobalNotificationPanel';
 import { initializeNotificationHandlers, setupAndroidNotificationChannel, NotificationData } from "@/lib/NotificationService";
 
 // Ensure foreground notifications show a banner/sound when permitted
@@ -79,7 +81,8 @@ export default function RootLayout() {
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <ThemeProvider>
           <AuthProvider>
-            <VoiceProvider>
+            <SpotifyProvider>
+              <VoiceProvider>
               {/* Notification Banner */}
               {notification && (
                 <Animated.View
@@ -125,9 +128,11 @@ export default function RootLayout() {
                 <Stack.Screen name="gameModes" options={{ headerShown: false }} />
                 <Stack.Screen name="+not-found" />
               </Stack>
+              <GlobalNotificationPanel />
               <GlobalVoiceBar />
               <StatusBar style="auto" />
             </VoiceProvider>
+            </SpotifyProvider>
           </AuthProvider>
         </ThemeProvider>
       </SafeAreaProvider>

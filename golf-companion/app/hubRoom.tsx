@@ -258,17 +258,20 @@ export default function HubRoomScreen() {
   const sendMessage = async () => {
     if (!chatInput.trim()) return;
 
+    const messageText = chatInput; // Store message before clearing
+    setChatInput(''); // Clear input immediately for better UX
+
     try {
       const { error } = await supabase.from('voice_messages').insert({
         group_id: roomId,
         user_id: user?.id,
-        text: chatInput,
+        text: messageText,
       });
 
       if (error) throw error;
 
       // 📬 Send notifications to other group members about the message
-      const messagePreview = chatInput.trim();
+      const messagePreview = messageText.trim();
       const senderName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'A user';
       
       // Get other group members to notify
@@ -288,8 +291,6 @@ export default function HubRoomScreen() {
         console.warn('Failed to send message notifications:', notifErr);
         // Don't fail message sending if notifications fail
       }
-
-      setChatInput('');
     } catch (error) {
       console.error('Error sending message:', error);
       showToast('Error sending message');
@@ -486,7 +487,7 @@ export default function HubRoomScreen() {
             ]}
             hitSlop={10}
           >
-            <ThemedText style={styles(palette).backButtonText}>{'\u25C0'}</ThemedText>
+            <Ionicons name="chevron-back" size={28} color={palette.primary} />
           </Pressable>
           <Pressable 
             onPress={handleGroupInfoPress}
@@ -496,115 +497,141 @@ export default function HubRoomScreen() {
               {roomName}
             </ThemedText>
             <ThemedText style={styles(palette).headerSubtext}>
-              Tap for group info
+              {voiceMembers.length} {voiceMembers.length === 1 ? 'person' : 'people'} in voice
             </ThemedText>
           </Pressable>
+          <Pressable 
+            onPress={handleGroupInfoPress}
+            style={({ pressed }) => [
+              styles(palette).infoButton,
+              pressed && { opacity: 0.7 }
+            ]}
+            hitSlop={10}
+          >
+            <Ionicons name="information-circle" size={26} color={palette.primary} />
+          </Pressable>
         </View>
-        <Pressable 
-          onPress={handleInvitePress} 
-          style={({ pressed }) => [
-            styles(palette).inviteButton,
-            pressed && styles(palette).inviteButtonPressed,
-          ]}
-        >
-          <ThemedText style={styles(palette).inviteButtonText}>Invite</ThemedText>
-        </Pressable>
       </View>
 
       {/* Voice Members Bar — shows ONLY users currently in the voice channel */}
-      <View style={[styles(palette).voiceMembersBar, { backgroundColor: palette.secondary, borderRadius: 12, margin: 8, elevation: 2 }]}>
-        <ThemedText style={styles(palette).sectionTitle}>Voice Channel ({voiceMembers.length})</ThemedText>
-        <FlatList
-          horizontal
-          data={voiceMembers}
-          keyExtractor={(item) => `${item.user_id}:${item.session_id ?? ''}`} // Stable key across updates
-          renderItem={({ item }) => (
-            <View style={[
-              styles(palette).voiceMemberAvatar,
-              item.agora_uid === activeSpeakerUid ? styles(palette).activeSpeaker : null // correct mapping: agora_uid -> activeSpeakerUid
-            ]}>
-              <ThemedText style={styles(palette).voiceMemberInitial}>
-                {item.profiles?.full_name?.[0]?.toUpperCase() || '?'}
-              </ThemedText>
-              <ThemedText style={styles(palette).voiceMemberName}>
-                {item.profiles?.full_name || 'Unknown'}
-              </ThemedText>
+      {voiceMembers.length > 0 && (
+        <View style={styles(palette).voiceMembersCard}>
+          <ThemedText style={styles(palette).voiceMembersTitle}>
+            🎤 Voice Channel
+          </ThemedText>
+          <FlatList
+            horizontal
+            data={voiceMembers}
+            keyExtractor={(item) => `${item.user_id}:${item.session_id ?? ''}`}
+            renderItem={({ item }) => (
+              <View style={[
+                styles(palette).voiceMemberBubble,
+                item.agora_uid === activeSpeakerUid && styles(palette).activeSpeaker
+              ]}>
+                <View style={styles(palette).voiceMemberAvatar}>
+                  <ThemedText style={styles(palette).voiceMemberInitial}>
+                    {item.profiles?.full_name?.[0]?.toUpperCase() || '?'}
+                  </ThemedText>
+                </View>
+                <ThemedText style={styles(palette).voiceMemberName} numberOfLines={1}>
+                  {item.user_id === user?.id ? 'You' : item.profiles?.full_name || 'Unknown'}
+                </ThemedText>
+                {item.is_muted && (
+                  <Ionicons name="mic-off" size={12} color={palette.error} />
+                )}
+              </View>
+            )}
+            scrollEnabled={voiceMembers.length > 3}
+            showsHorizontalScrollIndicator={false}
+            style={{ paddingHorizontal: 4 }}
+          />
+        </View>
+      )}
 
-              {/* Per-member mute indicator from presence */}
-              {item.is_muted ? (
-                <ThemedText style={{ color: palette.error, fontSize: 10 }}>Muted</ThemedText>
-              ) : null}
-
-              {/* Explicit "You (Muted)" for the local user */}
-              {item.user_id === user?.id && isMuted && (
-                <ThemedText style={{ color: palette.error, fontSize: 10 }}>You (Muted)</ThemedText>
-              )}
-            </View>
-          )}
-          ListEmptyComponent={
-            <ThemedText style={styles(palette).emptyText}>No one in voice channel</ThemedText>
-          }
-          style={{ paddingVertical: 8 }}
-          showsHorizontalScrollIndicator={false}
-        />
-      </View>
-
-      {/* Voice Controls Bar */}
-      <View style={[styles(palette).voiceControlsBar, { backgroundColor: palette.third, borderRadius: 12, marginHorizontal: 8, marginBottom: 8, elevation: 2 }]}>
+      {/* Voice Controls Bar - Cleaner Layout */}
+      <View style={styles(palette).voiceControlsCard}>
         <Pressable
           onPress={handleJoin}
           style={({ pressed }) => [
-            styles(palette).iconButton,
-            styles(palette).iconJoin,
-            isJoined && styles(palette).iconDisabled,
-            pressed && styles(palette).iconPressed,
+            styles(palette).controlButton,
+            { backgroundColor: isJoined ? palette.grey : palette.success || '#22C55E' },
+            isJoined && styles(palette).controlDisabled,
+            pressed && styles(palette).controlPressed,
           ]}
           disabled={isJoined}
         >
-          <MaterialCommunityIcons name="phone-plus" size={24} color={palette.white} />
-          <ThemedText style={styles(palette).iconLabel}>{isJoined ? 'Joined' : 'Join'}</ThemedText>
+          <MaterialCommunityIcons 
+            name="phone-plus" 
+            size={20} 
+            color={palette.white} 
+          />
+          <ThemedText style={styles(palette).controlButtonText}>
+            {isJoined ? 'Joined' : 'Join'}
+          </ThemedText>
         </Pressable>
 
         <Pressable
           onPress={handleLeave}
           style={({ pressed }) => [
-            styles(palette).iconButton,
-            styles(palette).iconLeave,
-            !isJoined && styles(palette).iconDisabled,
-            pressed && styles(palette).iconPressed,
+            styles(palette).controlButton,
+            { backgroundColor: !isJoined ? palette.grey : palette.error },
+            !isJoined && styles(palette).controlDisabled,
+            pressed && styles(palette).controlPressed,
           ]}
           disabled={!isJoined}
         >
-          <MaterialCommunityIcons name="phone-hangup" size={24} color={palette.white} />
-          <ThemedText style={styles(palette).iconLabel}>Leave</ThemedText>
+          <MaterialCommunityIcons 
+            name="phone-hangup" 
+            size={20} 
+            color={palette.white} 
+          />
+          <ThemedText style={styles(palette).controlButtonText}>Leave</ThemedText>
         </Pressable>
 
         <Pressable 
           onPress={toggleMute}
           style={({ pressed }) => [
-            styles(palette).iconButton,
-            isMuted ? styles(palette).iconMuteActive : styles(palette).iconMute,
-            !isJoined && styles(palette).iconDisabled,
-            pressed && styles(palette).iconPressed,
+            styles(palette).controlButton,
+            { 
+              backgroundColor: !isJoined ? palette.grey : (isMuted ? palette.warning || '#F59E42' : palette.primary)
+            },
+            !isJoined && styles(palette).controlDisabled,
+            pressed && styles(palette).controlPressed,
           ]}
           disabled={!isJoined}
         >
-          <Ionicons name={isMuted ? 'mic-off' : 'mic'} size={24} color={palette.white} />
-          <ThemedText style={styles(palette).iconLabel}>
+          <Ionicons 
+            name={isMuted ? 'mic-off' : 'mic'} 
+            size={20} 
+            color={palette.white} 
+          />
+          <ThemedText style={styles(palette).controlButtonText}>
             {isMuted ? 'Unmute' : 'Mute'}
           </ThemedText>
         </Pressable>
 
         <Pressable
-          onPress={fetchVoiceMembers} // manual refresh helper
+          onPress={fetchVoiceMembers}
           style={({ pressed }) => [
-            styles(palette).iconButton,
-            styles(palette).iconRefresh,
-            pressed && styles(palette).iconPressed,
+            styles(palette).controlButton,
+            { backgroundColor: palette.primary },
+            pressed && styles(palette).controlPressed,
           ]}
         >
-          <Ionicons name="refresh" size={24} color={palette.white} />
-          <ThemedText style={styles(palette).iconLabel}>Refresh</ThemedText>
+          <Ionicons name="refresh" size={20} color={palette.white} />
+          <ThemedText style={styles(palette).controlButtonText}>Refresh</ThemedText>
+        </Pressable>
+
+        <Pressable 
+          onPress={handleInvitePress} 
+          style={({ pressed }) => [
+            styles(palette).controlButton,
+            { backgroundColor: palette.third },
+            pressed && styles(palette).controlPressed,
+          ]}
+        >
+          <Ionicons name="person-add" size={20} color={palette.white} />
+          <ThemedText style={styles(palette).controlButtonText}>Invite</ThemedText>
         </Pressable>
       </View>
 
@@ -614,59 +641,57 @@ export default function HubRoomScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <View style={{ flex: 1 }}>
-          {/* Messages List */}
-          <View style={[styles(palette).messagesContainer, { backgroundColor: palette.background, borderRadius: 12, margin: 8, elevation: 1 }]}>
-            <KeyboardAwareFlatList
-              ref={flatListRef}
-              data={messages}
-              keyExtractor={(_, idx) => idx.toString()}
-              renderItem={({ item }) => (
-                <View
-                  style={[
-                    styles(palette).messageBubble,
-                    item.user === 'You'
-                      ? styles(palette).myMessage
-                      : styles(palette).otherMessage,
-                  ]}
-                >
-                  <ThemedText style={styles(palette).messageUser}>{item.user}</ThemedText>
-                  <ThemedText style={styles(palette).messageText}>{item.text}</ThemedText>
-                </View>
-              )}
-              style={{ flex: 1 }}
-              contentContainerStyle={{ paddingBottom: 10, paddingHorizontal: 8 }}
-              keyboardShouldPersistTaps="handled"
-              extraHeight={100}
-              enableOnAndroid={true}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-          
-          {/* Input Bar */}
-          <View style={[styles(palette).inputBar, { marginBottom: insets.bottom }]}>
-            <TextInput
-              style={styles(palette).input}
-              value={chatInput}
-              onChangeText={setChatInput}
-              placeholder="Type a message..."
-              placeholderTextColor={palette.textLight}
-              onSubmitEditing={sendMessage}
-              returnKeyType="send"
-              multiline={false}
-            />
-            <Pressable 
-              style={({ pressed }) => [
-                styles(palette).sendButton,
-                pressed && styles(palette).sendButtonPressed,
-              ]} 
-              onPress={sendMessage}
-            >
-              <ThemedText style={styles(palette).sendButtonText}>Send</ThemedText>
-            </Pressable>
-          </View>
+        {/* Messages List */}
+        <View style={[styles(palette).messagesContainer, { backgroundColor: palette.background, borderRadius: 12, margin: 8, elevation: 1 }]}>
+          <KeyboardAwareFlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(_, idx) => idx.toString()}
+            renderItem={({ item }) => (
+              <View
+                style={[
+                  styles(palette).messageBubble,
+                  item.user === 'You'
+                    ? styles(palette).myMessage
+                    : styles(palette).otherMessage,
+                ]}
+              >
+                <ThemedText style={styles(palette).messageUser}>{item.user}</ThemedText>
+                <ThemedText style={styles(palette).messageText}>{item.text}</ThemedText>
+              </View>
+            )}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 10, paddingHorizontal: 8 }}
+            keyboardShouldPersistTaps="handled"
+            extraHeight={100}
+            enableOnAndroid={true}
+            showsVerticalScrollIndicator={false}
+          />
         </View>
       </KeyboardAvoidingView>
+      
+      {/* Input Bar - Fixed at bottom */}
+      <View style={[styles(palette).inputBar, { marginBottom: insets.bottom }]}>
+        <TextInput
+          style={styles(palette).input}
+          value={chatInput}
+          onChangeText={setChatInput}
+          placeholder="Type a message..."
+          placeholderTextColor={palette.textLight}
+          onSubmitEditing={sendMessage}
+          returnKeyType="send"
+          multiline={false}
+        />
+        <Pressable 
+          style={({ pressed }) => [
+            styles(palette).sendButton,
+            pressed && styles(palette).sendButtonPressed,
+          ]} 
+          onPress={sendMessage}
+        >
+          <ThemedText style={styles(palette).sendButtonText}>Send</ThemedText>
+        </Pressable>
+      </View>
 
       {/* Invite Modal */}
       <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
@@ -873,19 +898,14 @@ const styles = (palette: any) => StyleSheet.create({
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: palette.background,
-    padding: 16,
-    borderRadius: 16,
-    margin: 12,
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.35,
-    shadowRadius: 32,
-    elevation: 45,
-    marginBottom: 24,
+    backgroundColor: palette.white,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.grey,
   },
   headerText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: palette.primary,
   },
@@ -895,21 +915,20 @@ const styles = (palette: any) => StyleSheet.create({
     marginTop: 2,
   },
   backButton: {
-    marginRight: 10,
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: palette.background,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingRight: 12,
+    paddingVertical: 8,
   },
   backButtonPressed: {
-    backgroundColor: palette.grey,
-    transform: [{ scale: 0.95 }],
+    opacity: 0.6,
   },
   backButtonText: {
     fontSize: 20,
     color: palette.primary,
     fontWeight: 'bold',
+  },
+  infoButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   inviteButton: {
     backgroundColor: palette.primary,
@@ -958,14 +977,15 @@ const styles = (palette: any) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: palette.backgroundV2,
-    padding: 4,
+    padding: 12,
     marginHorizontal: 12,
+    marginBottom: 8,
     borderRadius: 16,
-    elevation: 2,
+    elevation: 3,
     shadowColor: palette.primary,   
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   input: {
     flex: 1,
@@ -1270,8 +1290,8 @@ const styles = (palette: any) => StyleSheet.create({
   },
   activeSpeaker: {
     borderColor: palette.success || '#22C55E',
-    borderWidth: 3,
-    backgroundColor: palette.primaryLight || '#E0E7FF',
+    borderWidth: 2,
+    backgroundColor: palette.primary,
   },
   voiceMembersBar: {
     backgroundColor: palette.secondary,
@@ -1281,24 +1301,79 @@ const styles = (palette: any) => StyleSheet.create({
     margin: 8,
     elevation: 2,
   },
-  voiceMemberAvatar: {
+  voiceMembersCard: {
+    backgroundColor: palette.white,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    shadowColor: palette.black,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  voiceMembersTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: palette.primary,
+    marginBottom: 8,
+  },
+  voiceMemberBubble: {
     alignItems: 'center',
-    marginRight: 16,
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: palette.primaryLight || '#E0E7FF',
-    borderWidth: 1,
-    borderColor: palette.grey,
+    marginRight: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  voiceMemberAvatar: {
+    width: 35,
+    height: 35,
+    borderRadius: 18,
+    backgroundColor: palette.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   voiceMemberInitial: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: palette.primary,
+    color: palette.white,
   },
   voiceMemberName: {
-    fontSize: 12,
+    fontSize: 11,
     color: palette.textDark,
-    marginTop: 4,
+    marginTop: 2,
+    maxWidth: 55,
+  },
+  voiceControlsCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 6,
+  },
+  controlButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    gap: 4,
+  },
+  controlButtonText: {
+    color: palette.white,
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  controlPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
+  },
+  controlDisabled: {
+    opacity: 0.5,
   },
   voiceControlsBar: {
     flexDirection: 'row',

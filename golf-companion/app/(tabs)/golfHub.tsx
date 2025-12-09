@@ -13,7 +13,7 @@
   
   */}
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Pressable, FlatList, StyleSheet, Platform, Switch, PermissionsAndroid, TextInput, Modal, Text, Alert } from 'react-native';
+import { View, Pressable, FlatList, StyleSheet, Platform, Switch, PermissionsAndroid, TextInput, Modal, Text, Alert, Image } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from "@/components/ThemeContext";
@@ -24,12 +24,7 @@ import { useRouter } from 'expo-router';
 import { Swipeable } from 'react-native-gesture-handler';
 import { MaterialIcons } from '@expo/vector-icons';
 import { notifyGroupInvite } from '@/lib/NotificationTriggers';
-
-const mockTrack = {
-  title: 'Green on the Fairway',
-  artist: 'Birdie Band',
-  albumArt: 'https://picsum.photos/100',
-};
+import { useSpotify } from '@/components/SpotifyContext';
 
 type VoiceGroup = {
   id: string;
@@ -39,6 +34,14 @@ type VoiceGroup = {
   creator_id: string;
 };
 
+// Format milliseconds to MM:SS
+const formatTime = (ms: number): string => {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
 export default function GolfHubScreen() {
   const [groups, setGroups] = useState<VoiceGroup[]>([]);
   const [headerGroupName, setHeaderGroupName] = useState('');
@@ -46,7 +49,6 @@ export default function GolfHubScreen() {
   const [modalGroupDesc, setModalGroupDesc] = useState('');
   const [joinedGroupId, setJoinedGroupId] = useState<string | null>(null);
   const [joinedGroupName, setJoinedGroupName] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
@@ -56,7 +58,7 @@ export default function GolfHubScreen() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState('');
-  const [editGroupDesc, setEditGroupDesc] = useState(''); // <-- Add this
+  const [editGroupDesc, setEditGroupDesc] = useState('');
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const { user } = useAuth();
   const router = useRouter();
@@ -66,6 +68,8 @@ export default function GolfHubScreen() {
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
   const [inviteGroupId, setInviteGroupId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  const { isConnected: spotifyIsConnected, isPlaying, currentTrack, connectSpotify, disconnectSpotify, play, pause, nextTrack, previousTrack, error: spotifyError } = useSpotify();
 
   const engineRef = useRef<any>(null); // Use 'any' or the correct instance type if available
   const flatListRef = useRef<FlatList>(null);
@@ -500,19 +504,17 @@ export default function GolfHubScreen() {
 
       {/* Header */}
       <View style={styles(palette).header}>
-        <ThemedText type="title" style={styles(palette).title}>GolfHub</ThemedText>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Pressable style={styles(palette).createButton} onPress={() => setCreateModalVisible(true)}>
-            <ThemedText style={styles(palette).createButtonText}>+ Create Group</ThemedText>
-          </Pressable>
+        <View>
+          <ThemedText type="title" style={styles(palette).title}>GolfHub</ThemedText>
+          <ThemedText style={styles(palette).subtitle}>{groups.length} groups</ThemedText>
         </View>
+        <Pressable style={styles(palette).createButton} onPress={() => setCreateModalVisible(true)}>
+          <MaterialIcons name="add" size={28} color={palette.white} />
+        </Pressable>
       </View>
 
       {/* Groups Section */}
       <View style={{ flex: 1, marginBottom: 24 }}>
-        <ThemedText style={styles(palette).sectionTitle}>
-          My Groups ({groups.length})
-        </ThemedText>
         
         <FlatList
           data={groups}
@@ -534,99 +536,116 @@ export default function GolfHubScreen() {
         />
       </View>
 
-      {/* Enhanced Music Player Section */}
+      {/* Music Player Section */}
       <View style={styles(palette).musicPlayerContainer}>
-        {/* Header */}
-        <View style={styles(palette).musicPlayerHeader}>
-          <View style={styles(palette).musicBrandingContainer}>
-            <View style={styles(palette).spotifyIcon}>
-              <MaterialIcons name="music-note" size={20} color={palette.white} />
-            </View>
-            <ThemedText style={styles(palette).musicBrandingText}>Now Playing</ThemedText>
+        {/* Header with Connect/Disconnect */}
+        <View style={styles(palette).playerHeader}>
+          <View>
+            <ThemedText style={styles(palette).playerTitle}>
+              {spotifyIsConnected ? '🎵 Now Playing' : '🎧 Spotify'}
+            </ThemedText>
           </View>
-          <Pressable style={styles(palette).musicMenuButton}>
-            <MaterialIcons name="more-horiz" size={20} color={palette.textLight} />
+          <Pressable 
+            style={[styles(palette).connectButton, spotifyIsConnected && { backgroundColor: palette.error }]}
+            onPress={spotifyIsConnected ? disconnectSpotify : connectSpotify}
+          >
+            <MaterialIcons 
+              name={spotifyIsConnected ? 'logout' : 'login'} 
+              size={16} 
+              color={palette.white} 
+            />
           </Pressable>
         </View>
 
-        {/* Main Player Content */}
-        <View style={styles(palette).musicPlayerContent}>
-          {/* Album Art & Track Info */}
-          <View style={styles(palette).trackInfoContainer}>
-          <View style={styles(palette).albumArtContainer}>
-            <MaterialIcons name="music-note" size={48} color={palette.primary} />
-            <View style={styles(palette).playIndicator}>
-              <View style={[styles(palette).soundWave, { animationDelay: '0ms' }]} />
-              <View style={[styles(palette).soundWave, { animationDelay: '150ms' }]} />
-              <View style={[styles(palette).soundWave, { animationDelay: '300ms' }]} />
+        {spotifyIsConnected && currentTrack ? (
+          <>
+            {/* Album Art with shadow */}
+            <View style={styles(palette).albumContainer}>
+              {currentTrack.item?.album?.images?.[0]?.url ? (
+                <Image
+                  source={{ uri: currentTrack.item.album.images[0].url }}
+                  style={styles(palette).albumImage}
+                />
+              ) : (
+                <View style={[styles(palette).albumImage, { justifyContent: 'center', alignItems: 'center' }]}>
+                  <MaterialIcons name="music-note" size={50} color={palette.primary} />
+                </View>
+              )}
             </View>
-          </View>
-            
-            <View style={styles(palette).trackDetails}>
-              <ThemedText style={styles(palette).trackTitle}>{mockTrack.title}</ThemedText>
-              <ThemedText style={styles(palette).trackArtist}>{mockTrack.artist}</ThemedText>
-              <View style={styles(palette).trackMetadata}>
-                <ThemedText style={styles(palette).trackDuration}>3:24</ThemedText>
-                <View style={styles(palette).trackGenreBadge}>
-                  <ThemedText style={styles(palette).trackGenreText}>Golf Vibes</ThemedText>
+
+            {/* Song Info */}
+            <View style={styles(palette).songInfo}>
+              <ThemedText style={styles(palette).songTitle} numberOfLines={2}>
+                {currentTrack.item?.name || 'Unknown'}
+              </ThemedText>
+              <ThemedText style={styles(palette).songArtist} numberOfLines={1}>
+                {currentTrack.item?.artists?.[0]?.name || 'Unknown Artist'}
+              </ThemedText>
+            </View>
+
+            {/* Progress */}
+            {currentTrack.item && (
+              <View style={styles(palette).progressSection}>
+                <View style={styles(palette).progressBarBg}>
+                  <View 
+                    style={[
+                      styles(palette).progressBarFill,
+                      { width: `${(currentTrack.progress_ms / (currentTrack.item.duration_ms || 1)) * 100}%` }
+                    ]} 
+                  />
+                </View>
+                <View style={styles(palette).timeRow}>
+                  <ThemedText style={styles(palette).timeLabel}>
+                    {formatTime(currentTrack.progress_ms)}
+                  </ThemedText>
+                  <ThemedText style={styles(palette).timeLabel}>
+                    {formatTime(currentTrack.item.duration_ms || 0)}
+                  </ThemedText>
                 </View>
               </View>
+            )}
+
+            {/* Controls */}
+            <View style={styles(palette).controls}>
+              <Pressable 
+                style={styles(palette).controlSmall}
+                onPress={() => previousTrack()}
+              >
+                <MaterialIcons name="skip-previous" size={26} color={palette.primary} />
+              </Pressable>
+              
+              <Pressable 
+                onPress={() => isPlaying ? pause() : play()} 
+                style={styles(palette).controlLarge}
+              >
+                <MaterialIcons
+                  name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
+                  size={60}
+                  color={palette.primary}
+                />
+              </Pressable>
+              
+              <Pressable 
+                style={styles(palette).controlSmall}
+                onPress={() => nextTrack()}
+              >
+                <MaterialIcons name="skip-next" size={26} color={palette.primary} />
+              </Pressable>
             </View>
+          </>
+        ) : spotifyIsConnected ? (
+          <View style={styles(palette).emptyPlayerState}>
+            <MaterialIcons name="music-note" size={48} color={palette.textLight} />
+            <ThemedText style={styles(palette).emptyPlayerText}>No track playing</ThemedText>
+            <ThemedText style={styles(palette).emptyPlayerSubtext}>Start playing on Spotify</ThemedText>
           </View>
-
-          {/* Progress Bar */}
-          <View style={styles(palette).progressContainer}>
-            <ThemedText style={styles(palette).progressTime}>1:23</ThemedText>
-            <View style={styles(palette).progressBarContainer}>
-              <View style={styles(palette).progressBar}>
-                <View style={[styles(palette).progressFill, { width: '40%' }]} />
-                <View style={styles(palette).progressThumb} />
-              </View>
-            </View>
-            <ThemedText style={styles(palette).progressTime}>3:24</ThemedText>
+        ) : (
+          <View style={styles(palette).emptyPlayerState}>
+            <MaterialIcons name="music-note" size={48} color={palette.grey} />
+            <ThemedText style={styles(palette).emptyPlayerText}>Not Connected</ThemedText>
+            <ThemedText style={styles(palette).emptyPlayerSubtext}>Tap login to connect</ThemedText>
           </View>
-
-          {/* Controls */}
-          <View style={styles(palette).musicControls}>
-            <Pressable style={styles(palette).controlButton}>
-              <MaterialIcons name="skip-previous" size={24} color={palette.textDark} />
-            </Pressable>
-            
-            <Pressable 
-              onPress={() => setIsPlaying(!isPlaying)} 
-              style={styles(palette).playPauseButton}
-            >
-              <MaterialIcons
-                name={isPlaying ? 'pause-circle-filled' : 'play-circle-filled'}
-                size={52}
-                color={palette.primary}
-              />
-            </Pressable>
-            
-            <Pressable style={styles(palette).controlButton}>
-              <MaterialIcons name="skip-next" size={24} color={palette.textDark} />
-            </Pressable>
-          </View>
-
-          {/* Additional Controls */}
-          <View style={styles(palette).additionalControls}>
-            <Pressable style={styles(palette).smallControlButton}>
-              <MaterialIcons name="shuffle" size={18} color={palette.textLight} />
-            </Pressable>
-            
-            <Pressable style={styles(palette).smallControlButton}>
-              <MaterialIcons name="favorite" size={18} color={palette.error} />
-            </Pressable>
-            
-            <Pressable style={styles(palette).smallControlButton}>
-              <MaterialIcons name="repeat" size={18} color={palette.primary} />
-            </Pressable>
-            
-            <Pressable style={styles(palette).smallControlButton}>
-              <MaterialIcons name="volume-up" size={18} color={palette.textLight} />
-            </Pressable>
-          </View>
-        </View>
+        )}
       </View>
 
       <Modal
@@ -924,6 +943,11 @@ const styles = (palette: any) => StyleSheet.create({
     fontWeight: '700',
     color: palette.primary,
   },
+  subtitle: {
+    fontSize: 14,
+    color: palette.textLight,
+    marginTop: 2,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -995,16 +1019,133 @@ const styles = (palette: any) => StyleSheet.create({
     fontWeight: '700',
   },
   musicPlayerContainer: {
-    backgroundColor: palette.background,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.35,
-    shadowRadius: 32,
-    elevation: 45,
-    
+    backgroundColor: palette.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    shadowColor: palette.black,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
+  playerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  playerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textDark,
+  },
+  connectButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: palette.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  albumContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  albumImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 10,
+    backgroundColor: palette.background,
+    overflow: 'hidden',
+    shadowColor: palette.black,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  songInfo: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  songTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: palette.textDark,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  songArtist: {
+    fontSize: 12,
+    color: palette.textLight,
+    textAlign: 'center',
+  },
+  progressSection: {
+    marginBottom: 12,
+  },
+  progressBarBg: {
+    height: 4,
+    backgroundColor: palette.background,
+    borderRadius: 2,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: 4,
+    backgroundColor: palette.primary,
+    borderRadius: 2,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  timeLabel: {
+    fontSize: 10,
+    color: palette.textLight,
+    fontWeight: '600',
+  },
+  controls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  controlSmall: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: palette.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  controlLarge: {
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  emptyPlayerState: {
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  emptyPlayerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: palette.textDark,
+    marginTop: 8,
+  },
+  emptyPlayerSubtext: {
+    fontSize: 11,
+    color: palette.textLight,
+    marginTop: 2,
+  },
+  // Legacy styles (kept for compatibility)
   musicPlayerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1045,117 +1186,156 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
   },
   albumArtContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 16,
-    backgroundColor: palette.secondary,
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: palette.background,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
-    position: 'relative',
+    marginRight: 12,
     overflow: 'hidden',
   },
-  playIndicator: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
+  albumArtLargeContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  soundWave: {
-    width: 3,
-    height: 12,
-    backgroundColor: palette.primary,
-    borderRadius: 1.5,
-    opacity: 0.8,
+  albumArtLarge: {
+    width: 140,
+    height: 140,
+    borderRadius: 16,
+    backgroundColor: palette.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: palette.black,
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
-  trackDetails: {
-    flex: 1,
+  trackDetailsContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 12,
   },
-  trackTitle: {
-    fontSize: 18,
+  trackTitleLarge: {
+    fontSize: 20,
     fontWeight: '700',
     color: palette.textDark,
+    textAlign: 'center',
+    marginBottom: 6,
+    lineHeight: 26,
+  },
+  trackArtistLarge: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.primary,
+    textAlign: 'center',
     marginBottom: 4,
   },
-  trackArtist: {
-    fontSize: 15,
-    color: palette.textLight,
-    marginBottom: 8,
-  },
-  trackMetadata: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  trackDuration: {
+  albumNameText: {
     fontSize: 13,
     color: palette.textLight,
-    fontWeight: '600',
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
-  trackGenreBadge: {
-    backgroundColor: palette.background,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  trackGenreText: {
-    fontSize: 11,
-    color: palette.primary,
-    fontWeight: '600',
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  progressTime: {
-    fontSize: 12,
-    color: palette.textLight,
-    fontWeight: '600',
-    minWidth: 32,
-  },
-  progressBarContainer: {
-    flex: 1,
+  progressContainerDetailed: {
+    marginBottom: 16,
   },
   progressBar: {
     height: 6,
     backgroundColor: palette.background,
     borderRadius: 3,
-    position: 'relative',
+    marginBottom: 8,
+    overflow: 'hidden',
   },
   progressFill: {
     height: 6,
     backgroundColor: palette.primary,
     borderRadius: 3,
-    position: 'absolute',
-    top: 0,
-    left: 0,
   },
-  progressThumb: {
-    width: 14,
-    height: 14,
-    backgroundColor: palette.white,
-    borderRadius: 7,
-    position: 'absolute',
-    top: -4,
-    left: '40%',
-    shadowColor: palette.primary,
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+  timeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
   },
-  musicControls: {
+  timeText: {
+    fontSize: 12,
+    color: palette.textLight,
+    fontWeight: '600',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: palette.background,
+    marginBottom: 16,
+  },
+  statusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    color: palette.textDark,
+    fontWeight: '600',
+  },
+  musicControlsEnhanced: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 32,
   },
+  controlButtonEnhanced: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: palette.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: palette.black,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  playPauseButtonEnhanced: {
+    shadowColor: palette.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  trackDetails: {
+    flex: 1,
+  },
+  trackTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textDark,
+    marginBottom: 2,
+  },
+  trackArtist: {
+    fontSize: 14,
+    color: palette.textLight,
+  },
+  progressContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  musicControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 24,
+  },
   controlButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: palette.background,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1165,22 +1345,6 @@ const styles = (palette: any) => StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
-  },
-  additionalControls: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: palette.white,
-  },
-  smallControlButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: palette.background,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   spotifyConnectContainer: {
     flexDirection: 'row',

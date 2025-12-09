@@ -1197,22 +1197,59 @@ const refreshScoreboard = React.useCallback(async () => {
         q = q.gte('created_at', start.toISOString());
       }
 
-      // --- FIX: include both player and team IDs --- //
-      if ((baseIds.length || (scrambleTeams?.length ?? 0) > 0)) {
-        const teamIds: string[] = (scrambleTeams ?? [])
+      let { data, error } = await q;
+      if (error) throw error;
+    // --- NEW TEAM-SAFE FILTERING FIX (ORDER CORRECTED) --- //
+    // Collect team IDs from score rows so we never miss a scramble team
+    const teamIdsFromRows =
+      Array.from(new Set((data || []).map((r: any) => r.team_id).filter(Boolean)));
+
+    // Collect team IDs from scrambleTeams (if loaded)
+    const teamIdsFromTeams =
+      (scrambleTeams ?? [])
         .map(t => t.team_id)
         .filter((id): id is string => typeof id === "string");
-        const allKeys = [...baseIds.filter(Boolean), ...teamIds];
 
-        if (allKeys.length > 0) {
-          q = q.or(
-            `player_id.in.(${allKeys.join(",")}),team_id.in.(${allKeys.join(",")})`
-          );
-        }
+    // Merge both sources so filter NEVER excludes valid team score rows
+    const allTeamIds = Array.from(new Set([...teamIdsFromRows, ...teamIdsFromTeams]));
+
+    // Merge players + teams
+    const allKeys = Array.from(
+      new Set([
+        ...baseIds.filter(Boolean),
+        ...allTeamIds
+      ])
+    );
+
+    // Re-run the filter ONLY when we have keys
+    if (allKeys.length > 0) {
+      // Rebuild query safely now that data exists
+      let q2 = supabase
+        .from('scores')
+        .select('player_id, team_id, hole_number, score, game_id, course_id');
+
+      if (gid) {
+        q2 = q2.or(`game_id.eq.${gid},and(game_id.is.null,course_id.eq.${selectedCourse})`);
+      } else {
+        q2 = q2.eq('course_id', selectedCourse);
       }
-      // --- END FIX --- //
-      const { data, error } = await q;
-      if (error) throw error;
+
+      if (!gid) {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        q2 = q2.gte('created_at', start.toISOString());
+      }
+
+      q2 = q2.or(
+        `player_id.in.(${allKeys.join(",")}),team_id.in.(${allKeys.join(",")})`
+      );
+
+      const { data: data2, error: err2 } = await q2;
+      if (!err2) {
+        data = data2; // overwrite original with filtered rows
+      }
+    }
+    // --- END NEW FIX --- //
       // Map to the new row type (strip extra fields)
       rows = (data || []).map((r: any) => ({
         player_id: r.player_id ?? null,
@@ -1369,6 +1406,15 @@ const refreshScoreboard = React.useCallback(async () => {
     React.useCallback(() => {
       refreshScoreboard();
     }, [refreshScoreboard])
+  );
+
+  // 🔄 Always refresh scoreboard whenever CourseView becomes active.
+  // This ensures score changes from scorecard.tsx instantly update CourseView totals.
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log("🔄 CourseView focused → forcing scoreboard refresh");
+      refreshScoreboardRef.current?.(); // always run the latest version
+    }, [])
   );
 
   // Keep the callable ref updated
@@ -1903,8 +1949,12 @@ const refreshScoreboard = React.useCallback(async () => {
 
                   // correct conflict rule depending on game or not
                   const onConflict = gid
-                    ? (activeTeam ? "team_id,game_id,hole_number" : "player_id,game_id,hole_number")
-                    : (activeTeam ? "team_id,course_id,hole_number" : "player_id,course_id,hole_number");
+                    ? (activeTeam
+                        ? "team_id,game_id,hole_number"
+                        : "player_id,game_id,hole_number")
+                    : (activeTeam
+                        ? "team_id,course_id,hole_number"
+                        : "player_id,course_id,hole_number");
                   
                   console.log("SCORES PAYLOAD:", payload);
 

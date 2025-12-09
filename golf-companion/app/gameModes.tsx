@@ -462,7 +462,13 @@ export default function GameModesScreen() {
 }
           style={[
             styles(palette).beginButton,
-            (!selectedMode || creating || unassigned.length > 0) && { opacity: 0.5 },
+            (
+              !selectedMode ||
+              creating ||
+              (selectedMode?.id === 'scramble' && unassigned.length > 0)
+            )
+              ? { opacity: 0.5 }
+              : { opacity: 1 }
           ]}
           activeOpacity={0.9}
         >

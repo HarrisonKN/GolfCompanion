@@ -55,7 +55,8 @@ export const PALETTES = {
     sand: '#F5E9D3',
     teal: '#DFF7F4',
     shadow:'#111',
-    transparent: "rgba(96, 153, 102, 0.6)"
+    transparent: "rgba(96, 153, 102, 0.6)",
+    HoleWinner: "#FFC72C",
   },
   dark: {
     // primary: "#10B981",  
@@ -100,8 +101,8 @@ export const PALETTES = {
     warning: "#F59E42",
     error: "#EF4444",
     main: "#111",
-    shadow: "#2ED9C3"
-    
+    shadow: "#2ED9C3",
+    HoleWinner: "#FFC72C",
   },
   alt1: { // Forest & Charcoal
     primary: "#295F2D",
@@ -119,6 +120,7 @@ export const PALETTES = {
     warning: "#F59E42",
     main: "#111",
     shadow: "#5FE268",
+    HoleWinner: "#FFC72C",
   },
   alt2: { // Navy + Green
     primary: "#D4AF37",       // metallic gold accent
@@ -134,7 +136,8 @@ export const PALETTES = {
     success: "#22C55E",
     warning: "#F59E42",
     main: "#111",
-    shadow: "#D4AF37"
+    shadow: "#D4AF37",
+    HoleWinner: "#FFC72C",
   },
   alt3: { // Minimal Black, Mint & White
     primary: "#000000",
@@ -149,6 +152,7 @@ export const PALETTES = {
     grey: "#E8ECEF",
     success: "#22C55E",
     warning: "#F59E42",
-    main: "#111"
+    main: "#111",
+    HoleWinner: "#FFC72C",
   }
 };

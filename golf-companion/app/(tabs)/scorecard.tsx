@@ -29,8 +29,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Animated,
-  Easing,
   Image,
 } from 'react-native';
 import DropDownPicker from 'react-native-dropdown-picker';
@@ -115,14 +113,13 @@ export default function Scorecard() {
 
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
-  // Birdie animation state
-  const [showBirdieAnimation, setShowBirdieAnimation] = useState(false);
-  // Animation refs for birdie emoji
-  const birdieAnim = useRef(new Animated.Value(0)).current;
-  const birdieLeft = useRef(new Animated.Value(Math.random() * 200 - 100)).current;
 
   // grab courseId layerId from the URL
   const { courseId, playerNames, playerIds, playerAvatars, newGame, gameId, teams: teamParam, gameMode } = useLocalSearchParams();
+
+  const normalizedGameMode = Array.isArray(gameMode) ? gameMode[0] : gameMode;
+  const { matchPlayType } = useLocalSearchParams();
+  const normalizedMatchPlayType = Array.isArray(matchPlayType) ? matchPlayType[0] : matchPlayType;
 
   const scrambleTeams = useMemo(() => {
     if (!teamParam) return null;
@@ -145,7 +142,10 @@ export default function Scorecard() {
     }
   }, [teamParam]);
 
-  const isScramble = gameMode === 'scramble';
+  const isScramble = normalizedGameMode === 'scramble';
+  const isMatchPlay = normalizedGameMode === 'match';
+  const isMatchPlayTeams =
+  isMatchPlay && normalizedMatchPlayType === "teams";
   const [dbTeams, setDbTeams] = useState<any[]>([]);
 
   const isNewGame = String(Array.isArray(newGame) ? newGame[0] : newGame || '') === '1';
@@ -197,24 +197,25 @@ useEffect(() => {
   }, [playerNames, playerIds, playerAvatars]);
 
   useEffect(() => {
-  if (!isScramble) return;
+    // Load game_teams for Scramble AND Match Play Teams
+    if (!isScramble && !isMatchPlayTeams) return;
 
-  const gid = Array.isArray(gameId) ? gameId[0] : gameId;
-  if (!gid) return;
+    const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (!gid) return;
 
-  (async () => {
-    const { data, error } = await supabase
-      .from("game_teams")
-      .select("*")
-      .eq("game_id", gid);
+    (async () => {
+      const { data, error } = await supabase
+        .from("game_teams")
+        .select("*")
+        .eq("game_id", gid);
 
-    if (!error && data) {
-      setDbTeams(data);
-    } else {
-      console.warn("Failed to load game_teams:", error);
-    }
-  })();
-}, [isScramble, gameId]);
+      if (!error && data) {
+        setDbTeams(data);
+      } else {
+        console.warn("Failed to load game_teams:", error);
+      }
+    })();
+  }, [isScramble, isMatchPlayTeams, gameId]);
 
   useEffect(() => {
     if (courseId && typeof courseId === 'string') setSelectedCourse(courseId);
@@ -316,28 +317,6 @@ useEffect(() => {
     }, [selectedCourse])
   );
 
-  //---------------HOOKS---------------------------------
-  // Birdie detection effect
-  useEffect(() => {
-    if (!selectedCell) return;
-    const latestScore =
-    selectedCell.playerIndex !== undefined
-      ? players[selectedCell.playerIndex]?.scores[selectedCell.holeIndex]
-      : '';
-    const cls = classifyScore(latestScore, parValues[selectedCell.holeIndex]);
-    if (cls === 'birdie') {
-      setShowBirdieAnimation(true);
-      birdieAnim.setValue(0);
-      birdieLeft.setValue(Math.random() * 200 - 100);
-      Animated.timing(birdieAnim, {
-        toValue: -200,
-        duration: 2000 + Math.random() * 1000,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.quad),
-      }).start(() => setShowBirdieAnimation(false));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [players]);
 
   useEffect(() => {
     // If we navigated in with a courseId param, set it on mount
@@ -430,7 +409,7 @@ useEffect(() => {
       if (!selectedCourse) return;
 
       // Scramble mode: sync team-based scores using team_id + game_id
-      if (isScramble && scrambleTeams && scrambleTeams.length > 0) {
+     if ((isScramble || isMatchPlayTeams) && scrambleTeams && scrambleTeams.length > 0) {
         (async () => {
           const gid = Array.isArray(gameId) ? gameId[0] : gameId;
           if (!gid || dbTeams.length === 0) return;
@@ -546,6 +525,86 @@ useEffect(() => {
     const updatedPlayers = [...players];
     updatedPlayers[playerIndex].scores[holeIndex] = value;
     setPlayers(updatedPlayers);
+  };
+
+  const getHoleWinners = (holeIndex: number): number[] => {
+  // ------------------------------------------
+  // MATCH PLAY — SOLO
+  // ------------------------------------------
+  if (isMatchPlay && !isMatchPlayTeams) {
+    let lowest = Infinity;
+    const winners: number[] = [];
+
+    players.forEach((p, idx) => {
+      const cell = p.scores[holeIndex];
+      if (!cell) return;
+
+      const [scoreStr] = cell.split('/');
+      const score = parseInt(scoreStr, 10);
+      if (!Number.isFinite(score)) return;
+
+      if (score < lowest) {
+        lowest = score;
+        winners.length = 0;
+        winners.push(idx);
+      } else if (score === lowest) {
+        winners.push(idx);
+      }
+    });
+
+    return winners;
+  }
+
+  // ------------------------------------------
+  // MATCH PLAY — TEAMS
+  // ------------------------------------------
+  if (isMatchPlayTeams) {
+    let lowest = Infinity;
+    const winners: number[] = [];
+
+    scrambleTeams?.forEach((team, tIndex) => {
+      const realTeam = dbTeams.find(dt => dt.team_number === team.team_number);
+      const tid = realTeam?.id;
+
+      if (!tid) return;
+
+      const arr = teamScores[tid];
+      if (!arr) return;
+
+      const raw = arr[holeIndex] || '';
+      const [scoreStr] = raw.split('/');
+      const score = parseInt(scoreStr, 10);
+      if (!Number.isFinite(score)) return;
+
+      if (score < lowest) {
+        lowest = score;
+        winners.length = 0;
+        winners.push(tIndex);
+      } else if (score === lowest) {
+        winners.push(tIndex);
+      }
+    });
+
+    return winners;
+  }
+
+  // ------------------------------------------
+  // SCRAMBLE OR OTHER MODE → NO WINNERS
+  // ------------------------------------------
+  return [];
+};
+
+  // Compute total holes won for a given player (Match Play)
+  const getTotalHolesWon = (playerIndex: number): number => {
+    if (!isMatchPlay && !isMatchPlayTeams) return 0;
+    let total = 0;
+    for (let h = 0; h < holeCount; h++) {
+      const winners = getHoleWinners(h);
+      if (!isMatchPlayTeams && winners.includes(playerIndex)) total++;
+      // In team mode, playerIndex is actually teamIndex in our display
+      if (isMatchPlayTeams && winners.includes(playerIndex)) total++;
+    }
+    return total;
   };
 
   const calculateInOutTotals = (scores: string[]) => {
@@ -731,26 +790,6 @@ useEffect(() => {
   // ------------------- SCORECARD UI -------------------------
   return (
     <View style={[styles(palette).gradientBg, { paddingBottom: 80 }]}>
-      {/* Birdie Emoji Animation */}
-      {showBirdieAnimation && (
-        <Animated.View style={{
-          position: 'absolute',
-          bottom: 100,
-          left: '50%',
-          transform: [
-            { translateX: birdieLeft },
-            { translateY: birdieAnim },
-          ],
-          zIndex: 9999,
-        }}>
-          <Text style={{
-            fontSize: 40,
-            opacity: 0.9,
-          }}>
-            🐦‍⬛
-          </Text>
-        </Animated.View>
-      )}
       {/* Scorecard Title */}
       <View style={styles(palette).topHeader}>
         <View style={styles(palette).scorecardTitleWrap}>
@@ -888,7 +927,7 @@ useEffect(() => {
         {/* --- Players Section --- */}
         {
           // 1) SCRAMBLE MODE WITH TEAMS → show one row per team, scores from teamScores
-          isScramble && scrambleTeams && scrambleTeams.length > 0 ? (
+          (isScramble || isMatchPlayTeams) && scrambleTeams && scrambleTeams.length > 0 ? (
             scrambleTeams.map((team: any, teamIndex: number) => {
               const realTeam = dbTeams.find(t => t.team_number === team.team_number);
               const teamId = realTeam?.id; // UUID from database
@@ -1066,6 +1105,11 @@ useEffect(() => {
                         )}
 
                         <Text style={styles(palette).playerNameText}>{player.name}</Text>
+                        {isMatchPlay && (
+                          <Text style={{ color: palette.HoleWinner, fontWeight: '700', fontSize: 12 }}>
+                            Holes Won: {getTotalHolesWon(playerIndex)}
+                          </Text>
+                        )}
                       </View>
                     </View>
 
@@ -1073,6 +1117,9 @@ useEffect(() => {
                     {player.scores.slice(0, 9).map((score, holeIndex) => {
                       const cls = classifyScore(score, parValues[holeIndex]);
                       const [scoreStr, puttsStr] = score.split('/');
+                      const winners = getHoleWinners(holeIndex);
+                      const isWinner = winners.includes(playerIndex);
+
                       return (
                         <TouchableOpacity
                           key={holeIndex}
@@ -1090,6 +1137,7 @@ useEffect(() => {
                               cls === 'birdie' && styles(palette).birdieCell,
                               cls === 'par' && styles(palette).parCell,
                               cls === 'bogey' && styles(palette).bogeyCell,
+                              isMatchPlay && !isMatchPlayTeams && isWinner && { backgroundColor: palette.HoleWinner  , transform: [{ scale: 1.05 }] },
                             ]}
                           >
                             <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
@@ -1108,15 +1156,19 @@ useEffect(() => {
 
                     {/* HOLES 10–18 */}
                     {player.scores.slice(9, 18).map((score, holeIndex) => {
-                      const cls = classifyScore(score, parValues[holeIndex + 9]);
+                      const globalHole = holeIndex + 9;
+                      const cls = classifyScore(score, parValues[globalHole]);
                       const [scoreStr, puttsStr] = score.split('/');
+                      const winners = getHoleWinners(globalHole);
+                      const isWinner = winners.includes(playerIndex);
+
                       return (
                         <TouchableOpacity
-                          key={holeIndex + 9}
+                          key={globalHole}
                           style={styles(palette).cellTouchable}
                           activeOpacity={0.7}
                           onPress={() => {
-                            setSelectedCell({ playerIndex, holeIndex: holeIndex + 9 });
+                            setSelectedCell({ playerIndex, holeIndex: globalHole });
                             setScoreModalVisible(true);
                           }}
                         >
@@ -1127,6 +1179,7 @@ useEffect(() => {
                               cls === 'birdie' && styles(palette).birdieCell,
                               cls === 'par' && styles(palette).parCell,
                               cls === 'bogey' && styles(palette).bogeyCell,
+                              isMatchPlay && isWinner && { backgroundColor: palette.HoleWinner, transform: [{ scale: 1.05 }] },
                             ]}
                           >
                             <Text style={styles(palette).cellText}>{scoreStr || 'Tap'}</Text>
@@ -1170,7 +1223,7 @@ useEffect(() => {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles(palette).chipTableContainer} ref={scorecardRef}>
-        {isScramble && scrambleTeams && scrambleTeams.length > 0
+        {(isScramble || isMatchPlayTeams) && scrambleTeams && scrambleTeams.length > 0
           ? scrambleTeams.map((team: any, teamIndex: number) => {
               const realTeam = dbTeams.find(t => t.team_number === team.team_number);
               const teamId = realTeam?.id;
@@ -1296,6 +1349,11 @@ useEffect(() => {
                         </View>
                       )}
                       <Text style={styles(palette).chipPlayerName}>{player.name}</Text>
+                      {isMatchPlay && (
+                        <Text style={{ color: palette.HoleWinner, fontWeight: '700', fontSize: 12 }}>
+                          Holes Won: {getTotalHolesWon(playerIndex)}
+                        </Text>
+                      )}
                     </View>
 
                     <View style={styles(palette).chipHeaderTotals}>
@@ -1309,6 +1367,9 @@ useEffect(() => {
                     {player.scores.map((score, holeIndex) => {
                       const cls = classifyScore(score, parValues[holeIndex]);
                       const [scoreStr, puttsStr] = score.split('/');
+                      const winners = getHoleWinners(holeIndex);
+                      const isWinner = winners.includes(playerIndex);
+
                       return (
                         <TouchableOpacity
                           key={holeIndex}
@@ -1325,6 +1386,7 @@ useEffect(() => {
                               cls === 'birdie' && styles(palette).chipBirdie,
                               cls === 'par' && styles(palette).chipPar,
                               cls === 'bogey' && styles(palette).chipBogey,
+                              isMatchPlay && isWinner && { backgroundColor: palette.HoleWinner, transform: [{ scale: 1.05 }] },
                             ]}
                           >
                             <Text style={styles(palette).chipText}>

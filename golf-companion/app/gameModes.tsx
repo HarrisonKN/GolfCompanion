@@ -28,13 +28,55 @@ const ITEM_SIZE = Math.floor((SCREEN_W - GRID_OUTER_PADDING - GRID_INNER_PADDING
 const CIRCLE_SIZE = Math.max(56, ITEM_SIZE - 24);
 
 const gameModesData = [
-  { id: 'stroke', name: 'Stroke Play', icon: '⛳', description: 'The Regular Game of Golf, Total strokes over the round. Lowest wins.' },
-  { id: 'match', name: 'Match Play', icon: '🤝', description: 'Win holes versus opponents. Most holes won wins.' },
-  { id: 'stableford', name: 'Stableford', icon: '⭐', description: 'Points per hole based on score vs par.' },
-  { id: 'bestball', name: 'BestBall',icon: '👥', description: 'Best score per hole among partners counts.' },
-  { id: 'scramble', name: 'Scramble',icon: '🔁', description: 'Team hits, chooses best shot, repeat until holed.' },
-  { id: 'altshot', name: 'Alternate',icon: '🔄', description: 'Players alternate shots with one ball.' },
-  { id: 'wolf', name: 'Wolf',icon: '🐺', description: 'Rotating “Wolf” chooses partner or goes solo for a reduced score bonus.' },
+  {
+    id: 'stroke',
+    name: 'Stroke Play',
+    icon: '⛳',
+    description: 'The Regular Game of Golf, Total strokes over the round. Lowest wins.',
+    comingSoon: false,
+  },
+  {
+    id: 'match',
+    name: 'Match Play',
+    icon: '🤝',
+    description: 'Win holes versus opponents. Most holes won wins.',
+    comingSoon: false,
+  },
+  {
+    id: 'scramble',
+    name: 'Scramble',
+    icon: '🔁',
+    description: 'Team hits, chooses best shot, repeat until holed.',
+    comingSoon: false,
+  },
+  {
+    id: 'stableford',
+    name: 'Stableford',
+    icon: '⭐',
+    description: 'Points per hole based on score vs par.',
+    comingSoon: true,
+  },
+  {
+    id: 'bestball',
+    name: 'BestBall',
+    icon: '👥',
+    description: 'Best score per hole among partners counts.',
+    comingSoon: true,
+  },
+  {
+    id: 'altshot',
+    name: 'Alternate',
+    icon: '🔄',
+    description: 'Players alternate shots with one ball.',
+    comingSoon: true,
+  },
+  {
+    id: 'wolf',
+    name: 'Wolf',
+    icon: '🐺',
+    description: 'Rotating “Wolf” chooses partner or goes solo for a reduced score bonus.',
+    comingSoon: true,
+  },
 ];
 
 export default function GameModesScreen() {
@@ -43,6 +85,7 @@ export default function GameModesScreen() {
   const [players, setPlayers] = useState<any[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [selectedMode, setSelectedMode] = useState<any | null>(null);
+  const [matchPlayType, setMatchPlayType] = useState<'solo' | 'teams'>('solo');
   const [creating, setCreating] = useState(false);
   // Scramble teams state
   const [teams, setTeams] = useState([
@@ -53,6 +96,10 @@ export default function GameModesScreen() {
   const [teamPickerPlayer, setTeamPickerPlayer] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<number | null>(null);
   const [editingName, setEditingName] = useState<string>('');
+
+  const requiresTeams =
+    selectedMode?.id === 'scramble' ||
+    (selectedMode?.id === 'match' && matchPlayType === 'teams');
 
   const { palette } = useTheme();
 
@@ -150,6 +197,12 @@ export default function GameModesScreen() {
     load();
   }, [parsedIds, joiningExistingGame, gameId]);
 
+  useEffect(() => {
+    if (selectedMode?.id !== 'match') {
+      setMatchPlayType('solo');
+    }
+  }, [selectedMode?.id]);
+
   const handleStart = async () => {
     if (!courseId || !parsedIds.length || creating) return;
     setCreating(true);
@@ -179,22 +232,29 @@ export default function GameModesScreen() {
         gameId: gid,
         mode: selectedMode?.id || null,
       }));
-      await AsyncStorage.setItem('scrambleTeams', JSON.stringify(teams));
 
-      const { data: teamRows, error: teamErr } = await supabase
-        .from("game_teams")
-        .insert(
-          teams.map((t, i) => ({
-            game_id: gid,
-            team_number: t.id,
-            name: t.name || `Team ${t.id}`,
-            players: t.players,
-          }))
-        )
-        .select();
+      const isTeamMode =
+        selectedMode?.id === 'scramble' ||
+        (selectedMode?.id === 'match' && matchPlayType === 'teams');
 
-      if (!teamErr) {
-        await AsyncStorage.setItem('scrambleTeamRows', JSON.stringify(teamRows));
+      if (isTeamMode) {
+        await AsyncStorage.setItem('scrambleTeams', JSON.stringify(teams));
+
+        const { data: teamRows, error: teamErr } = await supabase
+          .from("game_teams")
+          .insert(
+            teams.map((t, i) => ({
+              game_id: gid,
+              team_number: t.id,
+              name: t.name || `Team ${t.id}`,
+              players: t.players,
+            }))
+          )
+          .select();
+
+        if (!teamErr) {
+          await AsyncStorage.setItem('scrambleTeamRows', JSON.stringify(teamRows));
+        }
       }
 
       // 🆕 IF JOINING, NOTIFY THE GAME HOST THAT YOU'VE JOINED
@@ -242,9 +302,10 @@ export default function GameModesScreen() {
           playerNames: JSON.stringify(players.map(p => p.name)),
           playerAvatars: JSON.stringify(players.map(p => p.avatar_url || null)),
           gameMode: selectedMode?.id || '',
+          matchPlayType: matchPlayType,
           tee: tee || '',
           newGame: joiningExistingGame ? '0' : '1',
-          teams: JSON.stringify(teams),
+          scrambleTeams: JSON.stringify(teams),
         },
       });
     } catch (err) {
@@ -299,23 +360,45 @@ export default function GameModesScreen() {
                 // Get icon and name from mode object
                 const icon = mode.icon;      // e.g. '⛳'
                 const name = mode.name;      // e.g. 'Stroke Play'
-                const isActive = selectedMode?.id === mode.id;
+                const isComingSoon = mode.comingSoon;
+                const isActive = !isComingSoon && selectedMode?.id === mode.id;
 
                 return (
                 <Pressable
                     key={mode.id}
-                    onPress={() => setSelectedMode(mode)}
+                    onPress={() => {
+                      if (!isComingSoon) {
+                        setSelectedMode(mode);
+                      }
+                    }}
                     style={styles(palette).gridItem}
+                    disabled={!!isComingSoon}
                 >
                     {/* Icon inside a styled circle */}
-                    <View style={[styles(palette).gridCircle, isActive && styles(palette).gridCircleActive]}>
+                    <View
+                      style={[
+                        styles(palette).gridCircle,
+                        isActive && styles(palette).gridCircleActive,
+                        isComingSoon && styles(palette).gridCircleComingSoon,
+                      ]}
+                    >
+                        {isComingSoon && (
+                          <View style={styles(palette).comingSoonBanner}>
+                            <Text style={styles(palette).comingSoonText}>Coming soon</Text>
+                          </View>
+                        )}
                         <Text style={styles(palette).gridIcon}>{icon}</Text>
                         <Text
-                            style={[styles(palette).gridLabel, isActive && { color: '#2563eb' }]} numberOfLines={1}>{name}
+                            style={[
+                              styles(palette).gridLabel,
+                              isActive && { color: '#2563eb' },
+                              isComingSoon && styles(palette).gridLabelComingSoon,
+                            ]}
+                            numberOfLines={1}
+                        >
+                          {name}
                         </Text>
                     </View>
-                    {/* Game mode name below the icon */}
-                    
                 </Pressable>
                 );
             })}
@@ -328,6 +411,50 @@ export default function GameModesScreen() {
               <Text style={styles(palette).detailTitle}>{selectedMode.name}</Text>
             </View>
             <Text style={styles(palette).detailDesc}>{selectedMode.description}</Text>
+
+            {selectedMode.id === 'match' && (
+              <View style={styles(palette).matchTypeContainer}>
+                <Text style={styles(palette).matchTypeLabel}>Match type</Text>
+                <View style={styles(palette).matchTypeButtonsRow}>
+                  <TouchableOpacity
+                    onPress={() => setMatchPlayType('solo')}
+                    style={[
+                      styles(palette).matchTypeButton,
+                      matchPlayType === 'solo' && styles(palette).matchTypeButtonActive,
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles(palette).matchTypeButtonText,
+                        matchPlayType === 'solo' && styles(palette).matchTypeButtonTextActive,
+                      ]}
+                    >
+                      Solo
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setMatchPlayType('teams')}
+                    style={[
+                      styles(palette).matchTypeButton,
+                      matchPlayType === 'teams' && styles(palette).matchTypeButtonActive,
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles(palette).matchTypeButtonText,
+                        matchPlayType === 'teams' && styles(palette).matchTypeButtonTextActive,
+                      ]}
+                    >
+                      Teams
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             <TouchableOpacity
               onPress={() => setSelectedMode(null)}
               style={styles(palette).clearModeBtn}
@@ -338,7 +465,7 @@ export default function GameModesScreen() {
           </View>
         )}
 
-        {selectedMode?.id === 'scramble' && (
+        {(selectedMode?.id === 'scramble' || (selectedMode?.id === 'match' && matchPlayType === 'teams')) && (
           <View style={{ marginTop: 20 }}>
             <Text style={styles(palette).sectionTitle}>Scramble Teams</Text>
 
@@ -450,22 +577,23 @@ export default function GameModesScreen() {
           </View>
         )}
       </ScrollView>
+      
 
       <View style={[styles(palette).bottomBar, { backgroundColor: palette.background }]}>
         <TouchableOpacity
         //IMPORTANT - LOGIC TO START GAMES WITHOUT TEAMS ASSIGNED IE:SOLO OR INDIVIDUAL SCORING WILL NEED TO ADD LOGIC FOR OTHER MODES
           onPress={handleStart}
           disabled={
-          !selectedMode ||
-          creating ||
-          (selectedMode?.id === 'scramble' && unassigned.length > 0)
-}
+            !selectedMode ||
+            creating ||
+            (requiresTeams && unassigned.length > 0)
+          }
           style={[
             styles(palette).beginButton,
             (
               !selectedMode ||
               creating ||
-              (selectedMode?.id === 'scramble' && unassigned.length > 0)
+              (requiresTeams && unassigned.length > 0)
             )
               ? { opacity: 0.5 }
               : { opacity: 1 }
@@ -629,6 +757,9 @@ const styles = (palette: any) => ({
     borderColor: palette.primary,
     backgroundColor: palette.teal,
   },
+  gridCircleComingSoon: {
+    opacity: 0.4,
+  },
   gridIcon: {
     fontSize: 24,
     lineHeight: 28,
@@ -641,6 +772,24 @@ const styles = (palette: any) => ({
     marginTop: 6,
     maxWidth: CIRCLE_SIZE + 8,
     textAlign: 'center' as const,
+  },
+  gridLabelComingSoon: {
+    color: palette.third,
+  },
+ comingSoonBanner: {
+  position: 'absolute' as const,
+  top: 0,             // centered properly over the circle
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 999,
+  backgroundColor: 'rgba(0,0,0,0.65)',
+  zIndex: 10,
+},
+  comingSoonText: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    color: '#fff',
+    textTransform: 'uppercase' as const,
   },
   modeDetail: {
     marginTop: 20,
@@ -668,6 +817,41 @@ const styles = (palette: any) => ({
     fontSize: 14,
     lineHeight: 20,
     color:  palette.textLight,
+  },
+  matchTypeContainer: {
+    marginTop: 16,
+  },
+  matchTypeLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: palette.textLight,
+    marginBottom: 8,
+  },
+  matchTypeButtonsRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+  },
+  matchTypeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: palette.secondary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: palette.background,
+  },
+  matchTypeButtonActive: {
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
+  },
+  matchTypeButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: palette.textLight,
+  },
+  matchTypeButtonTextActive: {
+    color: palette.textLight,
   },
   clearModeBtn: {
     marginTop: 16,

@@ -80,7 +80,8 @@ serve(async (req) => {
       hasUserId: !!userId, 
       hasToken: !!token, 
       title, 
-      hasData: !!data 
+      body: body.substring(0, 50),
+      data: data || {} 
     });
 
     // We only deal with **FCM** tokens now. The column in `profiles`

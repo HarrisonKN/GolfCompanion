@@ -70,6 +70,8 @@ class SpotifyService {
   private refreshToken: string | null = null;
   private expiresAt: number = 0;
   private codeVerifier: string = '';
+  private isRefreshing: boolean = false;
+  private refreshFailed: boolean = false;
 
   async initialize(userId: string) {
     try {
@@ -150,6 +152,7 @@ class SpotifyService {
       this.accessToken = data.access_token;
       this.refreshToken = data.refresh_token;
       this.expiresAt = Date.now() + data.expires_in * 1000;
+      this.refreshFailed = false; // Reset refresh failed flag on successful connection
 
       // Store tokens securely
       await SecureStore.setItemAsync(
@@ -178,12 +181,18 @@ class SpotifyService {
   }
 
   private async refreshAccessToken(): Promise<boolean> {
+    // Prevent concurrent refresh attempts
+    if (this.isRefreshing) {
+      return false;
+    }
+
     try {
-      console.log('[Spotify] Refreshing access token...');
+      this.isRefreshing = true;
       
       if (!this.refreshToken) {
         console.error('[Spotify] No refresh token available for refresh');
-        throw new Error('No refresh token available');
+        this.refreshFailed = true;
+        return false;
       }
 
       const response = await fetch('https://accounts.spotify.com/api/token', {
@@ -198,40 +207,51 @@ class SpotifyService {
         }).toString(),
       });
 
-      console.log('[Spotify] Token refresh response status:', response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[Spotify] Token refresh failed:', response.status, errorText);
-        throw new Error(`Failed to refresh token: ${response.status}`);
+        // Only log once on first failure
+        if (!this.refreshFailed) {
+          console.error('[Spotify] Token refresh failed:', response.status, errorText);
+        }
+        this.refreshFailed = true;
+        return false;
       }
 
       const data = await response.json();
-      console.log('[Spotify] Token refreshed successfully, expires in:', data.expires_in, 'seconds');
+      console.log('[Spotify] Token refreshed successfully');
       this.accessToken = data.access_token;
       this.expiresAt = Date.now() + data.expires_in * 1000;
+      this.refreshFailed = false;
 
       return true;
     } catch (error) {
-      console.error('Error refreshing access token:', error);
+      if (!this.refreshFailed) {
+        console.error('[Spotify] Error refreshing access token:', error);
+      }
+      this.refreshFailed = true;
       return false;
+    } finally {
+      this.isRefreshing = false;
     }
   }
 
   private async ensureValidToken(): Promise<boolean> {
     if (!this.accessToken) {
-      console.error('[Spotify] No access token available');
       return false;
     }
 
-    const timeUntilExpiry = this.expiresAt - Date.now();
-
-    if (Date.now() >= this.expiresAt) {
-      console.log('[Spotify] Token expired, refreshing...');
-      return await this.refreshAccessToken();
+    // If token refresh already failed, don't keep retrying
+    if (this.refreshFailed) {
+      return false;
     }
 
-    return true;
+    // If token is still valid, proceed
+    if (Date.now() < this.expiresAt) {
+      return true;
+    }
+
+    // Token expired, try to refresh once
+    return await this.refreshAccessToken();
   }
 
   async getCurrentlyPlaying(): Promise<SpotifyPlaybackState | null> {
@@ -469,6 +489,7 @@ class SpotifyService {
     this.accessToken = null;
     this.refreshToken = null;
     this.expiresAt = 0;
+    this.refreshFailed = false; // Reset refresh flag on disconnect
 
     try {
       await SecureStore.deleteItemAsync(`spotify_tokens_${userId}`);

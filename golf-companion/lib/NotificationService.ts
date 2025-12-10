@@ -51,19 +51,6 @@ export function initializeNotificationHandlers(
     }
   });
 
-  // FCM: Handle background message (app closed/killed)
-  messaging().setBackgroundMessageHandler(async (remoteMessage) => {
-    console.log('🛌 FCM Background message (app closed/killed)');
-    // Save to history
-    const title = remoteMessage.notification?.title || 'Golf Companion';
-    const body = remoteMessage.notification?.body || 'You have a new notification';
-    const data = remoteMessage.data;
-    await saveNotificationToHistory(title, body, data);
-    // Notification delivery and tap handling is automatic via system tray
-    // Navigation will be handled when user taps the notification
-    return Promise.resolve();
-  });
-
   // FCM: Handle foreground notifications
   const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
     console.log('📬 FCM Foreground message received');
@@ -111,8 +98,14 @@ export function initializeNotificationHandlers(
     .getInitialNotification()
     .then(remoteMessage => {
       if (remoteMessage) {
-        console.log('🚀 FCM Cold start notification');
-        handleNotificationNavigation(router, remoteMessage.data as NotificationData);
+        console.log('🚀 FCM Cold start notification received:', remoteMessage);
+        console.log('🚀 FCM data:', remoteMessage.data);
+        // Delay slightly to ensure router is ready
+        setTimeout(() => {
+          handleNotificationNavigation(router, remoteMessage.data as NotificationData);
+        }, 500);
+      } else {
+        console.log('⚠️ No initial notification found on cold start');
       }
     })
     .catch(err => console.error('❌ Error getting initial notification:', err));
@@ -133,41 +126,82 @@ export function handleNotificationNavigation(
   router: ReturnType<typeof useRouter>,
   data: NotificationData
 ) {
-  if (!data || !data.screen) {
-    console.log('⚠️ No navigation data provided');
+  console.log('📊 handleNotificationNavigation called with data:', data);
+  
+  if (!data) {
+    console.log('⚠️ No data provided');
+    return;
+  }
+
+  // Fallback: infer screen from type when missing
+  if (!data.screen && data.type) {
+    const inferred = inferScreenFromType(data.type as string);
+    if (inferred) {
+      console.log(`🧠 Inferred screen '${inferred}' from type '${data.type}'`);
+      data.screen = inferred;
+    }
+  }
+
+  if (!data.screen) {
+    console.log('⚠️ No screen specified in notification data, available keys:', Object.keys(data));
     return;
   }
 
   const route = ROUTE_MAP[data.screen];
   if (!route) {
-    console.warn(`⚠️ Unknown screen: ${data.screen}`);
+    console.warn(`⚠️ Unknown screen: ${data.screen}, available routes:`, Object.keys(ROUTE_MAP));
     return;
   }
 
-  console.log(`🧭 Navigating to ${data.screen} (${route})`);
+  console.log(`🧭 Navigating to ${data.screen} (${route}) with data:`, data);
 
-  if (data.screen === 'gameModes' && data.gameId) {
-    // Game invitation with specific gameId
-    router.push({
-      pathname: route as any,
-      params: {
-        gameId: data.gameId,
-        courseId: data.courseId || '',
-        courseName: data.courseName || '',
-        isJoiningExistingGame: '1',
-      },
-    });
-  } else if (data.screen === 'scorecard' && data.gameId) {
-    // Scorecard with specific game
-    router.push({
-      pathname: route as any,
-      params: {
-        gameId: data.gameId,
-      },
-    });
-  } else {
-    // Simple navigation to route
-    router.push(route as any);
+  try {
+    if (data.screen === 'gameModes' && data.gameId) {
+      // Game invitation with specific gameId
+      console.log('🎮 Navigating to gameModes with gameId:', data.gameId);
+      router.push({
+        pathname: route as any,
+        params: {
+          gameId: data.gameId,
+          courseId: data.courseId || '',
+          courseName: data.courseName || '',
+          isJoiningExistingGame: '1',
+        },
+      });
+    } else if (data.screen === 'scorecard' && data.gameId) {
+      // Scorecard with specific game
+      console.log('📊 Navigating to scorecard with gameId:', data.gameId);
+      router.push({
+        pathname: route as any,
+        params: {
+          gameId: data.gameId,
+        },
+      });
+    } else {
+      // Simple navigation to route
+      console.log(`✅ Simple navigation to ${route}`);
+      router.push(route as any);
+    }
+  } catch (err) {
+    console.error('❌ Navigation error:', err);
+  }
+}
+
+// Best-effort inference for legacy payloads that only send type
+function inferScreenFromType(type: string): string | null {
+  switch (type) {
+    case 'friend_request':
+    case 'friend_request_accepted':
+    case 'group_invite':
+      return 'account';
+    case 'group_message':
+      return 'hubRoom';
+    case 'game_invite':
+      return 'gameModes';
+    case 'score_update':
+      return 'scorecard';
+    default:
+      return null;
   }
 }
 

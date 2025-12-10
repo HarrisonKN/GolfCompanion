@@ -27,6 +27,9 @@ export async function sendNotificationToUser(
 ) {
   try {
     console.log(`📤 Sending notification to user ${userId}...`);
+    console.log(`   Title: ${title}`);
+    console.log(`   Body: ${body}`);
+    console.log(`   Payload:`, payload);
 
     const { data: response, error } = await supabase.functions.invoke(
       "pushNotification",

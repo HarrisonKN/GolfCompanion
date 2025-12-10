@@ -1,3 +1,7 @@
+// ⚠️ CRITICAL: Import background message handler FIRST before anything else
+// This sets up FCM to handle notifications when app is closed/minimized
+import "@/lib/BackgroundMessageHandler";
+
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -7,6 +11,7 @@ import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-c
 import { useRouter } from "expo-router";
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import messaging from '@react-native-firebase/messaging';
 
 import { AuthProvider } from "@/components/AuthContext";
 import { ThemeProvider } from "@/components/ThemeContext";
@@ -14,7 +19,7 @@ import { VoiceProvider } from '@/components/VoiceContext';
 import { SpotifyProvider } from '@/components/SpotifyContext';
 import { GlobalVoiceBar } from '@/components/GlobalVoiceBar';
 import { GlobalNotificationPanel } from '@/components/GlobalNotificationPanel';
-import { initializeNotificationHandlers, setupAndroidNotificationChannel, NotificationData } from "@/lib/NotificationService";
+import { initializeNotificationHandlers, setupAndroidNotificationChannel, handleNotificationNavigation, NotificationData } from "@/lib/NotificationService";
 
 // Ensure foreground notifications show a banner/sound when permitted
 Notifications.setNotificationHandler({
@@ -74,6 +79,26 @@ export default function RootLayout() {
     const cleanup = initializeNotificationHandlers(router, showNotificationBanner);
 
     return cleanup;
+  }, [router]);
+
+  // Check for initial notification when app is cold-started from notification tap
+  useEffect(() => {
+    console.log('🚀 Checking for initial notification on cold start...');
+    
+    messaging()
+      .getInitialNotification()
+      .then(remoteMessage => {
+        if (remoteMessage && remoteMessage.data) {
+          console.log('🎯 Found initial notification on cold start:', remoteMessage.data);
+          // Give router a moment to be ready
+          setTimeout(() => {
+            handleNotificationNavigation(router, remoteMessage.data as NotificationData);
+          }, 1000);
+        } else {
+          console.log('ℹ️ No initial notification on cold start');
+        }
+      })
+      .catch(err => console.error('❌ Error checking initial notification:', err));
   }, [router]);
 
   return (

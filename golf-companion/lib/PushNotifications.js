@@ -6,10 +6,14 @@ import messaging from '@react-native-firebase/messaging';
 import { setupAndroidNotificationChannel } from './NotificationService';
 
 // 🔧 Create Android notification channel for reliable delivery with heads-up display
+// This MUST match the channel_id in the edge function: 'golf-companion-alerts'
 async function createNotificationChannel() {
   try {
     if (Device.isDevice && Device.osName === 'Android') {
+      // Create the channel before registering for token
+      // This ensures FCM recognizes the channel when messages arrive
       await setupAndroidNotificationChannel();
+      console.log('✅ Android notification channel created and ready');
     }
   } catch (error) {
     // Channel creation is non-critical, as Firebase creates a default one

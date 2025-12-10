@@ -36,17 +36,17 @@ export function initializeNotificationHandlers(
 ) {
   console.log('🔔 Initializing notification handlers...');
 
-  // Handle notification tap (background/foreground)
+  // Handle local notification tap (when user taps the OS popup we created in onMessage)
   const unsubscribeExpoTap = Notifications.addNotificationResponseReceivedListener(response => {
     const { data } = response.notification.request.content;
-    console.log('👆 Notification tapped (Expo):', data);
+    console.log('👆 Local notification tapped (Expo):', data);
     handleNotificationNavigation(router, data);
   });
 
-  // Handle notification tap on cold start (app killed)
+  // Handle notification tap on cold start (app killed) - gets last notification response
   Notifications.getLastNotificationResponseAsync().then(response => {
     if (response && response.notification && response.notification.request.content.data) {
-      console.log('🚀 Cold start notification:', response.notification.request.content.data);
+      console.log('🚀 Cold start from local notification:', response.notification.request.content.data);
       handleNotificationNavigation(router, response.notification.request.content.data);
     }
   });
@@ -73,6 +73,26 @@ export function initializeNotificationHandlers(
 
     // Save to history
     await saveNotificationToHistory(title, body, data);
+
+    // Also show a local expo notification so user sees a brief OS popup/heads-up
+    // This is important for the notification to appear visually in the foreground
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data: data ?? {},
+          // Use the golf-companion-alerts channel for MAX importance (heads-up on Android)
+          android: {
+            channelId: 'golf-companion-alerts',
+          },
+        },
+        trigger: null, // Show immediately
+      });
+      console.log('📢 Local notification scheduled for foreground display');
+    } catch (err) {
+      console.warn('⚠️ Failed to schedule local notification:', err);
+    }
 
     // Show banner for foreground notification
     onNotificationBannerShow(title, body, data);

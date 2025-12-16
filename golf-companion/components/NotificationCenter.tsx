@@ -21,6 +21,8 @@ import {
   deleteNotification,
   StoredNotification,
 } from '@/lib/NotificationHistory';
+import { useRouter } from "expo-router";
+import { supabase } from "@/components/supabase";
 
 interface NotificationCenterProps {
   userId: string;
@@ -33,6 +35,7 @@ export function NotificationCenter({
   unreadCount,
   onUnreadChange,
 }: NotificationCenterProps) {
+  const router = useRouter();
   const { palette } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
@@ -163,6 +166,73 @@ export function NotificationCenter({
       >
         <MaterialIcons name="close" size={20} color={palette.grey} />
       </Pressable>
+
+        {/* GAME INVITE ACTION BUTTONS */}
+        {item.title?.toLowerCase().includes("game invite") && (
+          <View style={{ flexDirection: "row", marginTop: 8, gap: 12 }}>
+            <Pressable
+              style={{
+                backgroundColor: palette.primary,
+                paddingHorizontal: 14,
+                paddingVertical: 6,
+                borderRadius: 8,
+              }}
+              onPress={async () => {
+                const gameId = item.data?.gameId;
+                if (!gameId) return;
+
+                // Accept invite
+                await supabase
+                  .from("game_participantsv2")
+                  .update({ status: "accepted" })
+                  .eq("game_id", gameId)
+                  .eq("user_id", userId);
+
+                // Delete notification from DB
+                await deleteNotification(item.id);
+
+                // Remove from local state immediately
+                setNotifications(prev => prev.filter(n => n.id !== item.id));
+
+                // Update unread count
+                if (onUnreadChange) {
+                  onUnreadChange(Math.max(0, unreadCount - 1));
+                }
+
+                // Navigate to scorecard
+                router.push({
+                  pathname: "/scorecard",
+                  params: { gameId },
+                });
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700" }}>Accept</Text>
+            </Pressable>
+
+            <Pressable
+              style={{
+                backgroundColor: "#ef4444",
+                paddingHorizontal: 14,
+                paddingVertical: 6,
+                borderRadius: 8,
+              }}
+              onPress={async () => {
+                const gameId = item.data?.gameId;
+                if (!gameId) return;
+
+                await supabase
+                  .from("game_participantsv2")
+                  .update({ status: "declined" })
+                  .eq("game_id", gameId)
+                  .eq("user_id", userId);
+
+                handleDelete(item.id);
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700" }}>Decline</Text>
+            </Pressable>
+          </View>
+        )}
     </Pressable>
   );
 

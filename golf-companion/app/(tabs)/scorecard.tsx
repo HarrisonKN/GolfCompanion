@@ -113,9 +113,19 @@ export default function Scorecard() {
 
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
+  // --- When gameId is present, we always load players from game_participantsv2 ---
+  const [forceGameParticipantLoad, setForceGameParticipantLoad] = useState(false);
 
   // grab courseId layerId from the URL
   const { courseId, playerNames, playerIds, playerAvatars, newGame, gameId, teams: teamParam, gameMode } = useLocalSearchParams();
+  // 🔒 Force participant load BEFORE any other init logic runs
+  useEffect(() => {
+    const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (gid) {
+      console.log("⚡ FORCE LOAD ACTIVATED EARLY for game:", gid);
+      setForceGameParticipantLoad(true);
+    }
+  }, [gameId]);
 
   const normalizedGameMode = Array.isArray(gameMode) ? gameMode[0] : gameMode;
   const { matchPlayType } = useLocalSearchParams();
@@ -142,11 +152,124 @@ export default function Scorecard() {
     }
   }, [teamParam]);
 
+  // When a gameId exists, load all participants for that game from Supabase
+  useEffect(() => {
+    const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (!gid) return;
+
+    setForceGameParticipantLoad(true);
+    console.log("🔵 Loading participants for game:", gid);
+
+    (async () => {
+      // Ensure we have the correct course selected for this game
+      try {
+        const { data: gameRow, error: gameErr } = await supabase
+          .from("games")
+          .select("course_id")
+          .eq("id", gid)
+          .single();
+
+        if (gameErr) {
+          console.warn("Failed to load game for course_id", gameErr);
+        } else if (gameRow?.course_id && gameRow.course_id !== selectedCourse) {
+          setSelectedCourse(gameRow.course_id);
+        }
+      } catch (e) {
+        console.warn("Error fetching game row for participants load", e);
+      }
+
+      // Load all participants for this game
+      const { data: participants, error } = await supabase
+        .from("game_participantsv2")
+        .select("user_id")
+        .eq("game_id", gid);
+
+      if (error) {
+        console.warn("Failed to load participants", error);
+        return;
+      }
+      if (!participants || participants.length === 0) {
+        console.log("No participants found for game", gid);
+        return;
+      }
+
+      const userIds = participants.map(p => p.user_id);
+
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", userIds);
+
+      if (pErr) {
+        console.warn("Failed to load participant profiles", pErr);
+        return;
+      }
+
+      const rows: PlayerRow[] = (profiles || []).map(p => ({
+        id: p.id,
+        name: p.full_name?.split(" ")[0] || "Player",
+        avatar_url: p.avatar_url,
+        scores: Array(holeCount).fill(""),
+      }));
+
+      console.log("✅ Loaded game participants:", rows);
+      setPlayers(rows);
+    })();
+  }, [gameId]);
+
   const isScramble = normalizedGameMode === 'scramble';
   const isMatchPlay = normalizedGameMode === 'match';
   const isMatchPlayTeams =
   isMatchPlay && normalizedMatchPlayType === "teams";
-  const [dbTeams, setDbTeams] = useState<any[]>([]);
+  const [dbTeams, setDbTeams] = useState<any[]>([]);           
+  const [dbScrambleTeams, setDbScrambleTeams] = useState<any[]>([]);
+
+  // ✅ Single source of truth for team rows:
+  // - If we have a gameId, we render teams from DB (dbScrambleTeams)
+  // - Otherwise (new local game), we fall back to route param teams
+  const effectiveTeams = useMemo(() => {
+    const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+    if (gid) return Array.isArray(dbScrambleTeams) ? dbScrambleTeams : [];
+    return Array.isArray(scrambleTeams) ? scrambleTeams : [];
+  }, [gameId, dbScrambleTeams, scrambleTeams]);
+
+  // 🧩 Debug block for team/solo splitting
+  useEffect(() => {
+    console.log("🧩 MODE DEBUG", {
+      gameId,
+      normalizedGameMode,
+      normalizedMatchPlayType,
+      isScramble,
+      isMatchPlay,
+      isMatchPlayTeams,
+    });
+
+    console.log("🧩 TEAM SOURCES", {
+      teamParam,
+      scrambleTeams,
+      dbTeams,
+      dbScrambleTeams,
+      effectiveTeams,
+    });
+
+    console.log(
+      "🧩 PLAYER IDS:",
+      players.map(p => p.id)
+    );
+  }, [
+    gameId,
+    normalizedGameMode,
+    normalizedMatchPlayType,
+    isScramble,
+    isMatchPlay,
+    isMatchPlayTeams,
+    teamParam,
+    scrambleTeams,
+    dbTeams,
+    dbScrambleTeams,
+    effectiveTeams,
+    players,
+  ]);
 
   const isNewGame = String(Array.isArray(newGame) ? newGame[0] : newGame || '') === '1';
 
@@ -158,9 +281,12 @@ useEffect(() => {
 }, [teamParam, scrambleTeams, dbTeams]);
 
 
-  // Initialize players from Start Game route param (names -> empty scores)
+  // 🚫 NEVER use route params when gameId exists
   useEffect(() => {
+    if (gameId) return;
+    if (forceGameParticipantLoad) return;
     if (!playerNames) return;
+
     try {
       const rawNames = Array.isArray(playerNames) ? playerNames[0] : playerNames;
       const names = JSON.parse(String(rawNames)) as string[];
@@ -177,45 +303,49 @@ useEffect(() => {
         avatars = rawAv ? (JSON.parse(String(rawAv)) as (string | null)[]) : [];
       } catch {}
 
-      if (Array.isArray(names) && names.length) {
-        setPlayers(
-          names.map((n, i) => {
-            const raw = (n || '').toString().trim();
-            const firstName = raw.split(' ')[0] || raw || 'Player';
-            return {
-              id: ids[i], // may be undefined for manual players
-              name: firstName,
-              avatar_url: avatars[i] || null,
-              scores: Array(holeCount).fill(''),
-            };
-          })
-        );
-      }
+      setPlayers(
+        names.map((n, i) => ({
+          id: ids[i],
+          name: n.split(' ')[0] || 'Player',
+          avatar_url: avatars[i] || null,
+          scores: Array(holeCount).fill(''),
+        }))
+      );
     } catch (e) {
       console.warn('Invalid player params', e);
     }
-  }, [playerNames, playerIds, playerAvatars]);
+  }, [playerNames, playerIds, playerAvatars, gameId]);
 
-  useEffect(() => {
-    // Load game_teams for Scramble AND Match Play Teams
-    if (!isScramble && !isMatchPlayTeams) return;
+useEffect(() => {
+  if (!isScramble && !isMatchPlayTeams) return;
 
-    const gid = Array.isArray(gameId) ? gameId[0] : gameId;
-    if (!gid) return;
+  const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+  if (!gid) return;
 
-    (async () => {
-      const { data, error } = await supabase
-        .from("game_teams")
-        .select("*")
-        .eq("game_id", gid);
+  (async () => {
+    const { data, error } = await supabase
+      .from("game_teams")
+      .select("id, team_number, name, players")
+      .eq("game_id", gid)
+      .order("team_number", { ascending: true });
 
-      if (!error && data) {
-        setDbTeams(data);
-      } else {
-        console.warn("Failed to load game_teams:", error);
-      }
-    })();
-  }, [isScramble, isMatchPlayTeams, gameId]);
+    if (error) {
+      console.warn("❌ Failed to load teams:", error);
+      setDbScrambleTeams([]);
+      return;
+    }
+
+    const normalized = (data || []).map((t: any) => ({
+      team_id: t.id,              // ✅ THIS IS THE KEY
+      team_number: t.team_number,
+      name: t.name,
+      players: t.players ?? [],
+    }));
+
+    console.log("✅ Loaded DB teams:", normalized);
+    setDbScrambleTeams(normalized);
+  })();
+}, [isScramble, isMatchPlayTeams, gameId]);
 
   useEffect(() => {
     if (courseId && typeof courseId === 'string') setSelectedCourse(courseId);
@@ -247,22 +377,34 @@ useEffect(() => {
     wipePendingScores();
   }, [isNewGame, playerIds, selectedCourse, user?.id]);
 
-  // Ensure a default player only when none were passed/initialized and not a new game
+  // 🚫 NEVER auto-add a player when in a game
   useEffect(() => {
+    if (gameId) return;
+
     const fetchAndSetPlayer = async () => {
       if (!user || !selectedCourse || players.length > 0 || playerNames || isNewGame) return;
-      const { data } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
-      const fullName = data?.full_name || '';
-      const firstName = fullName.trim().split(' ')[0] || user.email?.split('@')[0] || 'You';
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      const firstName =
+        data?.full_name?.split(' ')[0] ||
+        user.email?.split('@')[0] ||
+        'You';
+
       setPlayers([{ name: firstName, scores: Array(holeCount).fill('') }]);
     };
+
     fetchAndSetPlayer();
-  }, [user, selectedCourse, players.length, playerNames, isNewGame]);
+  }, [user, selectedCourse, players.length, playerNames, isNewGame, gameId]);
 
   // Do not pull old per-hole rows on a new game
   useFocusEffect(
     React.useCallback(() => {
-      if (!user || !selectedCourse || isNewGame) return;
+      if (!user || !selectedCourse || isNewGame || forceGameParticipantLoad) return;
       (async () => {
         const { data: scoreData, error: fetchError } = await supabase
           .from('scores')
@@ -287,7 +429,7 @@ useEffect(() => {
           return [{ ...existing, scores: merged }, ...prev.slice(1)];
         });
       })();
-    }, [user, selectedCourse, isNewGame])
+    }, [user, selectedCourse, isNewGame, forceGameParticipantLoad])
   );
 
   //------REFRESH PAR VALUES ON PAGE REFRESH FOR ADDNG COURSES --------
@@ -328,7 +470,7 @@ useEffect(() => {
   // Ensure a default player for the logged-in user from Supabase profile
   useEffect(() => {
     const fetchAndSetPlayer = async () => {
-      if (!user || !selectedCourse || players.length > 0) return;
+      if (forceGameParticipantLoad || !user || !selectedCourse || players.length > 0) return;
 
       const { data, error } = await supabase
         .from('profiles')
@@ -343,7 +485,7 @@ useEffect(() => {
     };
 
     fetchAndSetPlayer();
-  }, [user, selectedCourse, players.length]);
+  }, [user, selectedCourse, players.length, forceGameParticipantLoad]);
 
   // Fetch courses from Supabase
   useEffect(() => {
@@ -388,8 +530,9 @@ useEffect(() => {
     setParValues(normalized);
   }, [selectedCourse, courses]);
 
-    // Reset player scores when the selected course changes
+    // 🚫 NEVER reset players in multiplayer
   useEffect(() => {
+    if (gameId) return;
     if (players.length > 0) {
       setPlayers(prev =>
         prev.map(p => ({
@@ -398,7 +541,7 @@ useEffect(() => {
         }))
       );
     }
-  }, [selectedCourse]);
+  }, [selectedCourse, gameId]);
 
   //----------------Sync & Clear pending “scores” rows---------------
   // Whenever this screen is focused, grab any recently-entered hole scores,
@@ -408,16 +551,23 @@ useEffect(() => {
     React.useCallback(() => {
       if (!selectedCourse) return;
 
+      // If we're in game-participant mode, ensure players are loaded first.
+      if (forceGameParticipantLoad && players.length === 0) return;
+
       // Scramble mode: sync team-based scores using team_id + game_id
-     if ((isScramble || isMatchPlayTeams) && scrambleTeams && scrambleTeams.length > 0) {
+     if ((isScramble || isMatchPlayTeams) && effectiveTeams.length > 0) {
         (async () => {
           const gid = Array.isArray(gameId) ? gameId[0] : gameId;
           if (!gid || dbTeams.length === 0) return;
 
-          const teamIds = scrambleTeams
+          const teamIds = effectiveTeams
             .map((t: any) => {
+              // Prefer DB-provided team_id (from dbScrambleTeams normalized rows)
+              if (t.team_id) return t.team_id as string;
+
+              // Fallback for route-param teams (new game navigation)
               const realTeam = dbTeams.find(dt => dt.team_number === t.team_number);
-              return realTeam?.id || t.team_id || null;
+              return realTeam?.id || null;
             })
             .filter((id): id is string => !!id);
           if (teamIds.length === 0) return;
@@ -500,7 +650,7 @@ useEffect(() => {
           });
         })();
       }
-    }, [selectedCourse, players, isScramble, scrambleTeams, gameId, dbTeams])
+    }, [selectedCourse, players, isScramble, isMatchPlayTeams, effectiveTeams, gameId, dbTeams])
   );
 
   const addPlayer = () => {
@@ -562,7 +712,7 @@ useEffect(() => {
     let lowest = Infinity;
     const winners: number[] = [];
 
-    scrambleTeams?.forEach((team, tIndex) => {
+    effectiveTeams.forEach((team: any, tIndex: number) => {
       const realTeam = dbTeams.find(dt => dt.team_number === team.team_number);
       const tid = realTeam?.id;
 
@@ -927,10 +1077,20 @@ useEffect(() => {
         {/* --- Players Section --- */}
         {
           // 1) SCRAMBLE MODE WITH TEAMS → show one row per team, scores from teamScores
-          (isScramble || isMatchPlayTeams) && scrambleTeams && scrambleTeams.length > 0 ? (
-            scrambleTeams.map((team: any, teamIndex: number) => {
-              const realTeam = dbTeams.find(t => t.team_number === team.team_number);
-              const teamId = realTeam?.id; // UUID from database
+          (isScramble || isMatchPlayTeams) && effectiveTeams.length > 0 ? (
+            effectiveTeams.map((team: any, teamIndex: number) => {
+              // 🟦 RENDER TEAM ROW debug
+              console.log("🟦 RENDER TEAM ROW", {
+                team_number: team.team_number,
+                team_id: team.team_id,
+                players: team.players,
+                resolvedPlayers: team.players.map((pid: string) =>
+                  players.find(p => p.id === pid)?.name || "❌ MISSING"
+                ),
+              });
+              //const realTeam = dbTeams.find(t => t.team_number === team.team_number);
+              //const teamId = team.team_id || realTeam?.id; // ✅ Prefer normalized DB team_id
+              const teamId = team.team_id;
               const scoresForTeam = teamScores[teamId] || Array(holeCount).fill('');
               const { inScore, outScore, totalScore } = calculateInOutTotals(scoresForTeam);
 
@@ -968,7 +1128,7 @@ useEffect(() => {
                           marginTop: 4,
                         }}
                       >
-                        {realTeam?.name ?? team.name ?? `Team ${team.team_number}`}
+                        {team.name ?? `Team ${team.team_number}`}
                       </Text>
                     </View>
 
@@ -1062,6 +1222,11 @@ useEffect(() => {
           // 2) SOLO MODE (default) → full table rows
           ) : (
             players.map((player, playerIndex) => {
+              // 🟥 RENDER SOLO ROW debug
+              console.log("🟥 RENDER SOLO ROW", {
+                playerId: player.id,
+                playerName: player.name,
+              });
               const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
               return (
                 <View key={playerIndex} style={styles(palette).playerCard}>
@@ -1223,10 +1388,20 @@ useEffect(() => {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles(palette).chipTableContainer} ref={scorecardRef}>
-        {(isScramble || isMatchPlayTeams) && scrambleTeams && scrambleTeams.length > 0
-          ? scrambleTeams.map((team: any, teamIndex: number) => {
-              const realTeam = dbTeams.find(t => t.team_number === team.team_number);
-              const teamId = realTeam?.id;
+        {(isScramble || isMatchPlayTeams) && effectiveTeams.length > 0
+          ? effectiveTeams.map((team: any, teamIndex: number) => {
+              // 🟦 RENDER TEAM ROW debug
+              console.log("🟦 RENDER TEAM ROW", {
+                team_number: team.team_number,
+                team_id: team.team_id,
+                players: team.players,
+                resolvedPlayers: team.players.map((pid: string) =>
+                  players.find(p => p.id === pid)?.name || "❌ MISSING"
+                ),
+              });
+              //const realTeam = dbTeams.find(t => t.team_number === team.team_number);
+              //const teamId = team.team_id || realTeam?.id;
+              const teamId = team.team_id;
               const scoresForTeam = teamScores[teamId] || Array(holeCount).fill('');
               const { inScore, outScore, totalScore } = calculateInOutTotals(scoresForTeam);
 
@@ -1256,7 +1431,7 @@ useEffect(() => {
                         })}
                       </View>
                       <Text style={styles(palette).chipPlayerName}>
-                        {realTeam?.name ?? team.name ?? `Team ${team.team_number}`}
+                        {team.name ?? `Team ${team.team_number}`}
                       </Text>
                     </View>
 
@@ -1316,6 +1491,11 @@ useEffect(() => {
               );
             })
           : players.map((player, playerIndex) => {
+              // 🟥 RENDER SOLO ROW debug
+              console.log("🟥 RENDER SOLO ROW", {
+                playerId: player.id,
+                playerName: player.name,
+              });
               const { inScore, outScore, totalScore } = calculateInOutTotals(player.scores);
               return (
                 <View key={playerIndex} style={styles(palette).chipPlayerCard}>
@@ -1528,7 +1708,7 @@ useEffect(() => {
             // Resolve a guaranteed valid teamId
             let resolvedTeamId = selectedCell.teamId;
 
-            if (!resolvedTeamId && scrambleTeams && dbTeams.length > 0) {
+            if (!resolvedTeamId && dbTeams.length > 0) {
               const match = dbTeams.find(t => t.team_number === selectedCell.teamNumber);
               if (match?.id) resolvedTeamId = match.id;
             }

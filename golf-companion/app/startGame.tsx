@@ -369,9 +369,32 @@ export default function StartGameScreen() {
 
     console.log("✅ Game created with ID:", gid);
 
+    // 🆕 Insert participants into game_participantsv2 for invites/accepted tracking
+    try {
+      const participantRows = ids.map((pid) => ({
+        game_id: gid as string,
+        user_id: pid,
+        role: "player",
+        status: pid === user.id ? "accepted" : "invited",
+      }));
+
+      const { error: gpError } = await supabase
+        .from("game_participantsv2")
+        .insert(participantRows);
+
+      if (gpError) {
+        console.warn("⚠️ Failed to insert into game_participantsv2:", gpError);
+      } else {
+        console.log("✅ game_participantsv2 rows inserted:", participantRows);
+      }
+    } catch (e) {
+      console.warn("⚠️ Unexpected error inserting game_participantsv2:", e);
+    }
+
     await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({ ids, course, gameId: gid }));
 
     await startSharingLocation(course as string, 1);
+
 
     // 🆕 GET THE COURSE NAME FOR THE NOTIFICATION
     const courseName = courseItems.find((c: any) => c.value === course)?.label || 'a course';

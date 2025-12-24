@@ -49,7 +49,25 @@ export default function FriendProfileScreen() {
 
   const fetchFriendProfile = async () => {
     try {
-      // Fetch friend's profile
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Not authenticated');
+      }
+
+      // Verify friendship before fetching profile
+      const { data: friendship, error: friendshipError } = await supabase
+        .from('friendships')
+        .select('id')
+        .or(`and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`)
+        .single();
+
+      if (friendshipError || !friendship) {
+        console.error('Not friends with this user');
+        throw new Error('Access denied');
+      }
+
+      // Then fetch profile
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select(`
@@ -59,6 +77,9 @@ export default function FriendProfileScreen() {
           handicap,
           rounds_played,
           average_score,
+          best_score,
+          fairways_hit,
+          putts_per_round,
           last_round_course_name,
           last_round_date,
           last_round_score

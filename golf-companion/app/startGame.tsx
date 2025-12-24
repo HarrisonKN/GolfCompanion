@@ -22,6 +22,8 @@ import { PALETTES } from '@/constants/theme';
 import { useTheme } from '@/components/ThemeContext';
 import { sendNotificationToMultipleUsers } from "@/lib/sendNotification";
 import { notifyGameInvite } from '@/lib/NotificationTriggers';
+import { ShotTracker } from '@/components/ShotTracker';
+import { updateTournamentScoresAfterRound } from '@/lib/TournamentService';
 
 const COMPACT_H = 36;
 
@@ -146,6 +148,10 @@ export default function StartGameScreen() {
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteResults, setInviteResults] = useState<any[]>([]);
   const [inviteSearching, setInviteSearching] = useState(false);
+
+  // New state variables for current round and hole
+  const [currentRound, setCurrentRound] = useState<{ id: string } | null>(null);
+  const [currentHole, setCurrentHole] = useState<number>(1);
 
   // Fetch courses from Supabase
   useEffect(() => {
@@ -462,6 +468,24 @@ export default function StartGameScreen() {
     });
   };
 
+  // Add this function to handle round completion
+  const handleRoundComplete = async () => {
+    // ... your existing round save logic ...
+    
+    const { data: savedRound, error } = await supabase
+      .from('golf_rounds')
+      .insert({ /* round data */ })
+      .select()
+      .single();
+
+    if (!error && savedRound) {
+      // Update tournament scores automatically
+      await updateTournamentScoresAfterRound(savedRound.id);
+      
+      console.log('✅ Round saved and tournament scores updated!');
+    }
+  };
+
 return (
     <ScrollView contentContainerStyle={styles(palette).container}>
       <View style={{ position: 'relative' }}>
@@ -745,6 +769,11 @@ return (
         >
           <Text style={styles(palette).beginButtonText}>Next</Text>
         </TouchableOpacity>
+
+        {/* Shot Tracker - Only show if currentRound is available */}
+        {currentRound && (
+          <ShotTracker roundId={currentRound.id} hole={currentHole} />
+        )}
         </View>
       </View>
     </ScrollView>

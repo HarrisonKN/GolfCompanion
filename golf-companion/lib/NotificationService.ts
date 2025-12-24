@@ -87,9 +87,19 @@ export function initializeNotificationHandlers(
 
   // FCM: Handle notification tap (app in background)
   const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp((remoteMessage) => {
-    console.log('👆 FCM Notification tapped (background)');
+    console.log('👆 FCM Notification tapped (background/minimized)');
     if (remoteMessage && remoteMessage.data) {
-      handleNotificationNavigation(router, remoteMessage.data as NotificationData);
+      // Navigate immediately when user taps notification
+      console.log('📲 Navigation data:', remoteMessage.data);
+      
+      // Ensure we have a screen specified
+      const navigationData = remoteMessage.data as NotificationData;
+      if (!navigationData.screen && navigationData.type) {
+        console.log('🔄 Inferring screen from notification type...');
+      }
+      
+      // Navigate with retry logic for background/minimized states
+      navigateWithRetry(router, navigationData);
     }
   });
 
@@ -98,12 +108,13 @@ export function initializeNotificationHandlers(
     .getInitialNotification()
     .then(remoteMessage => {
       if (remoteMessage) {
-        console.log('🚀 FCM Cold start notification received:', remoteMessage);
+        console.log('🚀 Cold start notification received:', remoteMessage);
         console.log('🚀 FCM data:', remoteMessage.data);
-        // Delay slightly to ensure router is ready
+        
+        // Delay to ensure router is ready
         setTimeout(() => {
-          handleNotificationNavigation(router, remoteMessage.data as NotificationData);
-        }, 500);
+          navigateWithRetry(router, remoteMessage.data as NotificationData);
+        }, 800);
       } else {
         console.log('⚠️ No initial notification found on cold start');
       }
@@ -185,6 +196,39 @@ export function handleNotificationNavigation(
   } catch (err) {
     console.error('❌ Navigation error:', err);
   }
+}
+
+/**
+ * Navigate with retry logic for background/minimized/cold start states
+ * Ensures router is ready before attempting navigation
+ * @param router - Expo Router instance
+ * @param data - Notification data containing screen/navigation info
+ * @param maxRetries - Number of retry attempts (default: 3)
+ */
+export async function navigateWithRetry(
+  router: ReturnType<typeof useRouter>,
+  data: NotificationData,
+  maxRetries: number = 3
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Navigation attempt ${attempt}/${maxRetries}`);
+      handleNotificationNavigation(router, data);
+      console.log('✅ Navigation succeeded on attempt', attempt);
+      return;
+    } catch (error) {
+      console.warn(`⚠️ Navigation attempt ${attempt} failed:`, error);
+      
+      if (attempt < maxRetries) {
+        // Wait before retrying (exponential backoff)
+        const delayMs = 300 * attempt;
+        console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  
+  console.error('❌ Navigation failed after', maxRetries, 'attempts');
 }
 
 // Best-effort inference for legacy payloads that only send type

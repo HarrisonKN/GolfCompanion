@@ -15,6 +15,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { TestNotifications } from '@/components/TestNotifications';
 import Toast from 'react-native-toast-message';
 import { notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/NotificationTriggers';
+import { PerformanceChart } from '@/components/PerformanceChart';
+import { ensureMonthlyTournament, autoEnrollInMonthlyTournament, getTournamentLeaderboard } from '@/lib/TournamentService';
+import { useRouter } from 'expo-router';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -43,6 +46,15 @@ type RoundHistory = {
   scorecard?: string;
 };
 
+type Achievement = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
+  earnedAt?: string;
+};
+
 // ------------------- ACCOUNTS LOGIC -------------------------
 export default function AccountsScreen() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -65,6 +77,10 @@ export default function AccountsScreen() {
   const [hideInviteBanner, setHideInviteBanner] = useState(false);
   const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
   const [showTestNotifications, setShowTestNotifications] = useState(false);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [loadingAchievements, setLoadingAchievements] = useState(true);
+  const [monthlyChallenge, setMonthlyChallenge] = useState<any>(null);
+  const [myRank, setMyRank] = useState<number | null>(null);
 
   const { palette } = useTheme();
   const [toast, setToast] = useState<string | null>(null);
@@ -949,6 +965,45 @@ const inviteChannel = supabase
         <StatTile label="Fairways Hit" value={profile.fairways_hit?.toString() ?? 'N/A'} />
         <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
       </View>
+
+      {/* Performance Charts - New Section */}
+      {user && (
+        <>
+          <PerformanceChart userId={user.id} type="score" />
+          <PerformanceChart userId={user.id} type="putts" />
+          <PerformanceChart userId={user.id} type="fairways" />
+        </>
+      )}
+
+      {/* Monthly Challenge Card */}
+      {monthlyChallenge && (
+        <Pressable
+          style={styles(palette).monthlyChallengeCard}
+          onPress={() =>
+            router.push({ pathname: '/tournamentDetails', params: { id: monthlyChallenge.id } } as never)
+          }
+        >
+          <View style={styles(palette).challengeHeader}>
+            <ThemedText type="subtitle">🏆 {monthlyChallenge.name}</ThemedText>
+            {myRank && (
+              <View style={styles(palette).rankBadge}>
+                <ThemedText style={styles(palette).rankText}>#{myRank}</ThemedText>
+              </View>
+            )}
+          </View>
+          <ThemedText style={styles(palette).challengeDescription}>
+            {monthlyChallenge.description}
+          </ThemedText>
+          <View style={styles(palette).challengeFooter}>
+            <ThemedText style={styles(palette).challengeDate}>
+              Ends {new Date(monthlyChallenge.end_date).toLocaleDateString()}
+            </ThemedText>
+            <ThemedText style={styles(palette).viewLeaderboard}>
+              View Leaderboard →
+            </ThemedText>
+          </View>
+        </Pressable>
+      )}
 
       <SectionDivider />
 
@@ -1958,7 +2013,7 @@ const styles = (palette: any) => StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
-    padding: 8,
+    padding:  8,
   },
   friendAvatarCircle: {
     width: 40,
@@ -2016,6 +2071,7 @@ const styles = (palette: any) => StyleSheet.create({
     letterSpacing: 0.2,
   },
   // Add these styles to your existing styles function:
+
 
 modalOverlay: {
   flex: 1,
@@ -2193,7 +2249,7 @@ userResultTilePressed: {
 
 resultsContainer: {
   flex: 1,
-  minHeight: 400, // Increased from 300
+  minHeight: 400,
 },
 
 listEnd: {
@@ -2322,5 +2378,113 @@ testNotificationsContent: {
   shadowRadius: 6,
   shadowOffset: { width: 0, height: 1 },
   elevation: 1,
+},
+achievementsSection: {
+  marginTop: 24,
+  marginBottom: 16,
+},
+achievementsGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 12,
+},
+achievementBadge: {
+  width: (SCREEN_WIDTH - 64) / 2,
+  backgroundColor: palette.white,
+  borderRadius: 16,
+  padding: 16,
+  alignItems: 'center',
+  shadowColor: palette.black,
+  shadowOpacity: 0.1,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 3,
+  borderWidth: 2,
+  borderColor: palette.primary,
+},
+achievementLocked: {
+  backgroundColor: palette.grey + '40',
+  borderColor: palette.grey,
+  opacity: 0.6,
+},
+achievementIcon: {
+  fontSize: 40,
+  marginBottom: 8,
+},
+achievementName: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: palette.primary,
+  textAlign: 'center',
+  marginBottom: 4,
+},
+achievementNameLocked: {
+  color: palette.textLight,
+},
+achievementDescription: {
+  fontSize: 12,
+  color: palette.textDark,
+  textAlign: 'center',
+  marginBottom: 4,
+},
+achievementDescriptionLocked: {
+  color: palette.textLight,
+},
+achievementDate: {
+  fontSize: 10,
+  color: palette.textLight,
+  marginTop: 4,
+},
+monthlyChallengeCard: {
+  backgroundColor: palette.white,
+  borderRadius: 16,
+  padding: 20,
+  marginHorizontal: SCREEN_WIDTH * 0.05,
+  marginVertical: 16,
+  borderLeftWidth: 5,
+  borderLeftColor: palette.primary,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.1,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 4,
+},
+challengeHeader: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 12,
+},
+rankBadge: {
+  backgroundColor: palette.primary,
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 20,
+},
+rankText: {
+  color: palette.white,
+  fontSize: 14,
+  fontWeight: '700',
+},
+challengeDescription: {
+  fontSize: 14,
+  color: palette.textDark,
+  marginBottom: 16,
+  lineHeight: 20,
+},
+challengeFooter: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+},
+challengeDate: {
+  fontSize: 13,
+  color: palette.textLight,
+  fontWeight: '500',
+},
+viewLeaderboard: {
+  fontSize: 14,
+  color: palette.primary,
+  fontWeight: '600',
 },
 });

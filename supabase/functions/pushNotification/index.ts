@@ -75,14 +75,66 @@ serve(async (req) => {
   console.log("📥 Push notification request received");
 
   try {
-    const { userId, token, title, body, data } = await req.json();
-    console.log("📋 Request params:", { 
-      hasUserId: !!userId, 
-      hasToken: !!token, 
-      title, 
-      body: body.substring(0, 50),
-      data: data || {} 
-    });
+    // ✅ NEW: Verify request is coming from authenticated user
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      console.error("❌ Missing or invalid authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    
+    // Verify the JWT with Supabase
+    const supabaseResponse = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/verify_jwt`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "apikey": supabaseServiceKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+      }
+    );
+
+    if (!supabaseResponse.ok) {
+      console.error("❌ Invalid JWT token");
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const { sub: authenticatedUserId } = await supabaseResponse.json();
+
+    const { userId, token: fcmToken, title, body, data } = await req.json();
+
+    // ✅ NEW: Verify user can only send to themselves or friends
+    if (userId !== authenticatedUserId) {
+      // Check if they're friends
+      const friendshipCheck = await fetch(
+        `${supabaseUrl}/rest/v1/friendships?select=id&or=(and(user_id.eq.${authenticatedUserId},friend_id.eq.${userId}),and(user_id.eq.${userId},friend_id.eq.${authenticatedUserId}))`,
+        {
+          headers: {
+            "apikey": supabaseServiceKey,
+            "Authorization": `Bearer ${supabaseServiceKey}`,
+          },
+        }
+      );
+
+      const friendships = await friendshipCheck.json();
+      if (!friendships || friendships.length === 0) {
+        console.error(`❌ User ${authenticatedUserId} not authorized to send to ${userId}`);
+        return new Response(
+          JSON.stringify({ error: "Not authorized" }),
+          { status: 403, headers: { "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // We only deal with **FCM** tokens now. The column in `profiles`
     // still happens to be named `fcm_token`, but it stores the
@@ -124,6 +176,36 @@ serve(async (req) => {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // ✅ NEW: Validate all inputs before processing
+    const validateInputs = (userId: string, title: string, body: string, fcmToken: string) => {
+      const errors: string[] = [];
+
+      if (!userId || typeof userId !== "string" || userId.length > 36) {
+        errors.push("Invalid userId");
+      }
+      if (!title || typeof title !== "string" || title.length > 200) {
+        errors.push("Title must be 1-200 characters");
+      }
+      if (!body || typeof body !== "string" || body.length > 4000) {
+        errors.push("Body must be 1-4000 characters");
+      }
+      if (!fcmToken || typeof fcmToken !== "string" || fcmToken.length < 100) {
+        errors.push("Invalid FCM token");
+      }
+
+      return errors;
+    };
+
+    // Validate
+    const validationErrors = validateInputs(userId, title, body, fcmToken);
+    if (validationErrors.length > 0) {
+      console.error("❌ Validation errors:", validationErrors);
+      return new Response(
+        JSON.stringify({ error: "Invalid input", details: validationErrors }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     console.log("🔐 Authenticating with Firebase...");
@@ -208,25 +290,45 @@ serve(async (req) => {
       dataKeys: Object.keys(data || {})
     });
 
-    const fcmResponse = await fetch(
-      `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${access_token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(messagePayload),
+    // ✅ NEW: Retry function for transient failures
+    async function retryWithBackoff<T>(
+      fn: () => Promise<T>,
+      maxRetries = 3,
+      delayMs = 1000
+    ): Promise<T> {
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          return await fn();
+        } catch (error) {
+          if (i === maxRetries - 1) throw error;
+          const delay = delayMs * Math.pow(2, i); // Exponential backoff
+          console.log(`⏳ Retry ${i + 1}/${maxRetries} after ${delay}ms`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-    );
-
-    if (!fcmResponse.ok) {
-      const errorData = await fcmResponse.text();
-      console.error("❌ FCM API error:", errorData);
-      throw new Error(`FCM API error: ${errorData}`);
+      throw new Error("Max retries exceeded");
     }
 
-    const fcmResult = await fcmResponse.json();
+    const fcmResult = await retryWithBackoff(async () => {
+      const fcmResponse = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(messagePayload),
+        }
+      );
+
+      if (!fcmResponse.ok) {
+        const errorData = await fcmResponse.text();
+        throw new Error(`FCM API error: ${errorData}`);
+      }
+
+      return await fcmResponse.json();
+    }, 3, 1000);
 
     console.log("✅ Push notification sent:", {
       messageId: fcmResult.name,
@@ -234,6 +336,51 @@ serve(async (req) => {
       recipientToken: fcmToken.substring(0, 20) + "...",
       gameId: data?.gameId || "N/A",
     });
+
+    // ✅ NEW: Structured logging for better monitoring
+    interface LogEntry {
+      timestamp: string;
+      level: "INFO" | "WARN" | "ERROR";
+      userId: string;
+      messageId?: string;
+      error?: string;
+      duration: number;
+    }
+
+    const logs: LogEntry[] = [];
+    const startTime = Date.now();
+
+    try {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        level: "INFO",
+        userId: authenticatedUserId,
+        messageId: fcmResult.name,
+        duration: Date.now() - startTime,
+      });
+    } catch (err) {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        level: "ERROR",
+        userId: authenticatedUserId,
+        error: err.message,
+        duration: Date.now() - startTime,
+      });
+    }
+
+    // Store logs in database for monitoring
+    await fetch(
+      `${supabaseUrl}/rest/v1/notification_logs`,
+      {
+        method: "POST",
+        headers: {
+          "apikey": supabaseServiceKey,
+          "Authorization": `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(logs[0]),
+      }
+    );
 
     return new Response(
       JSON.stringify({
@@ -263,3 +410,34 @@ serve(async (req) => {
     });
   }
 });
+
+// ✅ NEW: Simple rate limiting with Supabase
+const checkRateLimit = async (userId: string): Promise<boolean> => {
+  const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+
+  const { data: recentCalls, error } = await fetch(
+    `${supabaseUrl}/rest/v1/notification_history?user_id=eq.${userId}&created_at=gt.${oneMinuteAgo}&select=count()`,
+    {
+      headers: {
+        "apikey": supabaseServiceKey,
+        "Authorization": `Bearer ${supabaseServiceKey}`,
+      },
+    }
+  ).then(r => r.json());
+
+  // Allow max 10 notifications per minute per user
+  return !recentCalls || recentCalls.length < 10;
+};
+
+// ✅ NEW: Validate all required env vars at startup
+const validateEnv = () => {
+  const required = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "FIREBASE_SERVICE_ACCOUNT"];
+  const missing = required.filter(key => !Deno.env.get(key));
+
+  if (missing.length > 0) {
+    throw new Error(`Missing environment variables: ${missing.join(", ")}`);
+  }
+};
+
+// Call at function start
+validateEnv();

@@ -2,6 +2,9 @@
 // This sets up FCM to handle notifications when app is closed/minimized
 import "@/lib/BackgroundMessageHandler";
 
+// Initialize Firebase (including Analytics) early
+import "@/lib/firebase";
+
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -22,7 +25,7 @@ import { VoiceProvider } from '@/components/VoiceContext';
 import { SpotifyProvider } from '@/components/SpotifyContext';
 import { GlobalVoiceBar } from '@/components/GlobalVoiceBar';
 import { GlobalNotificationPanel } from '@/components/GlobalNotificationPanel';
-import { initializeNotificationHandlers, setupAndroidNotificationChannel, handleNotificationNavigation, NotificationData } from "@/lib/NotificationService";
+import { initializeNotificationHandlers, setupAndroidNotificationChannel, handleNotificationNavigation, navigateWithRetry, NotificationData } from "@/lib/NotificationService";
 
 function BootRoundResume() {
   const router = useRouter();
@@ -205,22 +208,38 @@ export default function RootLayout() {
 
   // Check for initial notification when app is cold-started from notification tap
   useEffect(() => {
-    console.log('🚀 Checking for initial notification on cold start...');
-    
-    messaging()
-      .getInitialNotification()
-      .then(remoteMessage => {
+    const checkInitialNotification = async () => {
+      console.log('🚀 Checking for initial notification on cold start...');
+      
+      try {
+        const remoteMessage = await messaging().getInitialNotification();
+        
         if (remoteMessage && remoteMessage.data) {
           console.log('🎯 Found initial notification on cold start:', remoteMessage.data);
-          // Give router a moment to be ready
-          setTimeout(() => {
-            handleNotificationNavigation(router, remoteMessage.data as NotificationData);
-          }, 1000);
+          
+          // Give router multiple attempts to be ready, with increasing delays
+          for (let i = 0; i < 3; i++) {
+            await new Promise(resolve => setTimeout(resolve, 500 + i * 300));
+            try {
+              handleNotificationNavigation(router, remoteMessage.data as NotificationData);
+              console.log('✅ Navigation from cold start notification successful');
+              break;
+            } catch (navErr) {
+              console.warn(`⚠️ Navigation attempt ${i + 1} failed:`, navErr);
+              if (i === 2) {
+                console.error('❌ All navigation attempts failed');
+              }
+            }
+          }
         } else {
           console.log('ℹ️ No initial notification on cold start');
         }
-      })
-      .catch(err => console.error('❌ Error checking initial notification:', err));
+      } catch (err) {
+        console.error('❌ Error checking initial notification:', err);
+      }
+    };
+    
+    checkInitialNotification();
   }, [router]);
 
   return (

@@ -21,6 +21,33 @@ async function createNotificationChannel() {
   }
 }
 
+/**
+ * Request user permission for push notifications (both OS-level and FCM)
+ * This follows the pattern from Firebase FCM v1 setup guide
+ */
+async function requestUserPermission() {
+  console.log('📝 Requesting user permission for push notifications...');
+  
+  try {
+    // Request FCM messaging permission (iOS-specific but harmless on Android)
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+    if (enabled) {
+      console.log('✅ FCM Authorization status:', authStatus);
+      return true;
+    } else {
+      console.warn('⚠️ FCM messaging permission not granted');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error requesting FCM permission:', error);
+    return false;
+  }
+}
+
 export async function registerForPushNotificationsAsync(userId) {
   console.log('🔔 === REGISTERING FOR FCM PUSH NOTIFICATIONS ===');
 
@@ -35,8 +62,12 @@ export async function registerForPushNotificationsAsync(userId) {
   }
 
   try {
-    // STEP 0: Request OS notification permission (Android 13+)
-    console.log('📝 Step 0: Requesting OS notification permission...');
+    // STEP 0: Create notification channel FIRST (Android requirement for API 26+)
+    // This must happen before requesting permissions or getting tokens
+    await createNotificationChannel();
+
+    // STEP 1: Request OS notification permission (Android 13+)
+    console.log('📝 Step 1: Requesting OS notification permission...');
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     if (existingStatus !== 'granted') {
@@ -48,24 +79,16 @@ export async function registerForPushNotificationsAsync(userId) {
       return null;
     }
 
-    // STEP 0: Create notification channel (Android requirement for API 26+)
-    await createNotificationChannel();
-
-    // STEP 1: Request FCM messaging permission
-    console.log('📝 Step 1: Requesting FCM messaging permission...');
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-
-    if (!enabled) {
+    // STEP 2: Request FCM messaging permission using the dedicated function
+    console.log('📝 Step 2: Requesting FCM messaging permission...');
+    const hasPermission = await requestUserPermission();
+    if (!hasPermission) {
       console.warn('⚠️ FCM messaging permission not granted');
       return null;
     }
-    console.log('✅ FCM messaging permission granted:', authStatus);
 
-    // STEP 2: Get FCM registration token
-    console.log('📝 Step 2: Getting FCM registration token...');
+    // STEP 3: Get FCM registration token
+    console.log('📝 Step 3: Getting FCM registration token...');
     const token = await messaging().getToken();
 
     if (!token) {
@@ -75,7 +98,7 @@ export async function registerForPushNotificationsAsync(userId) {
 
     console.log("✅ Obtained FCM token:", token.substring(0, 40) + '...');
 
-    // STEP 3: Save token to Supabase
+    // STEP 4: Save token to Supabase
     console.log('📝 Step 3: Saving FCM token to Supabase...');
     console.log('📤 Updating profiles table:', {
       table: 'profiles',

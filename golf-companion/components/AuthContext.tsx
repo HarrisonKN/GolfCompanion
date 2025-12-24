@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { supabase } from "@/components/supabase";
+import { trackLogin, trackLogout } from "@/lib/analytics";
 
 interface AuthContextType {
   user: any;
@@ -77,11 +78,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(session.user);
         await SecureStore.setItemAsync("supabase_access_token", session.access_token);
         await SecureStore.setItemAsync("supabase_refresh_token", session.refresh_token);
+        
+        // Track login event in Firebase Analytics
+        await trackLogin(session.user.id, "email");
       } else if (event === "SIGNED_OUT") {
         console.log("🔴 Signed out — clearing session");
         setUser(null);
         await SecureStore.deleteItemAsync("supabase_access_token");
         await SecureStore.deleteItemAsync("supabase_refresh_token");
+        
+        // Track logout event in Firebase Analytics
+        await trackLogout();
       }
     });
     return () => listener.subscription.unsubscribe();
@@ -89,6 +96,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = async () => {
     console.log("Signing out...");
+    await trackLogout();
     await supabase.auth.signOut();
     await SecureStore.deleteItemAsync("supabase_access_token");
     await SecureStore.deleteItemAsync("supabase_refresh_token");

@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { supabase, testSupabaseConnection } from '@/components/supabase';
 import * as SecureStore from 'expo-secure-store';
 import { registerForPushNotificationsAsync } from '@/lib/PushNotifications';
+import { trackSignup } from '@/lib/analytics';
 
 // ------------------- SIGNUP LOGIC -------------------------
 export default function SignupScreen() {
@@ -73,6 +74,9 @@ export default function SignupScreen() {
       }
 
       console.log('✅ Auth user created:', userId);
+
+      // Track signup event in Firebase Analytics
+      await trackSignup(userId, 'email');
 
       // 2. Check if profile already exists to avoid duplicates
       console.log('📝 Step 2: Checking if profile exists...');

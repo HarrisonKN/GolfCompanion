@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "10951197248",
+    "project_id": "golfcompanion-465805",
+    "storage_bucket": "golfcompanion-465805.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:10951197248:android:b162e48fdf481fb2a555a5",
+        "android_client_info": {
+          "package_name": "com.anonymous.golfcompanion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDc_Fjev9H5OlUY228wrGz8q4x2y_kMX4k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

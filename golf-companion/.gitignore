@@ -40,5 +40,4 @@ yarn-error.*
 app-example
 
 # Expo
-/android
 /ios

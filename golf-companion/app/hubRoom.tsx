@@ -487,7 +487,7 @@ export default function HubRoomScreen() {
             ]}
             hitSlop={10}
           >
-            <Ionicons name="chevron-back" size={28} color={palette.primary} />
+            <Ionicons name="chevron-back" size={28} color={palette.shadow} />
           </Pressable>
           <Pressable 
             onPress={handleGroupInfoPress}
@@ -508,7 +508,7 @@ export default function HubRoomScreen() {
             ]}
             hitSlop={10}
           >
-            <Ionicons name="information-circle" size={26} color={palette.primary} />
+            <Ionicons name="information-circle" size={26} color={palette.shadow} />
           </Pressable>
         </View>
       </View>
@@ -898,20 +898,18 @@ const styles = (palette: any) => StyleSheet.create({
   headerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: palette.white,
+    backgroundColor: palette.primary,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.grey,
   },
   headerText: {
     fontSize: 20,
     fontWeight: '700',
-    color: palette.primary,
+    color: palette.text,
   },
   headerSubtext: {
     fontSize: 12,
-    color: palette.textLight,
+    color: palette.text,
     marginTop: 2,
   },
   backButton: {
@@ -923,7 +921,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   backButtonText: {
     fontSize: 20,
-    color: palette.primary,
+    color: palette.text,
     fontWeight: 'bold',
   },
   infoButton: {
@@ -1113,12 +1111,12 @@ const styles = (palette: any) => StyleSheet.create({
     fontSize: 16,
   },
   groupInfoModal: {
-    backgroundColor: palette.white,
+    backgroundColor: palette.secondary,
     borderRadius: 20,
     width: '95%',
     maxHeight: '85%',
     elevation: 4,
-    shadowColor: palette.primary,
+    shadowColor: palette.shadow,
     shadowOpacity: 0.15,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -1141,7 +1139,7 @@ const styles = (palette: any) => StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: palette.background,
+    backgroundColor: palette.shadow,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1176,7 +1174,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   infoValue: {
     fontSize: 14,
-    color: palette.textDark,
+    color: palette.text,
     flex: 1,
   },
   membersList: {
@@ -1209,16 +1207,16 @@ const styles = (palette: any) => StyleSheet.create({
   memberName: {
     fontSize: 16,
     fontWeight: '600',
-    color: palette.textDark,
+    color: palette.text,
   },
   memberEmail: {
     fontSize: 12,
-    color: palette.textLight,
+    color: palette.text,
     marginTop: 2,
   },
   memberJoined: {
     fontSize: 11,
-    color: palette.textLight,
+    color: palette.text,
     marginTop: 2,
   },
   creatorBadge: {
@@ -1302,7 +1300,7 @@ const styles = (palette: any) => StyleSheet.create({
     elevation: 2,
   },
   voiceMembersCard: {
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     marginHorizontal: 12,
     marginBottom: 10,
     paddingHorizontal: 14,

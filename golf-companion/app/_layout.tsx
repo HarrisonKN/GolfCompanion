@@ -248,58 +248,58 @@ export default function RootLayout() {
         <ThemeProvider>
           <AuthProvider>
             <BootRoundResume />
-            <SpotifyProvider>
-              <VoiceProvider>
-              {/* Notification Banner */}
-              {notification && (
-                <Animated.View
-                  style={[
-                    notificationStyles.banner,
-                    {
-                      transform: [{ translateY: slideAnim }],
-                    },
-                  ]}
-                >
-                  <Pressable
-                    onPress={handleBannerTap}
-                    style={notificationStyles.bannerContent}
+              <SpotifyProvider>
+                <VoiceProvider>
+                {/* Notification Banner */}
+                {notification && (
+                  <Animated.View
+                    style={[
+                      notificationStyles.banner,
+                      {
+                        transform: [{ translateY: slideAnim }],
+                      },
+                    ]}
                   >
-                    <View style={notificationStyles.textContainer}>
-                      <Text style={notificationStyles.title} numberOfLines={1}>
-                        {notification.title}
-                      </Text>
-                      <Text style={notificationStyles.body} numberOfLines={2}>
-                        {notification.body}
-                      </Text>
-                    </View>
                     <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        hideNotificationBanner();
-                      }}
-                      style={notificationStyles.closeButton}
+                      onPress={handleBannerTap}
+                      style={notificationStyles.bannerContent}
                     >
-                      <Text style={notificationStyles.closeText}>✕</Text>
+                      <View style={notificationStyles.textContainer}>
+                        <Text style={notificationStyles.title} numberOfLines={1}>
+                          {notification.title}
+                        </Text>
+                        <Text style={notificationStyles.body} numberOfLines={2}>
+                          {notification.body}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          hideNotificationBanner();
+                        }}
+                        style={notificationStyles.closeButton}
+                      >
+                        <Text style={notificationStyles.closeText}>✕</Text>
+                      </Pressable>
                     </Pressable>
-                  </Pressable>
-                </Animated.View>
-              )}
-              
-              <Stack>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="login" options={{ headerShown: false }} />
-                <Stack.Screen name="signup" options={{ headerShown: false }} />
-                <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
-                <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
-                <Stack.Screen name="startGame" options={{ headerShown: false }} />
-                <Stack.Screen name="gameModes" options={{ headerShown: false }} />
-                <Stack.Screen name="settings" options={{ headerShown: false }} />
-                <Stack.Screen name="+not-found" />
-              </Stack>
-              <GlobalNotificationPanel />
-              <GlobalVoiceBar />
-              <StatusBar style="auto" />
-            </VoiceProvider>
+                  </Animated.View>
+                )}
+                
+                <Stack>
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="login" options={{ headerShown: false }} />
+                  <Stack.Screen name="signup" options={{ headerShown: false }} />
+                  <Stack.Screen name="hubRoom" options={{ headerShown: false }} />
+                  <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
+                  <Stack.Screen name="startGame" options={{ headerShown: false }} />
+                  <Stack.Screen name="gameModes" options={{ headerShown: false }} />
+                  <Stack.Screen name="settings" options={{ headerShown: false }} />
+                  <Stack.Screen name="+not-found" />
+                </Stack>
+                <GlobalNotificationPanel />
+                <GlobalVoiceBar />
+                <StatusBar style="auto" />
+              </VoiceProvider>
             </SpotifyProvider>
           </AuthProvider>
         </ThemeProvider>

@@ -201,12 +201,12 @@ export default function FriendProfileScreen() {
           Golf Stats
         </ThemedText>
         <View style={styles(palette).statsGrid}>
-          <StatTile label="Handicap" value={profile.handicap?.toFixed(1) ?? 'N/A'} />
-          <StatTile label="Rounds" value={profile.rounds_played?.toString() ?? 'N/A'} />
-          <StatTile label="Avg Score" value={profile.average_score?.toFixed(1) ?? 'N/A'} />
-          <StatTile label="Best Score" value={profile.best_score?.toString() ?? 'N/A'} />
-          <StatTile label="Fairways Hit" value={profile.fairways_hit?.toString() ?? 'N/A'} />
-          <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
+          <StatTile label="Handicap" value={profile.handicap != null ? profile.handicap.toFixed(1) : 'N/A'} />
+          <StatTile label="Rounds" value={profile.rounds_played != null ? String(profile.rounds_played) : 'N/A'} />
+          <StatTile label="Avg Score" value={profile.average_score != null ? profile.average_score.toFixed(1) : 'N/A'} />
+          <StatTile label="Best Score" value={profile.best_score != null ? String(profile.best_score) : 'N/A'} />
+          <StatTile label="Fairways Hit" value={profile.fairways_hit != null ? String(profile.fairways_hit) : 'N/A'} />
+          <StatTile label="Putts/Round" value={profile.putts_per_round != null ? String(profile.putts_per_round) : 'N/A'} />
         </View>
       </View>
 

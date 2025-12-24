@@ -127,6 +127,9 @@ export default function Scorecard() {
     }
   }, [gameId]);
 
+  console.log("🧾 SCORECARD PARAMS gameId:", gameId);
+  console.log("🧾 SCORECARD PARAMS courseId:", courseId);
+
   const normalizedGameMode = Array.isArray(gameMode) ? gameMode[0] : gameMode;
   const { matchPlayType } = useLocalSearchParams();
   const normalizedMatchPlayType = Array.isArray(matchPlayType) ? matchPlayType[0] : matchPlayType;
@@ -157,6 +160,8 @@ export default function Scorecard() {
     const gid = Array.isArray(gameId) ? gameId[0] : gameId;
     if (!gid) return;
 
+    console.log("🎬 participants effect fired. raw gameId:", gameId, "gid:", gid);
+
     setForceGameParticipantLoad(true);
     console.log("🔵 Loading participants for game:", gid);
 
@@ -164,7 +169,7 @@ export default function Scorecard() {
       // Ensure we have the correct course selected for this game
       try {
         const { data: gameRow, error: gameErr } = await supabase
-          .from("games")
+          .from("golf_rounds")
           .select("course_id")
           .eq("id", gid)
           .single();
@@ -204,6 +209,9 @@ export default function Scorecard() {
         console.warn("Failed to load participant profiles", pErr);
         return;
       }
+
+      console.log("participants returned:", participants?.length, participants);
+      console.log("profiles returned:", profiles?.length, profiles);
 
       const rows: PlayerRow[] = (profiles || []).map(p => ({
         id: p.id,
@@ -406,6 +414,9 @@ useEffect(() => {
     React.useCallback(() => {
       if (!user || !selectedCourse || isNewGame || forceGameParticipantLoad) return;
       (async () => {
+        // ⛔ Skip legacy single-user fetch when resuming a multiplayer round
+        if (gameId) return;
+
         const { data: scoreData, error: fetchError } = await supabase
           .from('scores')
           .select('hole_number, score, putts')
@@ -429,7 +440,7 @@ useEffect(() => {
           return [{ ...existing, scores: merged }, ...prev.slice(1)];
         });
       })();
-    }, [user, selectedCourse, isNewGame, forceGameParticipantLoad])
+    }, [user, selectedCourse, isNewGame, forceGameParticipantLoad, gameId])
   );
 
   //------REFRESH PAR VALUES ON PAGE REFRESH FOR ADDNG COURSES --------
@@ -605,7 +616,7 @@ useEffect(() => {
           setTeamScores(initial);
         })();
       } else {
-        // Stroke/solo mode: sync per-player scores using player_id
+        // Stroke/solo mode: sync per-player scores
         if (players.length === 0) return;
 
         (async () => {
@@ -618,12 +629,24 @@ useEffect(() => {
             return;
           }
 
-          const { data: scoreData, error: fetchError } = await supabase
+          // --- Unified, round-aware version ---
+          const gid = Array.isArray(gameId) ? gameId[0] : gameId;
+
+          const query = supabase
             .from('scores')
             .select('player_id, hole_number, score, putts')
-            .in('player_id', playerIdsList as string[])
-            .eq('course_id', selectedCourse)
             .order('hole_number');
+
+          if (gid) {
+            // ✅ RESUME MODE: fetch ALL players for this round
+            query.eq('game_id', gid);
+          } else {
+            // ✅ SOLO / LEGACY MODE
+            query.in('player_id', playerIdsList as string[]);
+            query.eq('course_id', selectedCourse);
+          }
+
+          const { data: scoreData, error: fetchError } = await query;
 
           if (fetchError) {
             console.error('Error fetching scores', fetchError);
@@ -631,7 +654,6 @@ useEffect(() => {
           }
 
           if (!scoreData || scoreData.length === 0) return;
-
           setPlayers(prev => {
             const updated = prev.map(p => ({ ...p, scores: [...p.scores] }));
 

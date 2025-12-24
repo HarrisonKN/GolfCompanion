@@ -12,8 +12,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { PALETTES } from '@/constants/theme';
 import { getAppVersion, getBuildInfo } from '@/utils/version';
 import * as ImagePicker from 'expo-image-picker';
-import { decode as atob } from 'base-64';
-import * as FileSystem from 'expo-file-system';
 import { TestNotifications } from '@/components/TestNotifications';
 import Toast from 'react-native-toast-message';
 import { notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/NotificationTriggers';
@@ -158,7 +156,6 @@ export default function AccountsScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.7,
-      base64: true,
     });
 
     if (pickerResult.canceled || !pickerResult.assets?.length) {
@@ -169,8 +166,26 @@ export default function AccountsScreen() {
     const image = pickerResult.assets[0];
     console.log("Selected image:", image);
 
-    const fileExt = image.uri.split('.').pop();
-    const filePath = `${user.id}.${fileExt}`;
+    // Figure out extension + content-type reliably (screenshots are often PNG)
+    const inferredExtRaw = (image.uri.split('.').pop() || '').toLowerCase();
+    const inferredExt = inferredExtRaw && inferredExtRaw.length <= 5 ? inferredExtRaw : '';
+
+    const inferredMime = (image as any).mimeType ? String((image as any).mimeType) : '';
+    let ext = 'jpg';
+    let contentType = 'image/jpeg';
+
+    if (inferredMime.includes('png') || inferredExt === 'png') {
+      ext = 'png';
+      contentType = 'image/png';
+    } else if (inferredMime.includes('webp') || inferredExt === 'webp') {
+      ext = 'webp';
+      contentType = 'image/webp';
+    } else if (inferredMime.includes('jpg') || inferredMime.includes('jpeg') || inferredExt === 'jpg' || inferredExt === 'jpeg') {
+      ext = 'jpg';
+      contentType = 'image/jpeg';
+    }
+
+    const filePath = `${user.id}.${ext}`;
 
     try {
       // Debug logging before upload call
@@ -189,21 +204,26 @@ export default function AccountsScreen() {
         }
       }
 
-      // Direct file upload using file URI
-      const contentType = image.mimeType ?? `image/${fileExt}`;
+      // Upload as bytes (ArrayBuffer) to avoid black/corrupted images from content:// URIs
       const fileUri = image.uri;
+      console.log("Uploading avatar as bytes from URI:", fileUri, "->", filePath, contentType);
 
-      console.log("Uploading file to Supabase from URI:", fileUri);
+      let arrayBuffer: ArrayBuffer;
+      try {
+        const res = await fetch(fileUri);
+        arrayBuffer = await res.arrayBuffer();
+      } catch (e) {
+        console.error('Failed to read image bytes from URI:', fileUri, e);
+        Alert.alert('Upload failed', 'Could not read the selected image. Please try a different image.');
+        return;
+      }
 
       const result = await supabase.storage
-        .from("avatars")
-        .upload(filePath, {
-          uri: fileUri,
-          type: contentType,
-          name: filePath,
-        } as any, {
+        .from('avatars')
+        .upload(filePath, arrayBuffer, {
           upsert: true,
           contentType,
+          cacheControl: '3600',
         });
 
       if (result.error) {
@@ -1421,7 +1441,9 @@ const inviteChannel = supabase
                 <ThemedText style={styles(palette).inviteTitle}>Group Invitation</ThemedText>
               </View>
               <ThemedText style={styles(palette).inviteMessage}>
-                You've been invited to join "{invite.voice_groups?.name || 'a group'}"
+                {"You've been invited to join \""}
+                {invite.voice_groups?.name || 'a group'}
+                {"\""}
               </ThemedText>
               <View style={styles(palette).inviteActions}>
                 <Pressable

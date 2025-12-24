@@ -1834,7 +1834,31 @@ const refreshScoreboard = React.useCallback(async () => {
                 setStepPromptConfirm(() => async () => {
                   setShowStepConfirm(false);
                   setStepPromptMessage(null);
-                  // Stop sharing location by clearing the user's friend location
+
+                  // Resolve gameId
+                  let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+                  if (!gid) {
+                    const raw = await AsyncStorage.getItem("currentGamePlayers");
+                    if (raw) {
+                      try { gid = JSON.parse(raw)?.gameId; } catch {}
+                    }
+                  }
+
+                  // ✅ Mark round as completed
+                  if (gid) {
+                    const { error: roundErr } = await supabase
+                      .from("golf_rounds")
+                      .update({ status: "completed" })
+                      .eq("id", gid);
+
+                    if (roundErr) {
+                      console.warn("Failed to mark round completed:", roundErr);
+                    } else {
+                      console.log("🏁 Round marked as completed:", gid);
+                    }
+                  }
+
+                  // Stop sharing location
                   if (user?.id) {
                     const { error: flErr } = await supabase
                       .from("friend_locations")
@@ -1844,13 +1868,18 @@ const refreshScoreboard = React.useCallback(async () => {
                       console.warn("Error clearing friend location", flErr);
                     }
                   }
-                  if (user?.id && selectedCourse) {
+
+                  // Navigate to scorecard
+                  if (selectedCourse) {
                     router.push({
-                      pathname: "/scorecard",
-                      params: { playerId: user.id, courseId: selectedCourse },
+                      pathname: "/(tabs)/scorecard",
+                      params: {
+                        gameId: gid ?? undefined,
+                        courseId: selectedCourse,
+                      },
                     });
                   } else {
-                    showMessage("Missing user or course to show scorecard.");
+                    showMessage("Missing course to show scorecard.");
                   }
                 });
                 setStepPromptCancel(() => () => {

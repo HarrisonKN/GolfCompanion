@@ -157,6 +157,7 @@ export default function StartGameScreen() {
       if (!error && data) {
         const mapped = data.map((course) => ({
           label: course.name,
+        
           value: course.id,
         }));
         setCourseItems([{ label: "➕ Add a course", value: "add_course" }, ...mapped]);
@@ -368,6 +369,33 @@ export default function StartGameScreen() {
     }
 
     console.log("✅ Game created with ID:", gid);
+
+    // 🆕 Create an ACTIVE golf_rounds row at game start (for resume / crash recovery)
+    try {
+      const courseName =
+        courseItems.find((c: any) => c.value === course)?.label ?? 'Unknown course';
+
+      const { error: roundError } = await supabase
+        .from('golf_rounds')
+        .insert({
+          id: gid, // 🔑 IMPORTANT: use game_id as round_id
+          user_id: user.id,
+          course_id: course,
+          course_name: courseName,
+          status: 'active',
+          score: null,
+          date: new Date().toISOString().split('T')[0],
+         // current_hole: 1,
+        });
+
+      if (roundError) {
+        console.warn('⚠️ Failed to create active golf_round:', roundError);
+      } else {
+        console.log('✅ Active golf_round created');
+      }
+    } catch (e) {
+      console.warn('⚠️ Unexpected error creating golf_round:', e);
+    }
 
     // 🆕 Insert participants into game_participantsv2 for invites/accepted tracking
     try {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mully",
     "slug": "golf-companion",
-    "version": "1.0.119",
+    "version": "1.0.120",
     "orientation": "portrait",
     "icon": "./assets/images/MullyLogoCircle.png",
     "assetBundlePatterns": [
@@ -13,16 +13,17 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "119",
+      "buildNumber": "120",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice chat.",
         "NSCameraUsageDescription": "This app may need access to your camera for video features.",
-        "NSPhotoLibraryUsageDescription": "This app may need access to your photo library."
+        "NSPhotoLibraryUsageDescription": "This app may need access to your photo library.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
-      "versionCode": 119,
+      "versionCode": 120,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/MullyLogoCircle.png",
         "backgroundColor": "#003b23"
@@ -100,7 +101,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f1e2b1b6-cf14-4bd6-8b9f-c1d4f9e17203"
+        "projectId": "02cabf4b-6e9e-4f3d-a17d-fdf7f8206563"
       },
       "supabaseUrl": "https://emgqdjhbmkjepbjdpnmh.supabase.co",
       "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtZ3FkamhibWtqZXBiamRwbm1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIwMzIyMDAsImV4cCI6MjA2NzYwODIwMH0.9HuTa44l_E_NTOpgOSIpe8LKnZEi_sjaOSbMVjU3NLc"

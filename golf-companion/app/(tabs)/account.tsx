@@ -86,6 +86,16 @@ export default function AccountsScreen() {
   const [showTestNotifications, setShowTestNotifications] = useState(false);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loadingAchievements, setLoadingAchievements] = useState(true);
+  const [userStats, setUserStats] = useState<{
+    rounds_count?: number;
+    avg_score?: number;
+    best_score?: number;
+    fairways_avg?: number;
+    putts_avg?: number;
+    last_round_course_name?: string | null;
+    last_round_date?: string | null;
+    last_round_score?: number | null;
+  } | null>(null);
   
   // Golf Gear State
   const [golfGear, setGolfGear] = useState<GolfGearItem[]>([]);
@@ -385,6 +395,26 @@ export default function AccountsScreen() {
     }
   };
 
+  const fetchUserStats = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_golf_stats')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      if (error) {
+        console.warn('Stats view fetch warning:', error.message);
+        safeSetState(setUserStats, null);
+      } else {
+        safeSetState(setUserStats, data || null);
+      }
+    } catch (err) {
+      console.error('User stats fetch error:', err);
+      safeSetState(setUserStats, null);
+    }
+  };
+
   const openScorecardModal = (scorecardStr: string) => {
     try {
       const scorecard = JSON.parse(scorecardStr);
@@ -421,6 +451,7 @@ export default function AccountsScreen() {
       if (user && isMounted) {
         fetchProfile();
         fetchRounds();
+        fetchUserStats();
       }
     }, [user, authLoading, isMounted])
   );
@@ -871,6 +902,41 @@ const inviteChannel = supabase
   const { fullDisplayVersion } = getAppVersion();
   const buildInfo = getBuildInfo();
 
+  // --- Derived Golf Stats (fallbacks from round history) ---
+  const fmtNumber = (value: number | null | undefined, digits?: number) => {
+    if (value == null || Number.isNaN(value)) return 'N/A';
+    return typeof digits === 'number' ? value.toFixed(digits) : String(value);
+  };
+
+  const roundsCount = Array.isArray(rounds) ? rounds.length : 0;
+  const scoreVals = (Array.isArray(rounds) ? rounds : [])
+    .map((r: any) => Number(r?.score))
+    .filter((v) => Number.isFinite(v));
+  const fairwaysVals = (Array.isArray(rounds) ? rounds : [])
+    .map((r: any) => Number(r?.fairways_hit))
+    .filter((v) => Number.isFinite(v));
+  const puttsVals = (Array.isArray(rounds) ? rounds : [])
+    .map((r: any) => Number(r?.putts))
+    .filter((v) => Number.isFinite(v));
+
+  const avgScoreDerived = scoreVals.length
+    ? scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length
+    : null;
+  const bestScoreDerived = scoreVals.length ? Math.min(...scoreVals) : null;
+  const fairwaysAvgDerived = fairwaysVals.length
+    ? fairwaysVals.reduce((a, b) => a + b, 0) / fairwaysVals.length
+    : null;
+  const puttsAvgDerived = puttsVals.length
+    ? puttsVals.reduce((a, b) => a + b, 0) / puttsVals.length
+    : null;
+
+  const handicapVal = typeof profile.handicap === 'number' ? profile.handicap : null;
+  const roundsPlayedVal = profile.rounds_played ?? userStats?.rounds_count ?? roundsCount;
+  const avgScoreVal = profile.average_score ?? userStats?.avg_score ?? avgScoreDerived;
+  const bestScoreVal = (profile as any).best_score ?? userStats?.best_score ?? bestScoreDerived;
+  const fairwaysHitVal = (profile as any).fairways_hit ?? userStats?.fairways_avg ?? fairwaysAvgDerived;
+  const puttsPerRoundVal = (profile as any).putts_per_round ?? userStats?.putts_avg ?? puttsAvgDerived;
+
 // ------------------- ACCOUNTS UI -------------------------
   return (
     <>
@@ -968,12 +1034,12 @@ const inviteChannel = supabase
         Golf Stats
       </ThemedText>
       <View style={styles(palette).statsGrid}>
-        <StatTile label="Handicap" value={profile.handicap != null ? profile.handicap.toFixed(1) : 'N/A'} />
-        <StatTile label="Rounds" value={profile.rounds_played != null ? profile.rounds_played.toString() : 'N/A'} />
-        <StatTile label="Avg Score" value={profile.average_score != null ? profile.average_score.toFixed(1) : 'N/A'} />
-        <StatTile label="Best Score" value={profile.best_score != null ? profile.best_score.toString() : 'N/A'} />
-        <StatTile label="Fairways Hit" value={profile.fairways_hit != null ? profile.fairways_hit.toString() : 'N/A'} />
-        <StatTile label="Putts/Round" value={profile.putts_per_round != null ? profile.putts_per_round.toString() : 'N/A'} />
+        <StatTile label="Handicap" value={fmtNumber(handicapVal, 1)} />
+        <StatTile label="Rounds" value={String(roundsPlayedVal)} />
+        <StatTile label="Avg Score" value={fmtNumber(avgScoreVal, 1)} />
+        <StatTile label="Best Score" value={fmtNumber(bestScoreVal)} />
+        <StatTile label="Fairways Hit" value={fmtNumber(fairwaysHitVal, 1)} />
+        <StatTile label="Putts/Round" value={fmtNumber(puttsPerRoundVal, 1)} />
       </View>
 
       {/* Performance Charts - New Section */}

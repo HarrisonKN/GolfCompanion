@@ -22,6 +22,8 @@ import { PALETTES } from '@/constants/theme';
 import { useTheme } from '@/components/ThemeContext';
 import { sendNotificationToMultipleUsers } from "@/lib/sendNotification";
 import { notifyGameInvite } from '@/lib/NotificationTriggers';
+import { ShotTracker } from '@/components/ShotTracker';
+import { updateTournamentScoresAfterRound } from '@/lib/TournamentService';
 
 const COMPACT_H = 36;
 
@@ -146,6 +148,10 @@ export default function StartGameScreen() {
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteResults, setInviteResults] = useState<any[]>([]);
   const [inviteSearching, setInviteSearching] = useState(false);
+
+  // New state variables for current round and hole
+  const [currentRound, setCurrentRound] = useState<{ id: string } | null>(null);
+  const [currentHole, setCurrentHole] = useState<number>(1);
 
   // Fetch courses from Supabase
   useEffect(() => {
@@ -369,9 +375,32 @@ export default function StartGameScreen() {
 
     console.log("✅ Game created with ID:", gid);
 
+    // 🆕 Insert participants into game_participantsv2 for invites/accepted tracking
+    try {
+      const participantRows = ids.map((pid) => ({
+        game_id: gid as string,
+        user_id: pid,
+        role: "player",
+        status: pid === user.id ? "accepted" : "invited",
+      }));
+
+      const { error: gpError } = await supabase
+        .from("game_participantsv2")
+        .insert(participantRows);
+
+      if (gpError) {
+        console.warn("⚠️ Failed to insert into game_participantsv2:", gpError);
+      } else {
+        console.log("✅ game_participantsv2 rows inserted:", participantRows);
+      }
+    } catch (e) {
+      console.warn("⚠️ Unexpected error inserting game_participantsv2:", e);
+    }
+
     await AsyncStorage.setItem('currentGamePlayers', JSON.stringify({ ids, course, gameId: gid }));
 
     await startSharingLocation(course as string, 1);
+
 
     // 🆕 GET THE COURSE NAME FOR THE NOTIFICATION
     const courseName = courseItems.find((c: any) => c.value === course)?.label || 'a course';
@@ -409,6 +438,24 @@ export default function StartGameScreen() {
         newGame: '1',
       },
     });
+  };
+
+  // Add this function to handle round completion
+  const handleRoundComplete = async () => {
+    // ... your existing round save logic ...
+    
+    const { data: savedRound, error } = await supabase
+      .from('golf_rounds')
+      .insert({ /* round data */ })
+      .select()
+      .single();
+
+    if (!error && savedRound) {
+      // Update tournament scores automatically
+      await updateTournamentScoresAfterRound(savedRound.id);
+      
+      console.log('✅ Round saved and tournament scores updated!');
+    }
   };
 
 return (
@@ -694,6 +741,11 @@ return (
         >
           <Text style={styles(palette).beginButtonText}>Next</Text>
         </TouchableOpacity>
+
+        {/* Shot Tracker - Only show if currentRound is available */}
+        {currentRound && (
+          <ShotTracker roundId={currentRound.id} hole={currentHole} />
+        )}
         </View>
       </View>
     </ScrollView>

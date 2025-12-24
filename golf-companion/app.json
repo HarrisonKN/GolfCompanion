@@ -2,11 +2,7 @@
   "expo": {
     "name": "Mully",
     "slug": "golf-companion",
-<<<<<<< HEAD
-    "version": "1.0.106",
-=======
     "version": "1.0.108",
->>>>>>> 501d4c15cf455c762fad2527cb61c60d5b1288ce
     "orientation": "portrait",
     "icon": "./assets/images/MullyLogoCircle.png",
     "assetBundlePatterns": [
@@ -17,11 +13,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-<<<<<<< HEAD
-      "buildNumber": "108",
-=======
       "buildNumber": "110",
->>>>>>> 501d4c15cf455c762fad2527cb61c60d5b1288ce
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice chat.",
         "NSCameraUsageDescription": "This app may need access to your camera for video features.",
@@ -30,11 +22,7 @@
       "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
-<<<<<<< HEAD
-      "versionCode": 107,
-=======
       "versionCode": 109,
->>>>>>> 501d4c15cf455c762fad2527cb61c60d5b1288ce
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/MullyLogoCircle.png",
         "backgroundColor": "#003b23"

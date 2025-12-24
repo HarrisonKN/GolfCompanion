@@ -12,11 +12,14 @@ type FriendProfile = {
   email: string | null;
   avatar_url: string | null;
   handicap: number | null;
-  rounds_played: number | null;
-  average_score: number | null;
+};
+
+type FriendStats = {
+  rounds_count: number | null;
+  avg_score: number | null;
   best_score: number | null;
-  fairways_hit: number | null;
-  putts_per_round: number | null;
+  fairways_avg: number | null;
+  putts_avg: number | null;
   last_round_course_name: string | null;
   last_round_date: string | null;
   last_round_score: number | null;
@@ -40,9 +43,11 @@ export default function FriendProfileScreen() {
   }>();
   
   const [profile, setProfile] = useState<FriendProfile | null>(null);
+  const [stats, setStats] = useState<FriendStats | null>(null);
   const [rounds, setRounds] = useState<RoundHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { palette } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -55,40 +60,77 @@ export default function FriendProfileScreen() {
         throw new Error('Not authenticated');
       }
 
-      // Verify friendship before fetching profile
-      const { data: friendship, error: friendshipError } = await supabase
+      // Verify friendship before fetching profile - try both table structures
+      let isFriend = false;
+
+      // Try symmetrical friendships table first
+      const { data: friendships } = await supabase
         .from('friendships')
         .select('id')
         .or(`and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`)
-        .single();
+        .eq('status', 'accepted');
 
-      if (friendshipError || !friendship) {
-        console.error('Not friends with this user');
-        throw new Error('Access denied');
+      if (Array.isArray(friendships) && friendships.length > 0) {
+        isFriend = true;
+      } else {
+        // Fallback to one-way friends table
+        const { data: friendRecord } = await supabase
+          .from('friends')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('friend_id', friendId);
+
+        if (Array.isArray(friendRecord) && friendRecord.length > 0) {
+          isFriend = true;
+        }
       }
 
-      // Then fetch profile
+      // If friendship verification fails, try to fetch profile anyway
+      // The RLS policies on profiles table will enforce access control
+      if (!isFriend) {
+        console.warn('Could not verify friendship, attempting to fetch profile with RLS enforcement...');
+      }
+
+      // Then fetch profile (only basic columns that exist in profiles table)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select(`
           full_name,
           email,
           avatar_url,
-          handicap,
-          rounds_played,
-          average_score,
-          best_score,
-          fairways_hit,
-          putts_per_round,
-          last_round_course_name,
-          last_round_date,
-          last_round_score
+          handicap
         `)
         .eq('id', friendId)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        if (profileError.code === 'PGRST116') {
+          // No rows returned
+          throw new Error('Profile not found');
+        }
+        throw profileError;
+      }
       setProfile(profileData);
+
+      // Fetch computed stats from user_golf_stats view
+      const { data: statsData } = await supabase
+        .from('user_golf_stats')
+        .select(`
+          rounds_count,
+          avg_score,
+          best_score,
+          fairways_avg,
+          putts_avg,
+          last_round_course_name,
+          last_round_date,
+          last_round_score
+        `)
+        .eq('user_id', friendId)
+        .single();
+
+      if (statsData) {
+        setStats(statsData);
+      }
 
       // Fetch friend's recent rounds (limit to 10 for performance)
       const { data: roundsData, error: roundsError } = await supabase
@@ -100,9 +142,15 @@ export default function FriendProfileScreen() {
 
       if (roundsError) throw roundsError;
       setRounds(roundsData || []);
+      setError(null); // Clear error on success
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching friend profile:', error);
+      const errorMessage = error?.message || 'Failed to load profile';
+      setError(errorMessage);
+      setProfile(null);
+      setStats(null);
+      setRounds([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -132,7 +180,9 @@ export default function FriendProfileScreen() {
   if (!profile) {
     return (
       <ThemedView style={[styles(palette).screen, styles(palette).centerContent]}>
-        <ThemedText style={styles(palette).errorText}>Profile not found</ThemedText>
+        <ThemedText style={styles(palette).errorText}>
+          {error || 'Profile not found'}
+        </ThemedText>
         <Pressable onPress={() => router.back()} style={styles(palette).backButton}>
           <ThemedText style={styles(palette).backButtonText}>Go Back</ThemedText>
         </Pressable>
@@ -202,11 +252,11 @@ export default function FriendProfileScreen() {
         </ThemedText>
         <View style={styles(palette).statsGrid}>
           <StatTile label="Handicap" value={profile.handicap != null ? profile.handicap.toFixed(1) : 'N/A'} />
-          <StatTile label="Rounds" value={profile.rounds_played != null ? String(profile.rounds_played) : 'N/A'} />
-          <StatTile label="Avg Score" value={profile.average_score != null ? profile.average_score.toFixed(1) : 'N/A'} />
-          <StatTile label="Best Score" value={profile.best_score != null ? String(profile.best_score) : 'N/A'} />
-          <StatTile label="Fairways Hit" value={profile.fairways_hit != null ? String(profile.fairways_hit) : 'N/A'} />
-          <StatTile label="Putts/Round" value={profile.putts_per_round != null ? String(profile.putts_per_round) : 'N/A'} />
+          <StatTile label="Rounds" value={stats?.rounds_count != null ? String(stats.rounds_count) : 'N/A'} />
+          <StatTile label="Avg Score" value={stats?.avg_score != null ? stats.avg_score.toFixed(1) : 'N/A'} />
+          <StatTile label="Best Score" value={stats?.best_score != null ? String(stats.best_score) : 'N/A'} />
+          <StatTile label="Fairways Hit" value={stats?.fairways_avg != null ? stats.fairways_avg.toFixed(1) : 'N/A'} />
+          <StatTile label="Putts/Round" value={stats?.putts_avg != null ? stats.putts_avg.toFixed(1) : 'N/A'} />
         </View>
       </View>
 
@@ -270,9 +320,7 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: palette.white,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.grey,
+    backgroundColor: palette.primary,
   },
   headerTitle: {
     fontSize: 20,
@@ -302,7 +350,7 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 20,
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     marginVertical: 8,
     marginHorizontal: 16,
     borderRadius: 12,
@@ -332,7 +380,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   profileEmail: {
     fontSize: 16,
-    color: palette.textLight,
+    color: palette.text,
     marginTop: 4,
   },
   section: {
@@ -353,16 +401,18 @@ const styles = (palette: any) => StyleSheet.create({
   },
   statTile: {
     width: SCREEN_WIDTH * 0.28,
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     alignItems: 'center',
-    shadowColor: palette.black,
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    elevation: 6,
   },
   statLabel: {
     fontSize: 12,
@@ -384,7 +434,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   roundTile: {
     width: SCREEN_WIDTH * 0.7,
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     borderRadius: 12,
     padding: 16,
     marginRight: 12,

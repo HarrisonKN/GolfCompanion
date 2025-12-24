@@ -11,10 +11,10 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background, padding: 24 }}>
-      <ThemedText type="title" style={{ marginBottom: 24 }}>Settings</ThemedText>
+      <ThemedText type="title" style={{ marginTop:50, marginBottom: 24,  color: palette.primary }}>Settings</ThemedText>
       
       {/* Theme Section */}
-      <ThemedText style={{ fontWeight: '700', marginBottom: 12, color: palette.textDark }}>
+      <ThemedText style={{ fontWeight: '700', marginBottom: 12, color: palette.shadow }}>
         Theme
       </ThemedText>
       <ScrollView
@@ -50,7 +50,7 @@ export default function SettingsScreen() {
       </ScrollView>
 
       {/* Help & Support Section */}
-      <ThemedText style={{ fontWeight: '700', marginBottom: 12, color: palette.textDark }}>
+      <ThemedText style={{ fontWeight: '700', marginBottom: 12, color: palette.shadow }}>
         Help & Support
       </ThemedText>
       
@@ -84,7 +84,7 @@ const styles = (palette: any) => StyleSheet.create({
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: palette.white,
+    backgroundColor: palette.third,
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,

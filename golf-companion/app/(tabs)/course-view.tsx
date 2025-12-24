@@ -13,6 +13,7 @@ Also changed the finish button to an icon, so that there wasnt such a jump in si
 // ------------------- IMPORTS -------------------------
 import { useAuth } from "@/components/AuthContext";
 import { useCourse } from "@/components/CourseContext";
+import ScoreEntryModal from "@/components/ScoreEntryModal";
 import { supabase, testSupabaseConnection } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as Location from "expo-location";
@@ -1908,106 +1909,77 @@ const refreshScoreboard = React.useCallback(async () => {
       </View>
 
       {/* Player score entry modal */}
-      <Modal visible={scoreModalVisible} transparent animationType="fade">
-        <View style={S.modalContainer}>
-          <View style={S.modalContent}>
-            <Text style={S.modalTitle}>
-              {activePlayer ? `Enter score for ${activePlayer.name}` : "Enter Score"}
-            </Text>
+      <ScoreEntryModal
+        visible={scoreModalVisible}
+        onClose={() => {
+          setScoreModalVisible(false);
+          setActiveTeam(null);
+          setActivePlayer(null);
+        }}
+        score={tempScore}
+        putts={tempPutts}
+        playerName={activePlayer?.name || activeTeam?.name}
+        holeName={selectedHoleNumber ? `Hole ${selectedHoleNumber}` : undefined}
+        onSave={async (score, putts) => {
+          if (!selectedHoleNumber) return;
+          const selectedHole = holes.find(h => h.hole_number === selectedHoleNumber);
+          if (!selectedHole) return;
 
-            <View style={S.statControl}>
-              <Text style={S.statLabel}>Score</Text>
-              <Pressable onPress={() => setTempScore((s) => s + 1)} style={S.button}>
-                <Text style={S.buttonText}>＋</Text>
-              </Pressable>
-              <Text style={S.statValue}>{tempScore}</Text>
-              <Pressable onPress={() => setTempScore((s) => Math.max(0, s - 1))} style={S.button}>
-                <Text style={S.buttonText}>－</Text>
-              </Pressable>
-            </View>
+          // Resolve gameId for game-based scoring
+          let gid = Array.isArray(gameId) ? gameId[0] : gameId;
+          if (!gid) {
+            const raw = await AsyncStorage.getItem('currentGamePlayers');
+            if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
+          }
 
-            <View style={S.statControl}>
-              <Text style={S.statLabel}>Putts</Text>
-              <Pressable onPress={() => setTempPutts((p) => p + 1)} style={S.button}>
-                <Text style={S.buttonText}>＋</Text>
-              </Pressable>
-              <Text style={S.statValue}>{tempPutts}</Text>
-              <Pressable onPress={() => setTempPutts((p) => Math.max(0, p - 1))} style={S.button}>
-                <Text style={S.buttonText}>－</Text>
-              </Pressable>
-            </View>
+          let payload: any = {
+            course_id: selectedCourse!,
+            hole_number: selectedHole.hole_number,
+            score: score,
+            putts: putts,
+            created_by: user?.id ?? null,
+            game_id: gid ?? null,
+          };
 
-            <View style={S.modalButtons}>
-              <Button title="Cancel" onPress={() => setScoreModalVisible(false)} />
-              <Button
-                title="Enter"
-                onPress={async () => {
-                  if (!selectedHoleNumber) return;
-                  const selectedHole = holes.find(h => h.hole_number === selectedHoleNumber);
-                  if (!selectedHole) return;
+          // TEAM scoring
+          if (activeTeam) {
+            payload.team_id = activeTeam.team_id;
+            payload.player_id = null;
+          }
+          // PLAYER scoring
+          else if (activePlayer) {
+            payload.player_id = activePlayer.player_id;
+            payload.team_id = null;
+          }
+          else {
+            return;
+          }
 
-                  // Resolve gameId for game-based scoring
-                  let gid = Array.isArray(gameId) ? gameId[0] : gameId;
-                  if (!gid) {
-                    const raw = await AsyncStorage.getItem('currentGamePlayers');
-                    if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
-                  }
+          // correct conflict rule depending on game or not
+          const onConflict = gid
+            ? (activeTeam
+                ? "team_id,game_id,hole_number"
+                : "player_id,game_id,hole_number")
+            : (activeTeam
+                ? "team_id,course_id,hole_number"
+                : "player_id,course_id,hole_number");
+          
+          console.log("SCORES PAYLOAD:", payload);
 
-                  let payload: any = {
-                    course_id: selectedCourse!,
-                    hole_number: selectedHole.hole_number,
-                    score: tempScore,
-                    putts: tempPutts,
-                    created_by: user?.id ?? null,
-                    game_id: gid ?? null,
-                  };
+          const { error } = await supabase
+            .from("scores")
+            .upsert([payload], { onConflict })
+            .select();
+            console.log("SCORES ERROR:", error);
 
-                  // TEAM scoring
-                  if (activeTeam) {
-                    payload.team_id = activeTeam.team_id;
-                    payload.player_id = null;
-                  }
-                  // PLAYER scoring
-                  else if (activePlayer) {
-                    payload.player_id = activePlayer.player_id;
-                    payload.team_id = null;
-                  }
-                  else {
-                    return;
-                  }
+          if (error) {
+            showMessage(`Error saving score: ${error.message}`);
+            return;
+          }
 
-                  // correct conflict rule depending on game or not
-                  const onConflict = gid
-                    ? (activeTeam
-                        ? "team_id,game_id,hole_number"
-                        : "player_id,game_id,hole_number")
-                    : (activeTeam
-                        ? "team_id,course_id,hole_number"
-                        : "player_id,course_id,hole_number");
-                  
-                  console.log("SCORES PAYLOAD:", payload);
-
-                  const { error } = await supabase
-                    .from("scores")
-                    .upsert([payload], { onConflict })
-                    .select();
-                    console.log("SCORES ERROR:", error);
-
-                  if (error) {
-                    showMessage(`Error saving score: ${error.message}`);
-                    return;
-                  }
-
-                  await refreshScoreboardRef.current?.();
-                  setScoreModalVisible(false);
-                  setActiveTeam(null);
-                  setActivePlayer(null);
-                }}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+          await refreshScoreboardRef.current?.();
+        }}
+      />
 
       <MapView
         provider={PROVIDER_GOOGLE}

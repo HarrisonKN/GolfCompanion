@@ -47,12 +47,12 @@ export function PerformanceChart({ userId, type = 'score' }: { userId: string; t
         case 'putts':
           dataPoints = rounds.map(r => r.putts || 0);
           chartTitle = 'Putts Per Round';
-          chartColor = '#3b82f6';
+          chartColor = palette.warning;
           break;
         case 'fairways':
           dataPoints = rounds.map(r => r.fairways_hit || 0);
           chartTitle = 'Fairways Hit';
-          chartColor = '#10b981';
+          chartColor = palette.success;
           break;
         default:
           dataPoints = rounds.map(r => r.score);
@@ -86,7 +86,7 @@ export function PerformanceChart({ userId, type = 'score' }: { userId: string; t
     labels: ['', '', '', '', ''],
     datasets: [{ data: [0, 0, 0, 0, 0] }],
     chartTitle: type === 'putts' ? 'Putts Per Round' : type === 'fairways' ? 'Fairways Hit' : 'Score Trend',
-    chartColor: type === 'putts' ? '#3b82f6' : type === 'fairways' ? '#10b981' : palette.primary,
+    chartColor: type === 'putts' ? palette.warning : type === 'fairways' ? palette.success : palette.primary,
   };
 
   const isEmpty = !chartData;
@@ -106,18 +106,18 @@ export function PerformanceChart({ userId, type = 'score' }: { userId: string; t
       <View style={isEmpty ? styles(palette).chartContainerEmpty : undefined}>
         <LineChart
           data={displayData}
-          width={screenWidth - 48}
+          width={screenWidth - 72}
           height={220}
           chartConfig={{
-            backgroundColor: palette.white,
-            backgroundGradientFrom: palette.white,
-            backgroundGradientTo: palette.white,
+            backgroundColor: palette.backgroundv2,
+            backgroundGradientFrom: palette.backgroundv2,
+            backgroundGradientTo: palette.backgroundv2,
             decimalPlaces: 0,
             color: (opacity = 1) => {
               const baseOpacity = isEmpty ? 0.15 : opacity;
               return displayData.chartColor + Math.floor(baseOpacity * 255).toString(16).padStart(2, '0');
             },
-            labelColor: () => isEmpty ? palette.grey + '60' : palette.textDark,
+            labelColor: () => (isEmpty ? palette.grey + '60' : palette.textLight),
             style: { borderRadius: 16 },
             propsForDots: {
               r: isEmpty ? '0' : '5',
@@ -149,8 +149,19 @@ export function PerformanceChart({ userId, type = 'score' }: { userId: string; t
 
 const styles = (palette: any) => StyleSheet.create({
   container: {
+    borderRadius: 16,
     marginVertical: 16,
     marginHorizontal: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
+    backgroundColor: palette.backgroundv2,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -161,6 +172,10 @@ const styles = (palette: any) => StyleSheet.create({
   },
   title: {
     marginBottom: 0,
+    fontWeight: '800',
+    color: palette.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   emptyBadge: {
     fontSize: 12,
@@ -170,10 +185,14 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   chart: {
     marginVertical: 8,
+    marginLeft: 0,
     borderRadius: 16,
+    backgroundColor: 'transparent',
   },
   chartContainerEmpty: {
     position: 'relative',

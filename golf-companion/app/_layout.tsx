@@ -293,6 +293,7 @@ export default function RootLayout() {
                 <Stack.Screen name="friendProfile" options={{ headerShown: false }} />
                 <Stack.Screen name="startGame" options={{ headerShown: false }} />
                 <Stack.Screen name="gameModes" options={{ headerShown: false }} />
+                <Stack.Screen name="settings" options={{ headerShown: false }} />
                 <Stack.Screen name="+not-found" />
               </Stack>
               <GlobalNotificationPanel />

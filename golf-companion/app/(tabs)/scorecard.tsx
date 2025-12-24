@@ -1481,9 +1481,9 @@ useEffect(() => {
                           <View
                             style={[
                               styles(palette).chip,
-                              cls === 'birdie' && styles(palette).chipBirdie,
-                              cls === 'par' && styles(palette).chipPar,
-                              cls === 'bogey' && styles(palette).chipBogey,
+                              cls === 'birdie' && { backgroundColor: palette.chipBirdie },
+                              cls === 'par' && { backgroundColor: palette.chipPar },
+                              cls === 'bogey' && { backgroundColor: palette.chipBogey },
                             ]}
                           >
                             <Text style={styles(palette).chipText}>
@@ -1585,9 +1585,9 @@ useEffect(() => {
                           <View
                             style={[
                               styles(palette).chip,
-                              cls === 'birdie' && styles(palette).chipBirdie,
-                              cls === 'par' && styles(palette).chipPar,
-                              cls === 'bogey' && styles(palette).chipBogey,
+                              cls === 'birdie' && { backgroundColor: palette.chipBirdie },
+                              cls === 'par' && { backgroundColor: palette.chipPar },
+                              cls === 'bogey' && { backgroundColor: palette.chipBogey },
                               isMatchPlay && isWinner && { backgroundColor: palette.HoleWinner, transform: [{ scale: 1.05 }] },
                             ]}
                           >
@@ -1649,7 +1649,7 @@ useEffect(() => {
             <Text style={styles(palette).modalText}>Enter Player Name:</Text>
             <TextInput
               placeholder="Name"
-              placeholderTextColor={palette.white}
+              placeholderTextColor={palette.text}
               value={newPlayerName}
               onChangeText={setNewPlayerName}
               style={styles(palette).modalInput}
@@ -1762,8 +1762,6 @@ useEffect(() => {
               // Course View listens to Realtime on 'scores' and will refresh automatically
             }
           }
-
-          setScoreModalVisible(false);
         }}
       />
     </View>
@@ -2081,7 +2079,7 @@ const styles = (palette: any) => StyleSheet.create({
     marginBottom: 24,
   },
   modalView: {
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     borderRadius: 18,
     padding: 20,
     width: '85%',
@@ -2093,15 +2091,15 @@ const styles = (palette: any) => StyleSheet.create({
     elevation: 5,
   },
   modalInput: {
-    backgroundColor: palette.black,
-    color: palette.black,
+    backgroundColor: palette.background,
+    color: palette.text,
     padding: 16,
     marginVertical: 14,
     borderRadius: 10,
     fontSize: 17,
   },
   modalText: {
-    color: palette.textDark,
+    color: palette.text,
     fontSize: 22,
     marginBottom: 14,
     fontWeight: '700',
@@ -2277,15 +2275,6 @@ const styles = (palette: any) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
-  },
-  chipBirdie: {
-    backgroundColor: '#d4fcd4',
-  },
-  chipPar: {
-    backgroundColor: '#e0e0e0',
-  },
-  chipBogey: {
-    backgroundColor: '#fde0e0',
   },
 });
 

@@ -834,6 +834,8 @@ const styles = (palette: any) => StyleSheet.create({
     textAlign: 'center' as 'center',
   },
   selectedPlayersCompactRow: {
+    borderRadius: 12,
+    backgroundColor: palette.secondary,
     flexDirection: 'row' as 'row',
     flexWrap: 'wrap' as 'wrap',
     justifyContent: 'center' as 'center',
@@ -974,6 +976,7 @@ const styles = (palette: any) => StyleSheet.create({
     marginBottom: 18,
   },
   dropdownCompact: {
+    backgroundColor: palette.backgroundv2,
     height: COMPACT_H,
     minHeight: COMPACT_H,
     paddingVertical: 0,

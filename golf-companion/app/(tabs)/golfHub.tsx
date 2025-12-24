@@ -802,7 +802,7 @@ const styles = (palette: any) => StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: palette.white,
+    backgroundColor: palette.primary,
     borderRadius: 12,
     padding: 6,
     marginBottom: 12,
@@ -818,7 +818,7 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
   },
   tabItemActive: {
-    backgroundColor: palette.primary,
+    backgroundColor: palette.shadow,
   },
   tabItemLabel: {
     fontWeight: '700',
@@ -828,7 +828,7 @@ const styles = (palette: any) => StyleSheet.create({
     color: palette.white,
   },
   sectionCard: {
-    backgroundColor: palette.white,
+    backgroundColor: palette.secondary,
     borderRadius: 16,
     padding: 12,
     flex: 1,
@@ -855,7 +855,7 @@ const styles = (palette: any) => StyleSheet.create({
   chatCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: palette.white,
+    backgroundColor: palette.background,
     borderRadius: 14,
     padding: 14,
     marginBottom: 12,
@@ -957,7 +957,7 @@ const styles = (palette: any) => StyleSheet.create({
     justifyContent: 'center',
   },
   musicPlayerContainer: {
-    backgroundColor: palette.white,
+    backgroundColor: palette.secondary,
     borderRadius: 16,
     padding: 14,
     shadowColor: palette.black,
@@ -1159,7 +1159,7 @@ const styles = (palette: any) => StyleSheet.create({
   groupName: {
     fontWeight: '700',
     fontSize: 18,
-    color: palette.third,
+    color: palette.primary,
     flex: 1,
   },
   creatorBadge: {

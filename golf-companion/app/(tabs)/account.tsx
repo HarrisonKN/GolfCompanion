@@ -102,7 +102,7 @@ export default function AccountsScreen() {
   const [gearModalVisible, setGearModalVisible] = useState(false);
   const [newGear, setNewGear] = useState({ type: 'driver', brand: '', model: '', notes: '' });
 
-  const { palette } = useTheme();
+  const { palette, mode } = useTheme();
   const [toast, setToast] = useState<string | null>(null);
 
   function showToast(message: string) {
@@ -908,10 +908,31 @@ const inviteChannel = supabase
     return typeof digits === 'number' ? value.toFixed(digits) : String(value);
   };
 
+  // Try to compute a numeric round score using either `round.score` or by parsing `round.scorecard`
+  const computeRoundNumericScore = (round: any, preferredName?: string): number | null => {
+    const numericScore = Number(round?.score);
+    if (Number.isFinite(numericScore)) return numericScore;
+    if (!round?.scorecard) return null;
+    try {
+      const sc = JSON.parse(round.scorecard);
+      if (!Array.isArray(sc) || sc.length === 0) return null;
+      const parseVal = (text: string) => parseInt((String(text) || '').split('/')[0].trim()) || 0;
+      const playerIdx = preferredName
+        ? sc.findIndex((p: any) => String(p?.name || p?.player || '').trim() === String(preferredName).trim())
+        : 0;
+      const player = sc[playerIdx >= 0 ? playerIdx : 0];
+      if (!player?.scores || !Array.isArray(player.scores)) return null;
+      const total = player.scores.reduce((sum: number, v: string) => sum + parseVal(v), 0);
+      return Number.isFinite(total) ? total : null;
+    } catch {
+      return null;
+    }
+  };
+
   const roundsCount = Array.isArray(rounds) ? rounds.length : 0;
   const scoreVals = (Array.isArray(rounds) ? rounds : [])
-    .map((r: any) => Number(r?.score))
-    .filter((v) => Number.isFinite(v));
+    .map((r: any) => computeRoundNumericScore(r, profile.full_name || undefined))
+    .filter((v) => Number.isFinite(v as number)) as number[];
   const fairwaysVals = (Array.isArray(rounds) ? rounds : [])
     .map((r: any) => Number(r?.fairways_hit))
     .filter((v) => Number.isFinite(v));
@@ -941,7 +962,7 @@ const inviteChannel = supabase
   return (
     <>
     <StatusBar
-      barStyle={palette === PALETTES.dark ? "light-content" : "dark-content"}
+      barStyle={mode === 'dark' ? "light-content" : "dark-content"}
       backgroundColor={palette.background}
       translucent={false}
     />
@@ -999,12 +1020,15 @@ const inviteChannel = supabase
           >
             <MaterialIcons size={24} name="settings" color={palette.grey} />
           </Pressable>
+
+          {/*}
           <Pressable
             style={[styles(palette).logoutButton, { backgroundColor: palette.primary }]}
             onPress={testUID}
           >
             <ThemedText style={styles(palette).logoutButtonText}>Debug UID</ThemedText>
           </Pressable>
+          */}
         </View>
       </View>
 
@@ -1042,7 +1066,7 @@ const inviteChannel = supabase
         <StatTile label="Putts/Round" value={fmtNumber(puttsPerRoundVal, 1)} />
       </View>
 
-      {/* Performance Charts - New Section */}
+      {/* Performance Charts*/}
       {user && (
         <>
           <PerformanceChart userId={user.id} type="score" />
@@ -1103,6 +1127,9 @@ const inviteChannel = supabase
               <ThemedText style={styles(palette).roundCourse}>{round.course_name}</ThemedText>
               <ThemedText style={styles(palette).roundDate}>{round.date}</ThemedText>
               <ThemedText style={styles(palette).roundScore}>Score: {round.score}</ThemedText>
+              {/* Use numeric fallback if `round.score` missing */}
+              {/* If desired, replace above line with the following for consistent display: */}
+              {/* <ThemedText style={styles(palette).roundScore}>Score: {computeRoundNumericScore(round, profile.full_name || undefined) ?? (round.score ?? 'N/A')}</ThemedText> */}
               <ThemedText style={styles(palette).roundStat}>Fairways: {round.fairways_hit ?? 'N/A'}</ThemedText>
               <ThemedText style={styles(palette).roundStat}>GIR: {round.greens_in_reg ?? 'N/A'}</ThemedText>
               <ThemedText style={styles(palette).roundStat}>Putts: {round.putts ?? 'N/A'}</ThemedText>
@@ -1442,7 +1469,7 @@ const inviteChannel = supabase
                     contentContainerStyle={styles(palette).resultsListContent}
                     nestedScrollEnabled={true}
                     bounces={true}
-                    indicatorStyle={palette === PALETTES.dark ? 'white' : 'black'}
+                    indicatorStyle={mode === 'dark' ? 'white' : 'black'}
                   >
                     {searchResults.map((user, index) => (
                       <Pressable
@@ -1534,7 +1561,7 @@ const inviteChannel = supabase
                   value={newGear.brand}
                   onChangeText={(text) => setNewGear({ ...newGear, brand: text })}
                   placeholder="e.g., Titleist, Callaway, TaylorMade"
-                  placeholderTextColor={palette.textLight}
+                  placeholderTextColor={palette.text}
                 />
               </View>
 
@@ -1545,7 +1572,7 @@ const inviteChannel = supabase
                   value={newGear.model}
                   onChangeText={(text) => setNewGear({ ...newGear, model: text })}
                   placeholder="e.g., TSR3, Apex, Stealth 2"
-                  placeholderTextColor={palette.textLight}
+                  placeholderTextColor={palette.text}
                 />
               </View>
 
@@ -1556,7 +1583,7 @@ const inviteChannel = supabase
                   value={newGear.notes}
                   onChangeText={(text) => setNewGear({ ...newGear, notes: text })}
                   placeholder="Any additional details..."
-                  placeholderTextColor={palette.textLight}
+                  placeholderTextColor={palette.text}
                   multiline
                 />
               </View>
@@ -1724,7 +1751,15 @@ const inviteChannel = supabase
           </View>
           <View style={styles(palette).appInfoRow}>
             <ThemedText style={styles(palette).appInfoLabel}>Device:</ThemedText>
-            <ThemedText style={styles(palette).appInfoValue}>{buildInfo.isDevice ? 'Physical Device' : 'Simulator'}</ThemedText>
+            <ThemedText style={styles(palette).appInfoValue}>{buildInfo.deviceName}</ThemedText>
+          </View>
+          <View style={styles(palette).appInfoRow}>
+            <ThemedText style={styles(palette).appInfoLabel}>Model:</ThemedText>
+            <ThemedText style={styles(palette).appInfoValue}>{buildInfo.brand} {buildInfo.modelName}</ThemedText>
+          </View>
+          <View style={styles(palette).appInfoRow}>
+            <ThemedText style={styles(palette).appInfoLabel}>OS Build:</ThemedText>
+            <ThemedText style={styles(palette).appInfoValue}>{buildInfo.osBuildId || 'Unknown'}</ThemedText>
           </View>
         </View>
       </View>
@@ -1810,7 +1845,7 @@ const styles = (palette: any) => StyleSheet.create({
     paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingTop: SCREEN_HEIGHT * 0.04,
     paddingBottom: SCREEN_HEIGHT * 0.01,
-    backgroundColor: palette.white,
+    backgroundColor: palette.secondary,
     borderBottomWidth: 1,
     borderBottomColor: palette.primary + '12',
     shadowColor: palette.primary,
@@ -1832,7 +1867,7 @@ const styles = (palette: any) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SCREEN_WIDTH * 0.05,
     paddingVertical: SCREEN_HEIGHT * 0.02,
-    backgroundColor: palette.white,
+    backgroundColor: palette.secondary,
     borderBottomWidth: 1,
     borderBottomColor: palette.primary + '12',
     marginBottom: SCREEN_HEIGHT * 0.01,
@@ -1897,7 +1932,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   infoText: {
     fontSize: SCREEN_WIDTH * 0.045,
-    color: palette.textDark,
+    color: palette.text,
     marginTop: SCREEN_HEIGHT * 0.01,
     paddingLeft: SCREEN_WIDTH * 0.05,
   },
@@ -1950,18 +1985,18 @@ const styles = (palette: any) => StyleSheet.create({
   },
   statTile: {
     width: SCREEN_WIDTH * 0.28,
-    backgroundColor: palette.white,
-    borderRadius: 14,
+    backgroundColor: palette.backgroundv2,
+    borderRadius: 8,
     padding: SCREEN_WIDTH * 0.04,
     marginBottom: SCREEN_HEIGHT * 0.015,
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: palette.primary + '20',
+    borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
     shadowColor: palette.primary,
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    elevation: 6,
   },
   statLabel: {
     fontSize: SCREEN_WIDTH * 0.032,
@@ -1987,7 +2022,7 @@ const styles = (palette: any) => StyleSheet.create({
   roundTile: {
     width: SCREEN_WIDTH * 0.8,
     height: SCREEN_HEIGHT * 0.40,
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     borderRadius: 16,
     padding: SCREEN_WIDTH * 0.045,
     marginRight: SCREEN_WIDTH * 0.05,
@@ -2035,7 +2070,7 @@ const styles = (palette: any) => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
@@ -2057,7 +2092,7 @@ const styles = (palette: any) => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     padding: SCREEN_WIDTH * 0.015,
     borderRadius: 4,
   },
@@ -2174,18 +2209,20 @@ const styles = (palette: any) => StyleSheet.create({
   friendTile: {
     width: 100,
     height: 110,
-    backgroundColor: palette.white,
+    backgroundColor: palette.backgroundv2,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
     borderWidth: 1.5,
     borderColor: palette.primary + '15',
     shadowColor: palette.primary,
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    elevation: 6,
     padding:  8,
   },
   friendAvatarCircle: {
@@ -2376,7 +2413,7 @@ modalCloseButton: {
   backgroundColor: palette.primary + '10',
 },
 modalContent: {
-  backgroundColor: palette.white,
+  backgroundColor: palette.backgroundv2,
   borderRadius: 24,
   padding: 24,
   width: '90%',
@@ -2408,7 +2445,7 @@ textInput: {
   paddingHorizontal: 16,
   paddingVertical: 12,
   fontSize: 15,
-  color: palette.textDark,
+  color: palette.text,
   borderWidth: 1.5,
   borderColor: palette.grey,
 },
@@ -2481,7 +2518,7 @@ appInfoSection: {
   paddingHorizontal: 8,
 },
 appInfoContainer: {
-  backgroundColor: palette.white,
+  backgroundColor: palette.backgroundv2,
   borderRadius: 16,
   padding: 18,
   marginHorizontal: SCREEN_WIDTH * 0.05,
@@ -2514,18 +2551,18 @@ appInfoValue: {
   fontWeight: '700',
 },
 inviteCard: {
-  backgroundColor: palette.white,
+  backgroundColor: palette.backgroundv2,
   padding: 16,
   marginHorizontal: 12,
   marginBottom: 12,
   borderRadius: 16,
-  borderLeftWidth: 5,
+  borderLeftWidth: 4,
   borderLeftColor: palette.primary,
   shadowColor: palette.primary,
-  shadowOpacity: 0.09,
-  shadowRadius: 10,
+  shadowOpacity: 0.12,
+  shadowRadius: 12,
   shadowOffset: { width: 0, height: 3 },
-  elevation: 3,
+  elevation: 6,
 },
 inviteHeader: {
   marginBottom: 10,
@@ -2551,7 +2588,7 @@ testNotificationsSection: {
   marginTop: 20,
   marginBottom: 24,
   paddingHorizontal: 12,
-  backgroundColor: palette.white,
+  backgroundColor: palette.backgroundv2,
   marginHorizontal: 12,
   borderRadius: 16,
   padding: 16,
@@ -2600,7 +2637,7 @@ achievementsGrid: {
 },
 achievementBadge: {
   width: (SCREEN_WIDTH - 64) / 2,
-  backgroundColor: palette.white,
+  backgroundColor: palette.backgroundv2,
   borderRadius: 16,
   padding: 16,
   alignItems: 'center',
@@ -2658,16 +2695,16 @@ gearGrid: {
 },
 gearCard: {
   width: (SCREEN_WIDTH - 64) / 2,
-  backgroundColor: palette.white,
+  backgroundColor: palette.backgroundv2,
   borderRadius: 16,
   padding: 16,
-  borderWidth: 2,
-  borderColor: palette.primary + '30',
+  borderLeftWidth: 4,
+  borderLeftColor: palette.primary,
   shadowColor: palette.primary,
-  shadowOpacity: 0.1,
-  shadowRadius: 8,
+  shadowOpacity: 0.12,
+  shadowRadius: 12,
   shadowOffset: { width: 0, height: 2 },
-  elevation: 3,
+  elevation: 6,
 },
 gearType: {
   fontSize: 11,
@@ -2680,18 +2717,18 @@ gearType: {
 gearBrand: {
   fontSize: 16,
   fontWeight: '800',
-  color: palette.textDark,
+  color: palette.text,
   marginBottom: 4,
 },
 gearModel: {
   fontSize: 14,
   fontWeight: '600',
-  color: palette.textLight,
+  color: palette.text,
   marginBottom: 6,
 },
 gearNotes: {
   fontSize: 12,
-  color: palette.textLight,
+  color: palette.text,
   fontStyle: 'italic',
   lineHeight: 16,
 },
@@ -2733,7 +2770,7 @@ gearTypeButtonActive: {
 gearTypeButtonText: {
   fontSize: 13,
   fontWeight: '600',
-  color: palette.textDark,
+  color: palette.text,
 },
 gearTypeButtonTextActive: {
   color: palette.white,
@@ -2752,7 +2789,7 @@ addGearModalButton: {
   elevation: 4,
 },
 addGearModalButtonText: {
-  color: palette.white,
+  color: palette.text,
   fontSize: 16,
   fontWeight: '700',
   letterSpacing: 0.3,

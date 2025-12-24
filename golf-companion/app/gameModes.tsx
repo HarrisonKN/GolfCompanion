@@ -520,7 +520,7 @@ export default function GameModesScreen() {
                       }}
                       style={{ marginTop: 4 }}
                     >
-                      <Text style={{ color: palette.primary }}>Save</Text>
+                      <Text style={{ backgroundColor: palette.primary, padding: 10, borderRadius: 10, alignSelf: 'flex-start', color: palette.textLight }}>Save</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (

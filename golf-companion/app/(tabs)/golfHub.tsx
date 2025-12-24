@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, FlatList, StyleSheet, TextInput, Modal, Image } from 'react-native';
+import { View, Pressable, FlatList, StyleSheet, TextInput, Modal, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -11,6 +11,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { MaterialIcons } from '@expo/vector-icons';
 import { notifyGroupInvite } from '@/lib/NotificationTriggers';
 import { useSpotify } from '@/components/SpotifyContext';
+import { getMyTournaments, getGhostPlacement, Tournament, GhostPlacement } from '@/lib/TournamentService';
 
 type VoiceGroup = {
   id: string;
@@ -46,6 +47,11 @@ export default function GolfHubScreen() {
   const [toast, setToast] = useState<string | null>(null);
 
   const { isConnected: spotifyIsConnected, isPlaying, currentTrack, connectSpotify, disconnectSpotify, play, pause, nextTrack, previousTrack } = useSpotify();
+  
+  const [tournamentsData, setTournamentsData] = useState<Tournament[]>([]);
+  const [ghostRanks, setGhostRanks] = useState<Record<string, GhostPlacement | null>>({});
+  const [tournamentsLoading, setTournamentsLoading] = useState(false);
+
   const { palette } = useTheme();
 
   const showToast = (message: string) => {
@@ -123,6 +129,30 @@ export default function GolfHubScreen() {
     };
     fetchFriends();
   }, [user]);
+
+  useEffect(() => {
+    const loadTournaments = async () => {
+      try {
+        setTournamentsLoading(true);
+        const data = await getMyTournaments();
+        setTournamentsData(data);
+
+        // Fetch ghost placement per tournament (fire in parallel)
+        const entries = await Promise.all(
+          data.map(async (t) => [t.id, await getGhostPlacement(t.id)] as const)
+        );
+        setGhostRanks(Object.fromEntries(entries));
+      } catch (error) {
+        console.error('Error loading tournaments:', error);
+      } finally {
+        setTournamentsLoading(false);
+      }
+    };
+
+    if (activeTab === 'tournaments') {
+      loadTournaments();
+    }
+  }, [activeTab]);
 
   const inviteFriend = async (friendId: string, groupId: string) => {
     try {
@@ -482,47 +512,71 @@ export default function GolfHubScreen() {
     </View>
   );
 
-  const tournaments = [
-    { id: '1', name: 'Winter Scramble', date: 'Jan 12', course: 'Pebble Ridge', status: 'Registration open', spots: 32 },
-    { id: '2', name: 'Match Play Ladder', date: 'Feb 5', course: 'Harbor Links', status: 'Qualifiers running', spots: 16 },
-    { id: '3', name: 'Spring Classic', date: 'Mar 18', course: 'St. Andrews (sim)', status: 'Opens soon', spots: 48 },
-  ];
-
   const renderTournamentsSection = () => (
     <View style={{ flex: 1 }}>
       <View style={styles(palette).sectionHeaderRow}>
         <View>
           <ThemedText style={styles(palette).sectionTitle}>Tournaments</ThemedText>
-          <ThemedText style={styles(palette).sectionSubTitle}>Standalone events in GolfHub</ThemedText>
+          <ThemedText style={styles(palette).sectionSubTitle}>Events you're in</ThemedText>
         </View>
       </View>
 
-      <FlatList
-        data={tournaments}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ paddingBottom: 16 }}
-        renderItem={({ item }) => (
-          <View style={styles(palette).tournamentCard}>
-            <View style={styles(palette).tournamentHeader}>
-              <ThemedText style={styles(palette).tournamentName}>{item.name}</ThemedText>
-              <ThemedText style={styles(palette).tournamentStatus}>{item.status}</ThemedText>
+      {tournamentsLoading ? (
+        <View style={styles(palette).loadingContainer}>
+          <ActivityIndicator size="large" color={palette.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={tournamentsData}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          renderItem={({ item }) => {
+            const ghostRank = ghostRanks[item.id];
+            return (
+              <Pressable
+                style={styles(palette).tournamentCard}
+                onPress={() => router.push(`/tournamentDetails?id=${item.id}` as any)}
+              >
+                <View style={styles(palette).tournamentHeader}>
+                  <ThemedText style={styles(palette).tournamentName}>{item.name}</ThemedText>
+                  {item.is_auto && (
+                    <View style={styles(palette).autoLabel}>
+                      <ThemedText style={styles(palette).autoLabelText}>AUTO</ThemedText>
+                    </View>
+                  )}
+                </View>
+                {item.description && (
+                  <ThemedText style={styles(palette).tournamentDesc} numberOfLines={2}>
+                    {item.description}
+                  </ThemedText>
+                )}
+                <ThemedText style={styles(palette).tournamentMeta}>
+                  {new Date(item.start_date).toLocaleDateString()} - {new Date(item.end_date).toLocaleDateString()}
+                </ThemedText>
+                {ghostRank && (
+                  <View style={styles(palette).ghostRow}>
+                    <ThemedText style={styles(palette).ghostLabel}>Your rank:</ThemedText>
+                    <ThemedText style={styles(palette).ghostValue}>
+                      #{ghostRank.rank} of {(ghostRank.participant_count ?? 0) + 1}
+                    </ThemedText>
+                  </View>
+                )}
+                <Pressable style={styles(palette).enterPill} onPress={() => router.push(`/tournamentDetails?id=${item.id}` as any)}>
+                  <ThemedText style={styles(palette).enterPillText}>View Details</ThemedText>
+                  <MaterialIcons name="arrow-forward" size={16} color={palette.white} />
+                </Pressable>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles(palette).emptyState}>
+              <IconSymbol name="trophy.fill" size={48} color={palette.textLight} />
+              <ThemedText style={styles(palette).emptyStateText}>No tournaments yet</ThemedText>
+              <ThemedText style={styles(palette).emptyStateSubtext}>Check the tournaments page to join one!</ThemedText>
             </View>
-            <ThemedText style={styles(palette).tournamentMeta}>{item.course}</ThemedText>
-            <ThemedText style={styles(palette).tournamentMeta}>Starts {item.date} · {item.spots} spots</ThemedText>
-            <Pressable style={styles(palette).enterPill} onPress={() => showToast('Tournament flow coming soon')}>
-              <ThemedText style={styles(palette).enterPillText}>View</ThemedText>
-              <MaterialIcons name="arrow-forward" size={16} color={palette.white} />
-            </Pressable>
-          </View>
-        )}
-        ListEmptyComponent={
-          <View style={styles(palette).emptyState}>
-            <IconSymbol name="trophy.fill" size={48} color={palette.textLight} />
-            <ThemedText style={styles(palette).emptyStateText}>No tournaments yet</ThemedText>
-            <ThemedText style={styles(palette).emptyStateSubtext}>We will surface events here.</ThemedText>
-          </View>
-        }
-      />
+          }
+        />
+      )}
     </View>
   );
 
@@ -1016,6 +1070,11 @@ const styles = (palette: any) => StyleSheet.create({
     color: palette.textLight,
     marginTop: 2,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   tournamentCard: {
     backgroundColor: palette.white,
     borderRadius: 14,
@@ -1036,16 +1095,49 @@ const styles = (palette: any) => StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: palette.textDark,
+    flex: 1,
   },
-  tournamentStatus: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: palette.primary,
+  tournamentDesc: {
+    fontSize: 14,
+    color: palette.textLight,
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   tournamentMeta: {
     color: palette.textLight,
     fontSize: 13,
-    marginBottom: 4,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  autoLabel: {
+    backgroundColor: palette.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  autoLabelText: {
+    color: palette.white,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  ghostRow: {
+    backgroundColor: palette.background,
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ghostLabel: {
+    fontSize: 12,
+    color: palette.textLight,
+    fontWeight: '600',
+  },
+  ghostValue: {
+    fontSize: 12,
+    color: palette.primary,
+    fontWeight: '700',
   },
   groupList: {
     flexGrow: 0,

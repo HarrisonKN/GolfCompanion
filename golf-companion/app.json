@@ -29,7 +29,6 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.golfcompanion",
-      "useNextNotificationsApi": true,
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyDc_Fjev9H5OlUY228wrGz8q4x2y_kMX4k"
@@ -58,7 +57,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/golf-logo.png",
+          "image": "./assets/images/MullyLogo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#003b23"

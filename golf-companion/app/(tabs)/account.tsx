@@ -16,7 +16,6 @@ import { TestNotifications } from '@/components/TestNotifications';
 import Toast from 'react-native-toast-message';
 import { notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/NotificationTriggers';
 import { PerformanceChart } from '@/components/PerformanceChart';
-import { ensureMonthlyTournament, autoEnrollInMonthlyTournament, getTournamentLeaderboard } from '@/lib/TournamentService';
 import { useRouter } from 'expo-router';
 
 // ------------------- TYPES -------------------------
@@ -55,6 +54,14 @@ type Achievement = {
   earnedAt?: string;
 };
 
+type GolfGearItem = {
+  id: string;
+  type: 'driver' | 'irons' | 'wedges' | 'putter' | 'ball' | 'bag' | 'other';
+  brand: string;
+  model: string;
+  notes?: string;
+};
+
 // ------------------- ACCOUNTS LOGIC -------------------------
 export default function AccountsScreen() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -79,8 +86,11 @@ export default function AccountsScreen() {
   const [showTestNotifications, setShowTestNotifications] = useState(false);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loadingAchievements, setLoadingAchievements] = useState(true);
-  const [monthlyChallenge, setMonthlyChallenge] = useState<any>(null);
-  const [myRank, setMyRank] = useState<number | null>(null);
+  
+  // Golf Gear State
+  const [golfGear, setGolfGear] = useState<GolfGearItem[]>([]);
+  const [gearModalVisible, setGearModalVisible] = useState(false);
+  const [newGear, setNewGear] = useState({ type: 'driver', brand: '', model: '', notes: '' });
 
   const { palette } = useTheme();
   const [toast, setToast] = useState<string | null>(null);
@@ -958,12 +968,12 @@ const inviteChannel = supabase
         Golf Stats
       </ThemedText>
       <View style={styles(palette).statsGrid}>
-        <StatTile label="Handicap" value={profile.handicap?.toFixed(1) ?? 'N/A'} />
-        <StatTile label="Rounds" value={profile.rounds_played?.toString() ?? 'N/A'} />
-        <StatTile label="Avg Score" value={profile.average_score?.toFixed(1) ?? 'N/A'} />
-        <StatTile label="Best Score" value={profile.best_score?.toString() ?? 'N/A'} />
-        <StatTile label="Fairways Hit" value={profile.fairways_hit?.toString() ?? 'N/A'} />
-        <StatTile label="Putts/Round" value={profile.putts_per_round?.toString() ?? 'N/A'} />
+        <StatTile label="Handicap" value={profile.handicap != null ? profile.handicap.toFixed(1) : 'N/A'} />
+        <StatTile label="Rounds" value={profile.rounds_played != null ? profile.rounds_played.toString() : 'N/A'} />
+        <StatTile label="Avg Score" value={profile.average_score != null ? profile.average_score.toFixed(1) : 'N/A'} />
+        <StatTile label="Best Score" value={profile.best_score != null ? profile.best_score.toString() : 'N/A'} />
+        <StatTile label="Fairways Hit" value={profile.fairways_hit != null ? profile.fairways_hit.toString() : 'N/A'} />
+        <StatTile label="Putts/Round" value={profile.putts_per_round != null ? profile.putts_per_round.toString() : 'N/A'} />
       </View>
 
       {/* Performance Charts - New Section */}
@@ -975,35 +985,36 @@ const inviteChannel = supabase
         </>
       )}
 
-      {/* Monthly Challenge Card */}
-      {monthlyChallenge && (
-        <Pressable
-          style={styles(palette).monthlyChallengeCard}
-          onPress={() =>
-            router.push({ pathname: '/tournamentDetails', params: { id: monthlyChallenge.id } } as never)
-          }
-        >
-          <View style={styles(palette).challengeHeader}>
-            <ThemedText type="subtitle">🏆 {monthlyChallenge.name}</ThemedText>
-            {myRank && (
-              <View style={styles(palette).rankBadge}>
-                <ThemedText style={styles(palette).rankText}>#{myRank}</ThemedText>
+      {/* Golf Gear Section */}
+      <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
+        🏌️ My Golf Gear
+      </ThemedText>
+      <View style={styles(palette).gearSection}>
+        {golfGear.length === 0 ? (
+          <ThemedText style={styles(palette).infoText}>No gear added yet. Showcase your equipment!</ThemedText>
+        ) : (
+          <View style={styles(palette).gearGrid}>
+            {golfGear.map((item) => (
+              <View key={item.id} style={styles(palette).gearCard}>
+                <ThemedText style={styles(palette).gearType}>
+                  {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                </ThemedText>
+                <ThemedText style={styles(palette).gearBrand}>{item.brand}</ThemedText>
+                <ThemedText style={styles(palette).gearModel}>{item.model}</ThemedText>
+                {item.notes && (
+                  <ThemedText style={styles(palette).gearNotes}>{item.notes}</ThemedText>
+                )}
               </View>
-            )}
+            ))}
           </View>
-          <ThemedText style={styles(palette).challengeDescription}>
-            {monthlyChallenge.description}
-          </ThemedText>
-          <View style={styles(palette).challengeFooter}>
-            <ThemedText style={styles(palette).challengeDate}>
-              Ends {new Date(monthlyChallenge.end_date).toLocaleDateString()}
-            </ThemedText>
-            <ThemedText style={styles(palette).viewLeaderboard}>
-              View Leaderboard →
-            </ThemedText>
-          </View>
+        )}
+        <Pressable
+          style={styles(palette).addGearButton}
+          onPress={() => setGearModalVisible(true)}
+        >
+          <ThemedText style={styles(palette).addGearButtonText}>+ Add Gear</ThemedText>
         </Pressable>
-      )}
+      </View>
 
       <SectionDivider />
 
@@ -1410,6 +1421,102 @@ const inviteChannel = supabase
                   </ScrollView>
                 )}
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Add Golf Gear Modal */}
+        <Modal visible={gearModalVisible} transparent animationType="slide" onRequestClose={() => setGearModalVisible(false)}>
+          <View style={styles(palette).modalOverlay}>
+            <View style={styles(palette).modalContent}>
+              <View style={styles(palette).modalHeader}>
+                <ThemedText style={styles(palette).modalTitle}>Add Golf Gear</ThemedText>
+                <Pressable onPress={() => setGearModalVisible(false)}>
+                  <ThemedText style={styles(palette).modalClose}>✕</ThemedText>
+                </Pressable>
+              </View>
+              
+              <View style={styles(palette).inputContainer}>
+                <ThemedText style={styles(palette).inputLabel}>Gear Type</ThemedText>
+                <View style={styles(palette).gearTypeSelector}>
+                  {['driver', 'irons', 'wedges', 'putter', 'ball', 'bag', 'other'].map((type) => (
+                    <Pressable
+                      key={type}
+                      style={[
+                        styles(palette).gearTypeButton,
+                        newGear.type === type && styles(palette).gearTypeButtonActive
+                      ]}
+                      onPress={() => setNewGear({ ...newGear, type: type as any })}
+                    >
+                      <ThemedText
+                        style={[
+                          styles(palette).gearTypeButtonText,
+                          newGear.type === type && styles(palette).gearTypeButtonTextActive
+                        ]}
+                      >
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles(palette).inputContainer}>
+                <ThemedText style={styles(palette).inputLabel}>Brand</ThemedText>
+                <TextInput
+                  style={styles(palette).textInput}
+                  value={newGear.brand}
+                  onChangeText={(text) => setNewGear({ ...newGear, brand: text })}
+                  placeholder="e.g., Titleist, Callaway, TaylorMade"
+                  placeholderTextColor={palette.textLight}
+                />
+              </View>
+
+              <View style={styles(palette).inputContainer}>
+                <ThemedText style={styles(palette).inputLabel}>Model</ThemedText>
+                <TextInput
+                  style={styles(palette).textInput}
+                  value={newGear.model}
+                  onChangeText={(text) => setNewGear({ ...newGear, model: text })}
+                  placeholder="e.g., TSR3, Apex, Stealth 2"
+                  placeholderTextColor={palette.textLight}
+                />
+              </View>
+
+              <View style={styles(palette).inputContainer}>
+                <ThemedText style={styles(palette).inputLabel}>Notes (Optional)</ThemedText>
+                <TextInput
+                  style={[styles(palette).textInput, { height: 80 }]}
+                  value={newGear.notes}
+                  onChangeText={(text) => setNewGear({ ...newGear, notes: text })}
+                  placeholder="Any additional details..."
+                  placeholderTextColor={palette.textLight}
+                  multiline
+                />
+              </View>
+
+              <Pressable
+                style={styles(palette).addGearModalButton}
+                onPress={() => {
+                  if (newGear.brand && newGear.model) {
+                    const newItem: GolfGearItem = {
+                      id: Date.now().toString(),
+                      type: newGear.type as any,
+                      brand: newGear.brand,
+                      model: newGear.model,
+                      notes: newGear.notes || undefined,
+                    };
+                    setGolfGear([...golfGear, newItem]);
+                    setNewGear({ type: 'driver', brand: '', model: '', notes: '' });
+                    setGearModalVisible(false);
+                    showToast('Gear added successfully!');
+                  } else {
+                    Alert.alert('Missing Information', 'Please fill in brand and model.');
+                  }
+                }}
+              >
+                <ThemedText style={styles(palette).addGearModalButtonText}>Add to Bag</ThemedText>
+              </Pressable>
             </View>
           </View>
         </Modal>
@@ -2202,6 +2309,43 @@ modalCloseButton: {
   borderRadius: 10,
   backgroundColor: palette.primary + '10',
 },
+modalContent: {
+  backgroundColor: palette.white,
+  borderRadius: 24,
+  padding: 24,
+  width: '90%',
+  maxHeight: '80%',
+  shadowColor: palette.primary,
+  shadowOpacity: 0.2,
+  shadowRadius: 20,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 10,
+},
+modalClose: {
+  fontSize: 28,
+  color: palette.primary,
+  fontWeight: '700',
+},
+inputContainer: {
+  marginBottom: 18,
+},
+inputLabel: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: palette.textDark,
+  marginBottom: 8,
+  letterSpacing: 0.3,
+},
+textInput: {
+  backgroundColor: palette.background,
+  borderRadius: 12,
+  paddingHorizontal: 16,
+  paddingVertical: 12,
+  fontSize: 15,
+  color: palette.textDark,
+  borderWidth: 1.5,
+  borderColor: palette.grey,
+},
 
 searchInputContainer: {
   flexDirection: 'row',
@@ -2435,56 +2579,116 @@ achievementDate: {
   color: palette.textLight,
   marginTop: 4,
 },
-monthlyChallengeCard: {
+// Golf Gear Styles
+gearSection: {
+  marginHorizontal: SCREEN_WIDTH * 0.05,
+  marginBottom: 16,
+},
+gearGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 12,
+  marginBottom: 16,
+},
+gearCard: {
+  width: (SCREEN_WIDTH - 64) / 2,
   backgroundColor: palette.white,
   borderRadius: 16,
-  padding: 20,
-  marginHorizontal: SCREEN_WIDTH * 0.05,
-  marginVertical: 16,
-  borderLeftWidth: 5,
-  borderLeftColor: palette.primary,
+  padding: 16,
+  borderWidth: 2,
+  borderColor: palette.primary + '30',
   shadowColor: palette.primary,
   shadowOpacity: 0.1,
-  shadowRadius: 10,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 3,
+},
+gearType: {
+  fontSize: 11,
+  fontWeight: '600',
+  color: palette.primary,
+  textTransform: 'uppercase',
+  letterSpacing: 0.5,
+  marginBottom: 6,
+},
+gearBrand: {
+  fontSize: 16,
+  fontWeight: '800',
+  color: palette.textDark,
+  marginBottom: 4,
+},
+gearModel: {
+  fontSize: 14,
+  fontWeight: '600',
+  color: palette.textLight,
+  marginBottom: 6,
+},
+gearNotes: {
+  fontSize: 12,
+  color: palette.textLight,
+  fontStyle: 'italic',
+  lineHeight: 16,
+},
+addGearButton: {
+  backgroundColor: palette.primary,
+  paddingVertical: 14,
+  borderRadius: 12,
+  alignItems: 'center',
+  shadowColor: palette.primary,
+  shadowOpacity: 0.2,
+  shadowRadius: 8,
   shadowOffset: { width: 0, height: 3 },
   elevation: 4,
 },
-challengeHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 12,
-},
-rankBadge: {
-  backgroundColor: palette.primary,
-  paddingHorizontal: 12,
-  paddingVertical: 6,
-  borderRadius: 20,
-},
-rankText: {
+addGearButtonText: {
   color: palette.white,
-  fontSize: 14,
+  fontSize: 15,
+  fontWeight: '700',
+  letterSpacing: 0.3,
+},
+gearTypeSelector: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  gap: 8,
+  marginTop: 8,
+},
+gearTypeButton: {
+  paddingHorizontal: 14,
+  paddingVertical: 10,
+  borderRadius: 10,
+  backgroundColor: palette.background,
+  borderWidth: 1.5,
+  borderColor: palette.grey,
+},
+gearTypeButtonActive: {
+  backgroundColor: palette.primary,
+  borderColor: palette.primary,
+},
+gearTypeButtonText: {
+  fontSize: 13,
+  fontWeight: '600',
+  color: palette.textDark,
+},
+gearTypeButtonTextActive: {
+  color: palette.white,
   fontWeight: '700',
 },
-challengeDescription: {
-  fontSize: 14,
-  color: palette.textDark,
-  marginBottom: 16,
-  lineHeight: 20,
-},
-challengeFooter: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
+addGearModalButton: {
+  backgroundColor: palette.primary,
+  paddingVertical: 14,
+  borderRadius: 12,
   alignItems: 'center',
+  marginTop: 20,
+  shadowColor: palette.primary,
+  shadowOpacity: 0.2,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 4,
 },
-challengeDate: {
-  fontSize: 13,
-  color: palette.textLight,
-  fontWeight: '500',
-},
-viewLeaderboard: {
-  fontSize: 14,
-  color: palette.primary,
-  fontWeight: '600',
+addGearModalButtonText: {
+  color: palette.white,
+  fontSize: 16,
+  fontWeight: '700',
+  letterSpacing: 0.3,
 },
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mully",
     "slug": "golf-companion",
-    "version": "1.0.108",
+    "version": "1.0.110",
     "orientation": "portrait",
     "icon": "./assets/images/MullyLogoCircle.png",
     "assetBundlePatterns": [
@@ -22,7 +22,7 @@
       "bundleIdentifier": "com.anonymous.golfcompanion"
     },
     "android": {
-      "versionCode": 109,
+      "versionCode": 110,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/MullyLogoCircle.png",
         "backgroundColor": "#003b23"

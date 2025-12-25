@@ -14,6 +14,11 @@ export function PerformanceChart({ userId, type = 'score' }: { userId: string; t
   const { palette } = useTheme();
   const screenWidth = Dimensions.get('window').width;
 
+  const toFiniteNumber = (value: unknown): number => {
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numericValue) ? numericValue : 0;
+  };
+
   useEffect(() => {
     loadData();
   }, [userId, type]);
@@ -45,17 +50,17 @@ export function PerformanceChart({ userId, type = 'score' }: { userId: string; t
 
       switch (type) {
         case 'putts':
-          dataPoints = rounds.map(r => r.putts || 0);
+          dataPoints = rounds.map(r => toFiniteNumber(r.putts));
           chartTitle = 'Putts Per Round';
           chartColor = palette.warning;
           break;
         case 'fairways':
-          dataPoints = rounds.map(r => r.fairways_hit || 0);
+          dataPoints = rounds.map(r => toFiniteNumber(r.fairways_hit));
           chartTitle = 'Fairways Hit';
           chartColor = palette.success;
           break;
         default:
-          dataPoints = rounds.map(r => r.score);
+          dataPoints = rounds.map(r => toFiniteNumber(r.score));
           chartTitle = 'Score Trend';
           chartColor = palette.primary;
       }

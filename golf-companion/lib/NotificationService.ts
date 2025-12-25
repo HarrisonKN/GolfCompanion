@@ -32,7 +32,6 @@ const ROUTE_MAP: Record<string, string> = {
  */
 export function initializeNotificationHandlers(
   router: ReturnType<typeof useRouter>,
-  onNotificationBannerShow: (title: string, body: string, data: NotificationData) => void
 ) {
   console.log('🔔 Initializing notification handlers...');
 
@@ -80,9 +79,6 @@ export function initializeNotificationHandlers(
     } catch (err) {
       console.warn('⚠️ Failed to schedule local notification:', err);
     }
-
-    // Show banner for foreground notification
-    onNotificationBannerShow(title, body, data);
   });
 
   // FCM: Handle notification tap (app in background)

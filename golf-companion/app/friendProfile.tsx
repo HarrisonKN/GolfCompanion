@@ -6,6 +6,7 @@ import { useTheme } from "@/components/ThemeContext";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/components/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GolfGearService, GolfGearItem } from '@/lib/GolfGearService';
 
 type FriendProfile = {
   full_name: string | null;
@@ -45,6 +46,7 @@ export default function FriendProfileScreen() {
   const [profile, setProfile] = useState<FriendProfile | null>(null);
   const [stats, setStats] = useState<FriendStats | null>(null);
   const [rounds, setRounds] = useState<RoundHistory[]>([]);
+  const [gear, setGear] = useState<GolfGearItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +144,14 @@ export default function FriendProfileScreen() {
 
       if (roundsError) throw roundsError;
       setRounds(roundsData || []);
+      // Fetch friend's gear
+      try {
+        const gearItems = await GolfGearService.fetchByUser(String(friendId));
+        setGear(gearItems || []);
+      } catch (e) {
+        console.warn('Friend gear fetch warning:', e);
+        setGear([]);
+      }
       setError(null); // Clear error on success
 
     } catch (error: any) {
@@ -285,6 +295,31 @@ export default function FriendProfileScreen() {
               </View>
             ))}
           </ScrollView>
+        )}
+      </View>
+
+      {/* Friend's Golf Gear */}
+      <View style={styles(palette).section}>
+        <ThemedText type="subtitle" style={styles(palette).sectionTitle}>
+          🏌️ {profile.full_name ? `${profile.full_name.split(' ')[0]}'s` : 'Friend’s'} Gear
+        </ThemedText>
+        {gear.length === 0 ? (
+          <ThemedText style={styles(palette).infoText}>No gear shared yet.</ThemedText>
+        ) : (
+          <View style={styles(palette).gearGrid}>
+            {gear.map((item) => (
+              <View key={item.id} style={styles(palette).gearCard}>
+                <ThemedText style={styles(palette).gearType}>
+                  {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                </ThemedText>
+                <ThemedText style={styles(palette).gearBrand}>{item.brand}</ThemedText>
+                <ThemedText style={styles(palette).gearModel}>{item.model}</ThemedText>
+                {item.notes && (
+                  <ThemedText style={styles(palette).gearNotes}>{item.notes}</ThemedText>
+                )}
+              </View>
+            ))}
+          </View>
         )}
       </View>
     </ScrollView>
@@ -465,6 +500,43 @@ const styles = (palette: any) => StyleSheet.create({
     fontSize: 14,
     color: palette.textDark,
     marginBottom: 2,
+  },
+  gearGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  gearCard: {
+    width: SCREEN_WIDTH * 0.44,
+    backgroundColor: palette.backgroundv2,
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: palette.black,
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  gearType: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: palette.primary,
+    marginBottom: 4,
+  },
+  gearBrand: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: palette.textDark,
+  },
+  gearModel: {
+    fontSize: 13,
+    color: palette.textLight,
+    marginBottom: 4,
+  },
+  gearNotes: {
+    fontSize: 12,
+    color: palette.text,
   },
   infoText: {
     fontSize: 16,

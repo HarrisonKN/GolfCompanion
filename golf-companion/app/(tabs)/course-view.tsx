@@ -20,7 +20,7 @@ import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from "expo-router";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import haversine from "haversine-distance";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -38,7 +38,8 @@ import {
   StyleProp, 
   ViewStyle,
   InteractionManager, 
-  Easing 
+  Easing,
+  useWindowDimensions,
 } from "react-native";
 import DropDownPicker from "react-native-dropdown-picker";
 import MapView, {
@@ -50,6 +51,8 @@ import MapView, {
 import type { LatLng } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialIcons } from '@expo/vector-icons';
+import BugReportModal from '@/components/BugReportModal';
 
 // ------------------- STEP OVERLAY COMPONENT -------------------------
 function StepOverlay({ visible, message, onConfirm, onCancel, confirmButtons }: {
@@ -268,6 +271,10 @@ export default function CourseViewScreen() {
   // --- safe-area + dynamic map padding (our addition) ---
   const insets = useSafeAreaInsets();
   const [topPadPx, setTopPadPx] = useState(0); // space covered by dropdown stack
+  
+  // --- Expandable action menu state ---
+  const [actionRailCollapsed, setActionRailCollapsed] = useState(true);
+  const [bugReportModalVisible, setBugReportModalVisible] = useState(false);
   const [scoreH, setScoreH] = useState(0); // measured height of score overlay
   const [actionsH, setActionsH] = useState(0); // measured height of action buttons
   // --- Friend Live Locations ---
@@ -293,6 +300,51 @@ export default function CourseViewScreen() {
   const FLY_MS = 900;
   const CLOUD_CLOSE_MS = 320;
   const CLOUD_OPEN_MS = 700;
+
+  // Left action rail (collapsible + device scaled)
+  const { width: railW, height: railH } = useWindowDimensions();
+  const railMin = useMemo(() => Math.min(railW, railH), [railH, railW]);
+  const railPx = useCallback((ratio: number) => Math.round(railMin * ratio), [railMin]);
+  const railSizes = useMemo(() => {
+    const handleW = Math.max(railPx(0.09), 36);
+    const handleH = Math.max(railPx(0.13), 48);
+    const buttonsW = Math.max(railPx(0.38), 140);
+    // Collapsed: hide buttons but show part of the handle
+    const collapsedTranslateX = -(buttonsW - railPx(-0.06));
+    return {
+      bottomOffset: insets.bottom + Math.max(railPx(0.28), 90),
+      handleW,
+      handleH,
+      icon: Math.max(railPx(0.05), 18),
+      padSm: Math.max(railPx(0.02), 8),
+      padMd: Math.max(railPx(0.03), 10),
+      buttonGap: Math.max(railPx(0.02), 8),
+      buttonMinW: Math.max(railPx(0.38), 140),
+      buttonRadius: Math.max(railPx(0.04), 12),
+      shadowRadius: Math.max(railPx(0.015), 4),
+      shadowOffsetY: Math.max(railPx(0.01), 2),
+      elevation: Math.max(railPx(0.02), 4),
+      text: Math.max(railPx(0.036), 13),
+      tapSlop: Math.max(railPx(0.02), 8),
+      collapsedTranslateX,
+    };
+  }, [insets.bottom, railPx]);
+
+  const actionRailAnim = useRef(new Animated.Value(railSizes.collapsedTranslateX)).current;
+
+  const toggleActionRail = () => {
+    const nextCollapsed = !actionRailCollapsed;
+    const target = nextCollapsed ? railSizes.collapsedTranslateX : 0;
+    
+    Animated.spring(actionRailAnim, {
+      toValue: target,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start(() => {
+      setActionRailCollapsed(nextCollapsed);
+    });
+  };
 
   //Menu ui 
   const LABEL_CLEARANCE = 24;
@@ -1812,9 +1864,9 @@ const refreshScoreboard = React.useCallback(async () => {
                     : "-- m"}
                 </Text>
               )}
-              {distanceToPin !== null && (
+              {distanceToPin !== null && typeof distanceToPin === 'number' && (
                 <Text style={S.bannerInfo}>
-                  Distance to Pin: {distanceToPin?.toFixed(0)} m
+                  Distance to Pin: {distanceToPin.toFixed(0)} m
                 </Text>
               )}
             </View>
@@ -2444,6 +2496,116 @@ const refreshScoreboard = React.useCallback(async () => {
 
       {/* Drop Pin button removed per instructions; handleDropPin still available for internal use. */}
 
+      {/* Left Action Rail (Collapsible) */}
+      <Animated.View
+        style={[
+          S.actionRailContainer,
+          {
+            bottom: railSizes.bottomOffset,
+            transform: [{ translateX: actionRailAnim }],
+          },
+        ]}
+      >
+        <View
+          pointerEvents={actionRailCollapsed ? 'none' : 'auto'}
+          style={[
+            S.actionRailButtons,
+            {
+              paddingVertical: railSizes.padSm,
+              paddingHorizontal: railSizes.padMd,
+              gap: railSizes.buttonGap,
+              borderTopRightRadius: railSizes.buttonRadius,
+              borderBottomRightRadius: railSizes.buttonRadius,
+              elevation: railSizes.elevation,
+              shadowRadius: railSizes.shadowRadius,
+              shadowOffset: { width: 0, height: railSizes.shadowOffsetY },
+            },
+          ]}
+        >
+          <Pressable
+            onPress={() => {
+              setBugReportModalVisible(true);
+              setActionRailCollapsed(true);
+              Animated.spring(actionRailAnim, {
+                toValue: railSizes.collapsedTranslateX,
+                useNativeDriver: true,
+                friction: 8,
+                tension: 100,
+              }).start();
+            }}
+            style={({ pressed }) => [
+              S.actionRailButton,
+              {
+                paddingVertical: railSizes.padSm,
+                paddingHorizontal: railSizes.padMd,
+                gap: railSizes.padSm,
+                borderRadius: railSizes.buttonRadius,
+                minWidth: railSizes.buttonMinW,
+              },
+              pressed && S.actionRailButtonPressed,
+            ]}
+            hitSlop={railSizes.tapSlop}
+          >
+            <MaterialIcons name="bug-report" size={railSizes.icon} color={palette.white} />
+            <Text style={[S.actionRailButtonText, { fontSize: railSizes.text }]}>Report Bug</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              router.push('/settings');
+              setActionRailCollapsed(true);
+              Animated.spring(actionRailAnim, {
+                toValue: railSizes.collapsedTranslateX,
+                useNativeDriver: true,
+                friction: 8,
+                tension: 100,
+              }).start();
+            }}
+            style={({ pressed }) => [
+              S.actionRailButton,
+              {
+                paddingVertical: railSizes.padSm,
+                paddingHorizontal: railSizes.padMd,
+                gap: railSizes.padSm,
+                borderRadius: railSizes.buttonRadius,
+                minWidth: railSizes.buttonMinW,
+              },
+              pressed && S.actionRailButtonPressed,
+            ]}
+            hitSlop={railSizes.tapSlop}
+          >
+            <MaterialIcons name="settings" size={railSizes.icon} color={palette.white} />
+            <Text style={[S.actionRailButtonText, { fontSize: railSizes.text }]}>Settings</Text>
+          </Pressable>
+        </View>
+
+        <Pressable onPress={toggleActionRail} style={[
+          S.actionRailHandle,
+          {
+            width: railSizes.handleW,
+            height: railSizes.handleH,
+            borderTopRightRadius: railSizes.handleH / 2,
+            borderBottomRightRadius: railSizes.handleH / 2,
+            elevation: railSizes.elevation,
+            shadowRadius: railSizes.shadowRadius,
+            shadowOffset: { width: 0, height: railSizes.shadowOffsetY },
+          },
+        ]} hitSlop={railSizes.tapSlop}
+        >
+          <MaterialIcons
+            name={actionRailCollapsed ? 'keyboard-arrow-right' : 'keyboard-arrow-left'}
+            size={railSizes.icon}
+            color={palette.white}
+          />
+        </Pressable>
+      </Animated.View>
+
+      {/* Bug Report Modal */}
+      <BugReportModal
+        visible={bugReportModalVisible}
+        onClose={() => setBugReportModalVisible(false)}
+      />
+
       {/* Action Buttons for New Holes */}
       {selectedHole &&
         !(
@@ -2786,14 +2948,14 @@ const styles = (palette: any) =>
     //-------Pin Button Styling -----
     pinButton: {
       position: "absolute",
-      bottom: 80,
+      bottom: 200,
       left: 20,
       backgroundColor: "#111",
       paddingVertical: 10,
       paddingHorizontal: 16,
       borderRadius: 20,
-      zIndex: 1000,
-      elevation: 5,
+      zIndex: 2000,
+      elevation: 25,
       shadowColor: "#000",
       shadowOpacity: 0.2,
       shadowRadius: 6,
@@ -2804,7 +2966,6 @@ const styles = (palette: any) =>
       fontWeight: "bold",
       fontSize: 14,
     },
-
     //---------Distance Overlay Styling ------
     distanceOverlay: {
       position: "absolute",
@@ -2931,6 +3092,61 @@ const styles = (palette: any) =>
       color: palette.textLight,
       fontWeight: "600",
       textAlign: "center",
+    },
+    
+    // Left Action Rail Styles
+    actionRailContainer: {
+      position: 'absolute',
+      left: 0,
+      bottom: 120,
+      flexDirection: 'row',
+      alignItems: 'center',
+      zIndex: 2500,
+      elevation: 25,
+    },
+    actionRailHandle: {
+      width: 44,
+      height: 52,
+      backgroundColor: palette.primary,
+      borderTopRightRadius: 26,
+      borderBottomRightRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      elevation: 6,
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 3 },
+    },
+    actionRailButtons: {
+      backgroundColor: palette.primary,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderTopRightRadius: 18,
+      borderBottomRightRadius: 18,
+      gap: 10,
+      elevation: 6,
+      shadowColor: '#000',
+      shadowOpacity: 0.18,
+      shadowRadius: 5,
+      shadowOffset: { width: 0, height: 2 },
+    },
+    actionRailButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+      backgroundColor: palette.white + '1F',
+      minWidth: 160,
+    },
+    actionRailButtonPressed: {
+      opacity: 0.75,
+    },
+    actionRailButtonText: {
+      color: palette.white,
+      fontWeight: '700',
     },
 
     // ---- new my location button (legacy FAB, kept if needed) ------

@@ -27,8 +27,18 @@
  * - Animation uses native driver for smooth transitions.
  */
 
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Pressable, StyleSheet, Animated, Dimensions, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Pressable,
+  StyleSheet,
+  Animated,
+  Modal,
+  FlatList,
+  ActivityIndicator,
+  RefreshControl,
+  useWindowDimensions,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 import { useTheme } from '@/components/ThemeContext';
@@ -37,78 +47,154 @@ import { useRouter } from 'expo-router';
 import { supabase } from '@/components/supabase';
 import { useAuth } from '@/components/AuthContext';
 
-const { width: screenWidth } = Dimensions.get('window');
+import {
+  deleteNotification,
+  getNotificationHistory,
+  getUnreadNotificationCount,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  type StoredNotification,
+} from '@/lib/NotificationHistory';
 
 export const GlobalNotificationPanel = React.memo(() => {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const minDim = useMemo(() => Math.min(screenWidth, screenHeight), [screenHeight, screenWidth]);
 
-  const [pendingFriendRequests, setPendingFriendRequests] = useState<any[]>([]);
-  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
+  const sizes = useMemo(() => {
+    // All sizing derives from the current device dimensions.
+    const px = (ratio: number) => Math.round(minDim * ratio);
+    const pxH = (ratio: number) => Math.round(screenHeight * ratio);
+    const border = Math.max(1, px(0.005));
+
+    return {
+      bottomOffset: insets.bottom + pxH(0.11),
+
+      handleWidth: Math.max(px(0.06), 22),
+      handleHeight: Math.max(px(0.12), 40),
+
+      iconSm: px(0.04),
+      iconMd: px(0.06),
+      iconLg: px(0.16),
+
+      padXs: px(0.01),
+      padSm: px(0.02),
+      padMd: px(0.04),
+
+      radiusSm: px(0.03),
+      radiusMd: px(0.04),
+      radiusLg: px(0.08),
+
+      textXs: px(0.026),
+      textSm: px(0.03),
+      textMd: px(0.036),
+      textLg: px(0.05),
+
+      badgeSize: Math.max(px(0.05), 18),
+      badgeBorder: border,
+
+      shadowRadius: px(0.02),
+      shadowOffsetY: Math.max(1, px(0.008)),
+      elevation: Math.max(2, px(0.015)),
+      tapSlop: px(0.02),
+
+      listPad: px(0.03),
+      itemGap: px(0.02),
+      itemPad: px(0.03),
+      itemRadius: px(0.035),
+
+      modalHeaderPadV: px(0.04),
+      modalHeaderPadH: px(0.05),
+      modalHeaderTopPad: Math.max(px(0.02), insets.top + px(0.02)),
+
+      // Initial hidden position before we measure actual layout width.
+      initialCollapsedTranslateX: 0,
+    };
+  }, [insets.bottom, insets.top, minDim, screenHeight]);
+
+  const [notifications, setNotifications] = useState<StoredNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(true);
-  const slideAnim = useRef(new Animated.Value(150)).current;
+  const [showFullModal, setShowFullModal] = useState(false);
+  const [collapsedTranslateX] = useState(0);
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const totalNotifications = pendingFriendRequests.length + pendingInvites.length;
+  useEffect(() => {
+    // Keep animation state stable on rotation / dimension changes.
+    if (isCollapsed) {
+      slideAnim.setValue(0);
+    }
+  }, [isCollapsed, slideAnim]);
 
-  // Fetch pending notifications
+  const prevUnreadCount = useRef(unreadCount);
+
+  const loadUnread = useCallback(async () => {
+    if (!user?.id) return;
+    const count = await getUnreadNotificationCount(user.id);
+    setUnreadCount(count);
+  }, [user?.id]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const data = await getNotificationHistory(user.id);
+      setNotifications(data);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadUnread(), loadNotifications()]);
+    setRefreshing(false);
+  }, [loadNotifications, loadUnread]);
+
   useEffect(() => {
     if (!user?.id) return;
 
-    const fetchNotifications = async () => {
-      const [{ data: requests }, { data: invites }] = await Promise.all([
-        supabase
-          .from('friend_requests')
-          .select('*')
-          .eq('requested_user_id', user.id)
-          .eq('status', 'pending'),
-        supabase
-          .from('hubroom_invites')
-          .select('id, group_id, voice_groups(name), status')
-          .eq('invited_user_id', user.id)
-          .eq('status', 'pending'),
-      ]);
+    loadUnread();
 
-      setPendingFriendRequests(requests || []);
-      setPendingInvites(invites || []);
-    };
-
-    fetchNotifications();
-
-    // Subscribe to real-time updates
-    const friendChannel = supabase
-      .channel('global:friend_requests')
+    const channel = supabase
+      .channel(`notification_history:user_id=eq.${user.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: `requested_user_id=eq.${user.id}` },
-        (payload) => {
-          setPendingFriendRequests(prev => [...prev, payload.new]);
-        }
-      )
-      .subscribe();
-
-    const inviteChannel = supabase
-      .channel('global:hubroom_invites')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'hubroom_invites', filter: `invited_user_id=eq.${user.id}` },
-        (payload) => {
-          setPendingInvites(prev => [...prev, payload.new]);
+        { event: '*', schema: 'public', table: 'notification_history', filter: `user_id=eq.${user.id}` },
+        () => {
+          loadUnread();
+          if (showFullModal) {
+            loadNotifications();
+          }
         }
       )
       .subscribe();
 
     return () => {
-      friendChannel.unsubscribe();
-      inviteChannel.unsubscribe();
+      supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [loadNotifications, loadUnread, showFullModal, user?.id]);
 
-  if (totalNotifications === 0) return null;
+  useEffect(() => {
+    if (unreadCount > prevUnreadCount.current && unreadCount > 0) {
+      setIsCollapsed(false);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 8,
+      }).start();
+    }
+    prevUnreadCount.current = unreadCount;
+  }, [slideAnim, unreadCount]);
 
   const toggleCollapse = () => {
-    const toValue = isCollapsed ? 0 : 150;
+    const toValue = isCollapsed ? 0 : collapsedTranslateX;
     setIsCollapsed(!isCollapsed);
 
     Animated.spring(slideAnim, {
@@ -119,320 +205,583 @@ export const GlobalNotificationPanel = React.memo(() => {
     }).start();
   };
 
-  const handleAcceptFriend = async (requestId: string, requesterId: string) => {
-    try {
-      await supabase.from('friends').insert([
-        { user_id: user.id, friend_id: requesterId },
-        { user_id: requesterId, friend_id: user.id }
-      ]);
+  const handleMarkAsRead = useCallback(
+    async (notificationId: string) => {
+      await markNotificationAsRead(notificationId);
+      setNotifications(prev => prev.map(n => (n.id === notificationId ? { ...n, read: true } : n)));
+      loadUnread();
+    },
+    [loadUnread]
+  );
 
-      await supabase.from('friend_requests').update({ status: 'accepted' }).eq('id', requestId);
-      setPendingFriendRequests(prev => prev.filter(req => req.id !== requestId));
-    } catch (error) {
-      console.error('Error accepting friend request:', error);
-    }
-  };
+  const handleMarkAllAsRead = useCallback(async () => {
+    if (!user?.id) return;
+    await markAllNotificationsAsRead(user.id);
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    loadUnread();
+  }, [loadUnread, user?.id]);
 
-  const handleDeclineFriend = async (requestId: string) => {
-    try {
-      await supabase.from('friend_requests').update({ status: 'declined' }).eq('id', requestId);
-      setPendingFriendRequests(prev => prev.filter(req => req.id !== requestId));
-    } catch (error) {
-      console.error('Error declining friend request:', error);
-    }
-  };
+  const handleDelete = useCallback(
+    async (notificationId: string) => {
+      await deleteNotification(notificationId);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      loadUnread();
+    },
+    [loadUnread]
+  );
 
-  const handleAcceptInvite = async (inviteId: string, groupId: string) => {
-    try {
-      await supabase.from('voice_group_members').insert({
-        group_id: groupId,
-        user_id: user.id,
+  const handleAcceptGameInvite = useCallback(
+    async (item: StoredNotification) => {
+      const gameId = item.data?.gameId;
+      if (!gameId || !user?.id) return;
+
+      await supabase
+        .from('game_participantsv2')
+        .update({ status: 'accepted' })
+        .eq('game_id', gameId)
+        .eq('user_id', user.id);
+
+      await deleteNotification(item.id);
+      setNotifications(prev => prev.filter(n => n.id !== item.id));
+      loadUnread();
+
+      router.push({
+        pathname: '/(tabs)/scorecard',
+        params: { gameId },
       });
+    },
+    [loadUnread, router, user?.id]
+  );
 
-      await supabase.from('hubroom_invites').update({ status: 'accepted' }).eq('id', inviteId);
-      setPendingInvites(prev => prev.filter(inv => inv.id !== inviteId));
-    } catch (error) {
-      console.error('Error accepting invite:', error);
-    }
-  };
+  const handleDeclineGameInvite = useCallback(
+    async (item: StoredNotification) => {
+      const gameId = item.data?.gameId;
+      if (!gameId || !user?.id) return;
 
-  const handleDeclineInvite = async (inviteId: string) => {
+      await supabase
+        .from('game_participantsv2')
+        .update({ status: 'declined' })
+        .eq('game_id', gameId)
+        .eq('user_id', user.id);
+
+      await handleDelete(item.id);
+    },
+    [handleDelete, user?.id]
+  );
+
+  const formatTime = useCallback((dateString: string) => {
     try {
-      await supabase.from('hubroom_invites').update({ status: 'declined' }).eq('id', inviteId);
-      setPendingInvites(prev => prev.filter(inv => inv.id !== inviteId));
-    } catch (error) {
-      console.error('Error declining invite:', error);
-    }
-  };
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
 
-  const navigateToNotifications = () => {
-    router.push('/(tabs)/account');
-  };
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = monthNames[date.getMonth()];
+      const day = date.getDate();
+      return `${month} ${day}`;
+    } catch {
+      return 'unknown';
+    }
+  }, []);
+
+  const isGameInvite = useCallback((item: StoredNotification) => {
+    return (item.title ?? '').toLowerCase().includes('game invite');
+  }, []);
+
+  const modalTitle = useMemo(() => '📬 Notifications', []);
+
+  useEffect(() => {
+    if (showFullModal) {
+      loadNotifications();
+    }
+  }, [loadNotifications, showFullModal]);
+
+  const renderNotification = useCallback(
+    ({ item }: { item: StoredNotification }) => {
+      const unread = !item.read;
+      const gameInvite = isGameInvite(item);
+
+      return (
+        <Pressable
+          onPress={() => unread && handleMarkAsRead(item.id)}
+          style={[
+            styles(palette, sizes, insets).historyItem,
+            {
+              backgroundColor: unread ? palette.primary + '20' : palette.background,
+              borderLeftColor: unread ? palette.primary : palette.grey,
+            },
+          ]}
+        >
+          <View style={styles(palette, sizes, insets).historyContent}>
+            <View style={styles(palette, sizes, insets).historyHeader}>
+              <ThemedText
+                style={[
+                  styles(palette, sizes, insets).historyTitle,
+                  { fontWeight: unread ? '800' : '600' },
+                ]}
+                numberOfLines={2}
+              >
+                {item.title}
+              </ThemedText>
+              {!item.read && <View style={styles(palette, sizes, insets).unreadDot} />}
+            </View>
+
+            <ThemedText style={styles(palette, sizes, insets).historyBody} numberOfLines={2}>
+              {item.body}
+            </ThemedText>
+
+            <ThemedText style={styles(palette, sizes, insets).historyTime}>
+              {formatTime(item.created_at)}
+            </ThemedText>
+
+            {gameInvite && (
+              <View style={styles(palette, sizes, insets).inviteActions}>
+                <Pressable
+                  style={styles(palette, sizes, insets).inviteAccept}
+                  onPress={() => handleAcceptGameInvite(item)}
+                >
+                  <ThemedText style={styles(palette, sizes, insets).inviteActionText}>Accept</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={styles(palette, sizes, insets).inviteDecline}
+                  onPress={() => handleDeclineGameInvite(item)}
+                >
+                  <ThemedText style={styles(palette, sizes, insets).inviteActionText}>Decline</ThemedText>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          <Pressable
+            style={styles(palette, sizes, insets).historyDelete}
+            onPress={() => handleDelete(item.id)}
+            hitSlop={sizes.tapSlop}
+          >
+            <MaterialIcons name="close" size={sizes.iconSm} color={palette.grey} />
+          </Pressable>
+        </Pressable>
+      );
+    },
+    [
+      formatTime,
+      handleAcceptGameInvite,
+      handleDeclineGameInvite,
+      handleDelete,
+      handleMarkAsRead,
+      isGameInvite,
+      palette,
+    ]
+  );
 
   return (
-    <Animated.View
-      style={[
-        styles(palette).container,
-        {
-          bottom: insets.bottom + 90,
-          transform: [{ translateX: slideAnim }],
-        },
-      ]}
-    >
-      {isCollapsed ? (
-        // Collapsed State - Notification Badge
-        <View style={styles(palette).collapsedContainer}>
-          <Pressable onPress={toggleCollapse} style={styles(palette).expandTab}>
-            <MaterialIcons name="notifications" size={18} color={palette.white} />
-            <View style={styles(palette).badge}>
-              <ThemedText style={styles(palette).badgeText}>{totalNotifications}</ThemedText>
+    <>
+      {/* Notification Panel - Bottom Right */}
+      <Animated.View
+        style={[
+          styles(palette, sizes, insets).container,
+          {
+            bottom: sizes.bottomOffset,
+            transform: [{ translateX: slideAnim }],
+          },
+        ]}
+      >
+        {isCollapsed ? (
+          // ===== Collapsed State =====
+          <View
+            style={styles(palette, sizes, insets).collapsedContainer}
+            onLayout={() => {
+              // No-op: we keep the collapsed panel flush-right.
+            }}
+          >
+            {/* Compact content: notification count moved left of handle */}
+            <View style={styles(palette, sizes, insets).collapsedContent}>
+              {unreadCount > 0 && (
+                <View style={styles(palette, sizes, insets).countBubble}>
+                  <ThemedText style={styles(palette, sizes, insets).countText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </ThemedText>
+                </View>
+              )}
+              <MaterialIcons name="notifications" size={Math.round(sizes.iconSm * 0.9)} color={palette.white} />
             </View>
-          </Pressable>
 
-          <Pressable onPress={navigateToNotifications} style={styles(palette).collapsedLabel}>
-            <ThemedText style={styles(palette).collapsedText}>
-              {totalNotifications} notification{totalNotifications !== 1 ? 's' : ''}
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : (
-        // Expanded State - Full Notification List
-        <View style={styles(palette).expandedContainer}>
-          {/* Header */}
-          <View style={styles(palette).expandedHeader}>
-            <ThemedText style={styles(palette).headerTitle}>📬 Notifications</ThemedText>
-            <Pressable onPress={toggleCollapse} style={styles(palette).collapseButton}>
-              <MaterialIcons name="keyboard-arrow-right" size={20} color={palette.primary} />
+            {/* Expand tab */}
+            <Pressable onPress={toggleCollapse} style={styles(palette, sizes, insets).expandTab}>
+              <MaterialIcons name="keyboard-arrow-left" size={Math.round(sizes.iconSm * 0.9)} color={palette.white} />
             </Pressable>
+          </View>
+        ) : (
+          // ===== Expanded State =====
+          <View style={styles(palette, sizes, insets).expandedContainer}>
+            <Pressable 
+              onPress={() => {
+                setShowFullModal(true);
+                loadNotifications();
+              }}
+              style={styles(palette, sizes, insets).expandedButton}
+            >
+              <MaterialIcons name="notifications" size={sizes.iconMd} color={palette.white} />
+              {unreadCount > 0 && (
+                <View style={styles(palette, sizes, insets).badge}>
+                  <ThemedText style={styles(palette, sizes, insets).badgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </ThemedText>
+                </View>
+              )}
+            </Pressable>
+            
+            <Pressable onPress={toggleCollapse} hitSlop={sizes.tapSlop} style={styles(palette, sizes, insets).collapseButton}>
+              <MaterialIcons name="keyboard-arrow-right" size={sizes.iconSm} color={palette.white} />
+            </Pressable>
+          </View>
+        )}
+      </Animated.View>
+
+      {/* Full Screen Modal */}
+      <Modal
+        visible={showFullModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowFullModal(false)}
+      >
+        <View style={styles(palette, sizes, insets).modalContainer}>
+          {/* Header */}
+          <View style={styles(palette, sizes, insets).modalHeader}>
+            <ThemedText style={styles(palette, sizes, insets).modalTitle}>{modalTitle}</ThemedText>
+            <View style={styles(palette, sizes, insets).modalHeaderActions}>
+              {unreadCount > 0 && (
+                <Pressable onPress={handleMarkAllAsRead} style={styles(palette, sizes, insets).markAllButton}>
+                  <ThemedText style={styles(palette, sizes, insets).markAllText}>Mark all read</ThemedText>
+                </Pressable>
+              )}
+              <Pressable onPress={() => setShowFullModal(false)} style={styles(palette, sizes, insets).closeButton}>
+                <MaterialIcons name="close" size={sizes.iconMd} color={palette.white} />
+              </Pressable>
+            </View>
           </View>
 
           {/* Notifications List */}
-          <ScrollView style={styles(palette).notificationsList} showsVerticalScrollIndicator={false}>
-            {/* Friend Requests */}
-            {pendingFriendRequests.map(request => (
-              <View key={request.id} style={styles(palette).notificationItem}>
-                <View style={styles(palette).notificationContent}>
-                  <ThemedText style={styles(palette).notificationTitle}>Friend Request</ThemedText>
-                  <ThemedText style={styles(palette).notificationMessage}>
-                    New friend request received
+          {loading && notifications.length === 0 ? (
+            <View style={styles(palette, sizes, insets).loaderContainer}>
+              <ActivityIndicator size="large" color={palette.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={notifications}
+              renderItem={renderNotification}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={
+                notifications.length === 0
+                  ? styles(palette, sizes, insets).emptyList
+                  : styles(palette, sizes, insets).listContent
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={palette.primary}
+                />
+              }
+              ListEmptyComponent={
+                <View style={styles(palette, sizes, insets).emptyState}>
+                  <MaterialIcons name="notifications-none" size={sizes.iconLg} color={palette.textLight} />
+                  <ThemedText style={styles(palette, sizes, insets).emptyText}>All caught up!</ThemedText>
+                  <ThemedText style={styles(palette, sizes, insets).emptySubtext}>
+                    No notifications right now
                   </ThemedText>
                 </View>
-                <View style={styles(palette).notificationActions}>
-                  <Pressable
-                    style={styles(palette).acceptButton}
-                    onPress={() => handleAcceptFriend(request.id, request.requester_user_id)}
-                  >
-                    <MaterialIcons name="check" size={16} color={palette.white} />
-                  </Pressable>
-                  <Pressable
-                    style={styles(palette).declineButton}
-                    onPress={() => handleDeclineFriend(request.id)}
-                  >
-                    <MaterialIcons name="close" size={16} color={palette.white} />
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-
-            {/* Group Invites */}
-            {pendingInvites.map(invite => (
-              <View key={invite.id} style={styles(palette).notificationItem}>
-                <View style={styles(palette).notificationContent}>
-                  <ThemedText style={styles(palette).notificationTitle}>Group Invite</ThemedText>
-                  <ThemedText style={styles(palette).notificationMessage} numberOfLines={1}>
-                    Join "{invite.voice_groups?.name || 'group'}"
-                  </ThemedText>
-                </View>
-                <View style={styles(palette).notificationActions}>
-                  <Pressable
-                    style={styles(palette).acceptButton}
-                    onPress={() => handleAcceptInvite(invite.id, invite.group_id)}
-                  >
-                    <MaterialIcons name="check" size={16} color={palette.white} />
-                  </Pressable>
-                  <Pressable
-                    style={styles(palette).declineButton}
-                    onPress={() => handleDeclineInvite(invite.id)}
-                  >
-                    <MaterialIcons name="close" size={16} color={palette.white} />
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* View All Button */}
-          <Pressable
-            style={styles(palette).viewAllButton}
-            onPress={navigateToNotifications}
-          >
-            <ThemedText style={styles(palette).viewAllText}>View All Notifications</ThemedText>
-            <MaterialIcons name="arrow-forward" size={16} color={palette.white} />
-          </Pressable>
+              }
+            />
+          )}
         </View>
-      )}
-    </Animated.View>
+      </Modal>
+    </>
   );
 });
 
 GlobalNotificationPanel.displayName = 'GlobalNotificationPanel';
 
-const styles = (palette: any) => StyleSheet.create({
+const styles = (
+  palette: any,
+  sizes: {
+    bottomOffset: number;
+    handleWidth: number;
+    handleHeight: number;
+    iconSm: number;
+    iconMd: number;
+    iconLg: number;
+    padXs: number;
+    padSm: number;
+    padMd: number;
+    radiusSm: number;
+    radiusMd: number;
+    radiusLg: number;
+    textXs: number;
+    textSm: number;
+    textMd: number;
+    textLg: number;
+    badgeSize: number;
+    badgeBorder: number;
+    shadowRadius: number;
+    shadowOffsetY: number;
+    elevation: number;
+    tapSlop: number;
+    listPad: number;
+    itemGap: number;
+    itemPad: number;
+    itemRadius: number;
+    modalHeaderPadV: number;
+    modalHeaderPadH: number;
+    modalHeaderTopPad: number;
+    initialCollapsedTranslateX: number;
+  },
+  insets: { top: number; bottom: number }
+) =>
+  StyleSheet.create({
   container: {
     position: 'absolute',
     right: 0,
-    width: screenWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
     zIndex: 50,
   },
   collapsedContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 12,
-    marginBottom: 12,
+    position: 'relative',
   },
   expandTab: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: Math.round(sizes.handleWidth * 0.85) + sizes.padXs,
     backgroundColor: palette.primary,
+    borderTopRightRadius: sizes.radiusLg,
+    borderBottomRightRadius: sizes.radiusLg,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingLeft: sizes.padXs,
     shadowColor: palette.primary,
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
+    shadowRadius: sizes.shadowRadius,
+    shadowOffset: { width: 0, height: sizes.shadowOffsetY },
+    elevation: sizes.elevation,
+  },
+  collapsedContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: palette.primary,
+    paddingHorizontal: sizes.padXs,
+    paddingVertical: 0,
+    height: Math.round(sizes.handleHeight * 0.85),
+    borderTopLeftRadius: sizes.radiusMd,
+    borderBottomLeftRadius: sizes.radiusMd,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    paddingRight: sizes.padXs + Math.round(sizes.handleWidth * 0.85) + sizes.padXs,
+    gap: sizes.padXs,
+  },
+  countBubble: {
+    backgroundColor: palette.error,
+    minWidth: Math.round(sizes.badgeSize * 0.9),
+    height: Math.round(sizes.badgeSize * 0.9),
+    borderRadius: Math.round((sizes.badgeSize * 0.9) / 2),
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: sizes.padXs,
+  },
+  countText: {
+    color: palette.white,
+    fontSize: sizes.textXs,
+    fontWeight: '700',
+  },
+  expandedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: palette.primary,
+    borderTopLeftRadius: sizes.radiusLg,
+    borderBottomLeftRadius: sizes.radiusLg,
+    paddingLeft: sizes.padMd,
+    paddingRight: sizes.padSm,
+    paddingVertical: sizes.padSm,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: sizes.shadowRadius,
+    shadowOffset: { width: 0, height: sizes.shadowOffsetY },
+    elevation: sizes.elevation,
+  },
+  expandedButton: {
+    width: Math.max(sizes.handleHeight, sizes.handleWidth) + sizes.padXs,
+    height: Math.max(sizes.handleHeight, sizes.handleWidth) + sizes.padXs,
+    borderRadius: Math.round((Math.max(sizes.handleHeight, sizes.handleWidth) + sizes.padXs) / 2),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  collapseButton: {
+    padding: sizes.padXs,
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -sizes.padXs,
+    right: 0,
     backgroundColor: palette.error,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    minWidth: sizes.badgeSize,
+    height: sizes.badgeSize,
+    borderRadius: Math.round(sizes.badgeSize / 2),
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: palette.white,
+    borderWidth: sizes.badgeBorder,
+    borderColor: palette.primary,
+    paddingHorizontal: sizes.padXs,
   },
   badgeText: {
     color: palette.white,
-    fontSize: 12,
+    fontSize: sizes.textXs,
     fontWeight: '700',
   },
-  collapsedLabel: {
-    marginRight: 12,
-    paddingHorizontal: 12,
+  modalContainer: {
+    flex: 1,
+    backgroundColor: palette.background,
   },
-  collapsedText: {
-    fontSize: 13,
-    color: palette.primary,
+  modalHeader: {
+    backgroundColor: palette.primary,
+    paddingVertical: sizes.modalHeaderPadV,
+    paddingHorizontal: sizes.modalHeaderPadH,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: sizes.modalHeaderTopPad,
+  },
+  modalTitle: {
+    fontSize: sizes.textLg,
+    fontWeight: '800',
+    color: palette.white,
+  },
+  closeButton: {
+    padding: sizes.padXs,
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sizes.itemGap,
+  },
+  markAllButton: {
+    paddingHorizontal: sizes.padSm,
+    paddingVertical: sizes.padXs,
+    borderRadius: sizes.radiusLg,
+    backgroundColor: palette.white + '26',
+  },
+  markAllText: {
+    color: palette.white,
+    fontSize: sizes.textSm,
+    fontWeight: '700',
+  },
+  modalContent: {
+    flex: 1,
+  },
+  loaderContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: sizes.modalHeaderPadV,
+  },
+  listContent: {
+    padding: sizes.listPad,
+  },
+  emptyList: {
+    flexGrow: 1,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Math.max(sizes.modalHeaderPadV, sizes.listPad * 2),
+    paddingHorizontal: sizes.listPad,
+  },
+  emptyText: {
+    marginTop: sizes.padMd,
+    fontSize: sizes.textMd,
+    color: palette.textDark,
     fontWeight: '600',
   },
-  expandedContainer: {
-    backgroundColor: palette.white,
-    borderRadius: 16,
-    marginRight: 12,
-    marginBottom: 12,
-    overflow: 'hidden',
-    shadowColor: palette.primary,
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-    maxHeight: 380,
-  },
-  expandedHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.primary + '12',
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: palette.primary,
-    letterSpacing: 0.3,
-  },
-  collapseButton: {
-    padding: 4,
-  },
-  notificationsList: {
-    maxHeight: 280,
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.primary + '08',
-  },
-  notificationContent: {
-    flex: 1,
-    marginRight: 10,
-  },
-  notificationTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: palette.primary,
-    marginBottom: 2,
-  },
-  notificationMessage: {
-    fontSize: 12,
+  emptySubtext: {
+    marginTop: sizes.padSm,
+    fontSize: sizes.textSm,
     color: palette.textLight,
-    fontWeight: '500',
+    textAlign: 'center',
   },
-  notificationActions: {
+  historyItem: {
     flexDirection: 'row',
-    gap: 6,
+    alignItems: 'flex-start',
+    padding: sizes.itemPad,
+    marginBottom: sizes.itemGap,
+    borderRadius: sizes.itemRadius,
+    borderLeftWidth: Math.max(2, Math.round(sizes.badgeBorder * 1.5)),
   },
-  acceptButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  historyContent: {
+    flex: 1,
+    marginRight: sizes.padSm,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: sizes.padSm,
+    marginBottom: sizes.padXs,
+  },
+  historyTitle: {
+    flex: 1,
+    color: palette.textDark,
+    fontSize: sizes.textSm,
+  },
+  unreadDot: {
+    width: sizes.padSm,
+    height: sizes.padSm,
+    borderRadius: Math.round(sizes.padSm / 2),
     backgroundColor: palette.primary,
+  },
+  historyBody: {
+    color: palette.textLight,
+    fontSize: sizes.textSm,
+    lineHeight: Math.round(sizes.textSm * 1.25),
+    marginBottom: sizes.padXs,
+  },
+  historyTime: {
+    color: palette.textLight,
+    fontSize: sizes.textXs,
+  },
+  historyDelete: {
+    padding: sizes.padSm,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: palette.primary,
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
-  declineButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  inviteActions: {
+    flexDirection: 'row',
+    gap: sizes.itemGap,
+    marginTop: sizes.itemGap,
+  },
+  inviteAccept: {
+    backgroundColor: palette.primary,
+    paddingHorizontal: sizes.padMd,
+    paddingVertical: sizes.padSm,
+    borderRadius: sizes.radiusMd,
+  },
+  inviteDecline: {
     backgroundColor: palette.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: palette.error,
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    paddingHorizontal: sizes.padMd,
+    paddingVertical: sizes.padSm,
+    borderRadius: sizes.radiusMd,
   },
-  viewAllButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: palette.primary,
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: palette.primary + '12',
-  },
-  viewAllText: {
-    fontSize: 13,
-    fontWeight: '700',
+  inviteActionText: {
     color: palette.white,
-    letterSpacing: 0.3,
+    fontWeight: '800',
   },
-});
+  });

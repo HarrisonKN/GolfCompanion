@@ -15,7 +15,6 @@ import { supabase } from "@/components/supabase";
 import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
 import { registerForPushNotificationsAsync } from "@/lib/PushNotifications";
-import { NotificationCenter } from "@/components/NotificationCenter";
 import { getUnreadNotificationCount } from "@/lib/NotificationHistory";
 
 export default function TabsLayout() {
@@ -150,15 +149,6 @@ export default function TabsLayout() {
           <Tabs.Screen name="golfHub" options={{ title: "GolfHub", tabBarIcon: ({ color }) => <MaterialIcons name="audiotrack" size={28} color={color} /> }} />
           <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: ({ color }) => <MaterialIcons name="account-circle" size={28} color={color} /> }} />
         </Tabs>
-        
-        {/* Notification Center - Always visible on main pages */}
-        {user && (
-          <NotificationCenter
-            userId={user.id}
-            unreadCount={unreadCount}
-            onUnreadChange={setUnreadCount}
-          />
-        )}
       </View>
     </CourseProvider>
   );

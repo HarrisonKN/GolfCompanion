@@ -17,6 +17,7 @@ import Toast from 'react-native-toast-message';
 import { notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/NotificationTriggers';
 import { PerformanceChart } from '@/components/PerformanceChart';
 import { useRouter } from 'expo-router';
+import { GolfGearService } from '@/lib/GolfGearService';
 
 // ------------------- TYPES -------------------------
 type UserProfile = {
@@ -395,6 +396,24 @@ export default function AccountsScreen() {
     }
   };
 
+  const fetchGear = async () => {
+    try {
+      if (!user?.id) return;
+      const items = await GolfGearService.fetchByUser(user.id);
+      // map to local type without user_id
+      const mapped = (items || []).map(i => ({
+        id: i.id,
+        type: i.type,
+        brand: i.brand,
+        model: i.model,
+        notes: i.notes ?? undefined,
+      }));
+      safeSetState(setGolfGear, mapped);
+    } catch (err) {
+      console.error('Gear fetch error:', err);
+    }
+  };
+
   const fetchUserStats = async () => {
     if (!user) return;
     try {
@@ -452,6 +471,7 @@ export default function AccountsScreen() {
         fetchProfile();
         fetchRounds();
         fetchUserStats();
+        fetchGear();
       }
     }, [user, authLoading, isMounted])
   );
@@ -599,6 +619,7 @@ export default function AccountsScreen() {
     setRefreshing(true);
     await fetchProfile();
     await fetchRounds();
+    await fetchGear();
   
     // Friends
     const { data: friendsData } = await supabase
@@ -727,7 +748,6 @@ export default function AccountsScreen() {
         { event: 'INSERT', schema: 'public', table: 'friend_requests', filter: `requested_user_id=eq.${user.id}` },
         (payload) => {
           console.log('🔥 NEW FRIEND REQUEST:', payload);
-          showToast('New friend request received!');
           setPendingFriendRequests(prev => [...prev, payload.new]);
         }
       )
@@ -741,11 +761,7 @@ export default function AccountsScreen() {
         { event: 'UPDATE', schema: 'public', table: 'friend_requests', filter: `requester_user_id=eq.${user.id}` },
         (payload) => {
           console.log('🔥 FRIEND REQUEST UPDATE:', payload);
-          if (payload.new.status === 'accepted') {
-            showToast('Friend request accepted!');
-          } else if (payload.new.status === 'declined') {
-            showToast('Friend request declined');
-          }
+          // No in-app toast: rely on system notifications
         }
       )
       .subscribe();
@@ -793,8 +809,6 @@ export default function AccountsScreen() {
               profiles: friendProfile
             }];
           });
-          
-          showToast('You have a new friend!');
         }
       )
       .subscribe();
@@ -816,7 +830,6 @@ const inviteChannel = supabase
       .eq('id', payload.new.group_id)
       .single();
     
-    showToast(`Invited to join ${groupData?.name || 'a group'}!`);
     setPendingInvites(prev => [...prev, payload.new]);
   }
 )
@@ -904,7 +917,7 @@ const inviteChannel = supabase
 
   // --- Derived Golf Stats (fallbacks from round history) ---
   const fmtNumber = (value: number | null | undefined, digits?: number) => {
-    if (value == null || Number.isNaN(value)) return 'N/A';
+    if (value == null || Number.isNaN(value) || typeof value !== 'number') return 'N/A';
     return typeof digits === 'number' ? value.toFixed(digits) : String(value);
   };
 
@@ -1592,17 +1605,24 @@ const inviteChannel = supabase
                 style={styles(palette).addGearModalButton}
                 onPress={() => {
                   if (newGear.brand && newGear.model) {
-                    const newItem: GolfGearItem = {
-                      id: Date.now().toString(),
-                      type: newGear.type as any,
-                      brand: newGear.brand,
-                      model: newGear.model,
-                      notes: newGear.notes || undefined,
-                    };
-                    setGolfGear([...golfGear, newItem]);
-                    setNewGear({ type: 'driver', brand: '', model: '', notes: '' });
-                    setGearModalVisible(false);
-                    showToast('Gear added successfully!');
+                    (async () => {
+                      try {
+                        if (!user?.id) return;
+                        await GolfGearService.add(user.id, {
+                          type: newGear.type as any,
+                          brand: newGear.brand,
+                          model: newGear.model,
+                          notes: newGear.notes || undefined,
+                        });
+                        await fetchGear();
+                        setNewGear({ type: 'driver', brand: '', model: '', notes: '' });
+                        setGearModalVisible(false);
+                        showToast('Gear added successfully!');
+                      } catch (e) {
+                        console.error('Add gear error:', e);
+                        Alert.alert('Error', 'Failed to save gear.');
+                      }
+                    })();
                   } else {
                     Alert.alert('Missing Information', 'Please fill in brand and model.');
                   }

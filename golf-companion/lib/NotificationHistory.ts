@@ -122,7 +122,7 @@ export async function markAllNotificationsAsRead(userId: string) {
  */
 export async function getUnreadNotificationCount(userId: string) {
   try {
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from('notification_history')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
@@ -133,7 +133,7 @@ export async function getUnreadNotificationCount(userId: string) {
       return 0;
     }
 
-    return data ? data.length : 0;
+    return count ?? 0;
   } catch (err) {
     console.error('❌ Error getting unread count:', err);
     return 0;

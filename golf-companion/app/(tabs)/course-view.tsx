@@ -258,6 +258,29 @@ export default function CourseViewScreen() {
   const router = useRouter();
   const { selectedCourse, setSelectedCourse } = useCourse();
 
+
+
+    // ============================================================================
+  // MULTIPLAYER CONTEXT RESOLUTION (GAME + PARTICIPANTS)
+  // ----------------------------------------------------------------------------
+  // Why this exists:
+  // - Invitee devices sometimes open CourseView without a `gameId` route param
+  //   and/or with stale AsyncStorage values.
+  // - If we rely on route params alone, CourseView can load the wrong game or none.
+  // - We resolve a reliable `resolvedGameId` and then load participants from
+  //   `game_participantsv2` (status=accepted) and hydrate UI `players[]` from `profiles`.
+  //
+  // What it does:
+  // 1) Build candidate gameIds from: route param -> AsyncStorage -> recent accepted games
+  // 2) Validate candidates by checking they have accepted participants
+  // 3) Set `resolvedGameId` as the single source of truth for multiplayer
+  // 4) If CourseView has no course selected (invitee edge case), derive course_id
+  //    from `golf_rounds` using the resolved gameId
+  //
+  // NOTE:
+  // - `players[]` is UI-only (avatars/names). Scoreboard calculations should not
+  //   depend on it (race conditions). Scoreboard uses DB participants directly.
+  // ============================================================================
   useEffect(() => {
     let cancelled = false;
 
@@ -768,7 +791,9 @@ export default function CourseViewScreen() {
       return;
     }
 
-    // Resolve gameId (route -> storage)
+    // Resolve gameId for score inserts.
+    // NOTE: Multiplayer paths should prefer `resolvedGameId` (single source of truth).
+    // This block is kept for solo compatibility BUT WILL PROBABLY BE REMOVED.
     let gid = Array.isArray(gameId) ? gameId[0] : gameId;
     if (!gid) {
       const raw = await AsyncStorage.getItem('currentGamePlayers');
@@ -1344,7 +1369,23 @@ export default function CourseViewScreen() {
     }
     return m;
   }, [holes, courseParArray]);
-
+// ============================================================================
+// SCOREBOARD REFRESH (BOTTOM OVERLAY)
+// ----------------------------------------------------------------------------
+// Source of truth:
+// - Multiplayer: participant IDs come from `game_participantsv2` for `resolvedGameId`
+// - Solo: participant IDs fall back to the signed-in user
+//
+// Fetch strategy:
+// - Reads `scores` for either:
+//   - game_id = resolvedGameId (multiplayer)
+//   - course_id = selectedCourse AND game_id IS NULL (solo)
+// - Ignores team rows for this path (team_id IS NULL)
+//
+// Why DB participants (not `players[]` state):
+// - `players[]` hydrates asynchronously from profiles and can be briefly empty.
+// - Using DB participants removes invitee/host race conditions and stale closures.
+// ============================================================================
 // Fetch and compute scoreboard (today, for selected course)
 const refreshScoreboard = React.useCallback(async () => {
     if (!selectedCourse) return;
@@ -1361,6 +1402,7 @@ const refreshScoreboard = React.useCallback(async () => {
     // Resolve baseIds (authoritative: DB participants for multiplayer)
     let baseIds: string[] = [];
 
+        // Multiplayer: always derive participant IDs from DB (invitee-safe).
     if (gid) {
       const { data: parts, error: partErr } = await supabase
         .from('game_participantsv2')
@@ -1492,14 +1534,20 @@ const refreshScoreboard = React.useCallback(async () => {
     AsyncStorage.setItem('sbScalePct', String(sbScalePct)).catch(() => {});
   }, [sbScalePct]);
 
-  // Refresh on focus and tab press (already present)
+    // ---- Refresh triggers ----
+  // We refresh on screen focus and tab presses so CourseView stays in sync with
+  // Scorecard.tsx and realtime score updates.
   useFocusEffect(React.useCallback(() => { refreshScoreboard(); }, [refreshScoreboard]));
   useEffect(() => {
     const unsub = navigation.addListener('tabPress', () => { refreshScoreboard(); });
     return unsub;
   }, [navigation, refreshScoreboard]);
 
-  // Realtime by game (fallback course)
+   // ---- Realtime score subscription ----
+  // Subscribes to `scores` changes for:
+  // - game_id = resolvedGameId (multiplayer)
+  // - otherwise course_id = selectedCourse (solo)
+  // Uses refreshScoreboardRef to avoid stale closures.
   useEffect(() => {
     let active = true;
     (async () => {
@@ -2083,7 +2131,9 @@ const refreshScoreboard = React.useCallback(async () => {
                   const selectedHole = holes.find(h => h.hole_number === selectedHoleNumber);
                   if (!selectedHole) return;
 
-                  // Always use the resolved multiplayer gameId if available
+                  // IMPORTANT: Always use resolvedGameId in multiplayer.
+                  // If game_id is missing/null, inserts will hit the SOLO unique constraint
+                  // (player_id, course_id, hole_number) and can throw duplicate key errors.
                   const gid = resolvedGameId ?? (Array.isArray(gameId) ? gameId[0] : gameId) ?? null;
 
                   let payload: any = {

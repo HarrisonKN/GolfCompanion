@@ -139,6 +139,12 @@ type ScoreboardItem = {
   holesPlayed: number;
 };
 
+type PlayerRow = {
+  id: string;
+  name: string;
+  avatar_url?: string | null;
+};
+
 type FriendLocation = {
   user_id: string;
   course_id: string | null;
@@ -213,6 +219,9 @@ export default function CourseViewScreen() {
   // Trigger banner update when camera flight completes
   const [triggerBannerUpdate, setTriggerBannerUpdate] = useState(0);
   const [scoreboard, setScoreboard] = useState<ScoreboardItem[]>([]);
+  const [players, setPlayers] = useState<PlayerRow[]>([]);
+  // --- PATCH: Track resolved gameId for reactivity ---
+  const [resolvedGameId, setResolvedGameId] = useState<string | null>(null);
   const refreshScoreboardRef = useRef<null | (() => void)>(null);
   // Scoreboard scale (percentage, persisted)
   const [sbScalePct, setSbScalePct] = useState<number>(100); // 100% default
@@ -248,6 +257,196 @@ export default function CourseViewScreen() {
   const { courseId, playerIds, gameId, teams } = useLocalSearchParams<{ courseId?: string; playerIds?: string; gameId?: string; teams?: string }>();
   const router = useRouter();
   const { selectedCourse, setSelectedCourse } = useCourse();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      // --- Robust gameId resolver (invitee-safe + validated) ---
+      const gidFromParams = Array.isArray(gameId) ? gameId[0] : gameId;
+      let gidFromStorage: string | null = null;
+      try {
+        const raw = await AsyncStorage.getItem("currentGamePlayers");
+        if (raw) {
+          try { gidFromStorage = JSON.parse(raw)?.gameId ?? null; } catch {}
+        }
+      } catch {}
+
+      const candidates: string[] = [];
+      if (gidFromParams) candidates.push(String(gidFromParams));
+      if (gidFromStorage && !candidates.includes(String(gidFromStorage))) candidates.push(String(gidFromStorage));
+
+      // If we still have no candidates, pull a few recent accepted games for this user
+      if (candidates.length === 0 && user?.id) {
+        const { data: recent, error: recentErr } = await supabase
+          .from("game_participantsv2")
+          .select("game_id")
+          .eq("user_id", user.id)
+          .eq("status", "accepted")
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (recentErr) {
+          console.warn("❌ [CourseView] failed to derive recent gameIds from participants", recentErr);
+        } else {
+          for (const r of recent || []) {
+            const g = (r as any).game_id ? String((r as any).game_id) : null;
+            if (g && !candidates.includes(g)) candidates.push(g);
+          }
+        }
+      }
+
+      if (candidates.length === 0) {
+        console.warn("❌ [CourseView] could not resolve any gameId candidates");
+        return;
+      }
+
+      // Validate candidates by ensuring the game has accepted participants.
+      // This prevents stale AsyncStorage gameIds (the exact bug you're hitting).
+      let gid: string | null = null;
+      for (const c of candidates) {
+        const { data: partsCheck, error: partsErr } = await supabase
+          .from("game_participantsv2")
+          .select("user_id")
+          .eq("game_id", c)
+          .eq("status", "accepted")
+          .limit(1);
+
+        if (partsErr) {
+          console.warn("❌ [CourseView] participants check failed for candidate", c, partsErr);
+          continue;
+        }
+
+        if (partsCheck && partsCheck.length > 0) {
+          gid = c;
+          break;
+        }
+      }
+
+      if (!gid) {
+        // Second pass: AsyncStorage may be stale. Pull a few recent accepted games for this user and validate them.
+        if (user?.id) {
+          const { data: recent, error: recentErr } = await supabase
+            .from("game_participantsv2")
+            .select("game_id")
+            .eq("user_id", user.id)
+            .eq("status", "accepted")
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+          if (recentErr) {
+            console.warn("❌ [CourseView] failed to load recent games for validation", recentErr);
+          } else {
+            const recentIds = (recent || [])
+              .map((r: any) => (r?.game_id ? String(r.game_id) : null))
+              .filter(Boolean) as string[];
+
+            for (const c of recentIds) {
+              // skip already-checked stale candidates
+              if (candidates.includes(c)) continue;
+
+              const { data: partsCheck, error: partsErr } = await supabase
+                .from("game_participantsv2")
+                .select("user_id")
+                .eq("game_id", c)
+                .eq("status", "accepted")
+                .limit(1);
+
+              if (partsErr) {
+                console.warn("❌ [CourseView] participants check failed for recent game", c, partsErr);
+                continue;
+              }
+
+              if (partsCheck && partsCheck.length > 0) {
+                gid = c;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (!gid) {
+        console.warn("❌ [CourseView] no valid gameId found (storage/params stale + recent validation failed)", candidates);
+        return;
+      }
+
+      // Avoid extra rerenders when gid hasn't changed
+      setResolvedGameId(prev => (prev === gid ? prev : gid));
+
+      // If invitee navigated here without courseId selected, derive it from the round/game record
+      if (!selectedCourse && !courseId) {
+        try {
+          const { data: roundRow, error: roundErr } = await supabase
+            .from("golf_rounds")
+            .select("course_id")
+            .eq("id", gid)
+            .single();
+
+          if (roundErr) {
+            console.warn("❌ [CourseView] failed to derive course_id from golf_rounds", roundErr);
+          } else if (roundRow?.course_id) {
+            console.log("🧭 [CourseView] derived course_id from round:", roundRow.course_id);
+            setSelectedCourse(roundRow.course_id);
+          }
+        } catch (e) {
+          console.warn("❌ [CourseView] derive course_id exception", e);
+        }
+      }
+
+      console.log("🎬 [CourseView] loading participants for game:", gid);
+
+      // 1) Load participants (authoritative membership)
+      const { data: participants, error } = await supabase
+        .from("game_participantsv2")
+        .select("user_id")
+        .eq("game_id", gid)
+        .eq("status", "accepted");
+
+      // STEP 2: Sanity log after loading participants
+      console.log("👥 [CourseView] participants rows:", participants);
+
+      if (cancelled) return;
+
+      if (error || !participants || participants.length === 0) {
+        console.warn("❌ [CourseView] no participants found", error);
+        return;
+      }
+
+      const userIds = participants.map((p: any) => p.user_id).filter(Boolean);
+
+      // 2) Load profiles for those participants
+      const { data: profiles, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", userIds);
+
+      if (cancelled) return;
+
+      if (pErr || !profiles) {
+        console.warn("❌ [CourseView] failed to load profiles", pErr);
+        return;
+      }
+
+      // 3) Normalize to PlayerRow[] (first name + avatar)
+      const rows: PlayerRow[] = (profiles as any[]).map((p: any) => ({
+        id: p.id,
+        name: (p.full_name || "").trim().split(" ")[0] || "Player",
+        avatar_url: p.avatar_url ?? null,
+      }));
+
+      console.log("✅ [CourseView] loaded players:", rows);
+      setPlayers(rows);
+      // STEP 3: Sanity log after setting players
+      console.log("🧠 [CourseView] players state set to:", rows.map(r => r.id));
+      // Ensure scoreboard refreshes once participants are known
+      refreshScoreboardRef.current?.();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gameId, user?.id]);
 
   const mountedRef = useRef(true);
   const mapRef = useRef<MapView | null>(null);
@@ -1146,197 +1345,121 @@ export default function CourseViewScreen() {
     return m;
   }, [holes, courseParArray]);
 
-  // Fetch and compute scoreboard (today, for selected course)
+// Fetch and compute scoreboard (today, for selected course)
 const refreshScoreboard = React.useCallback(async () => {
     if (!selectedCourse) return;
 
-    // Resolve gameId (route -> storage)
-    let gid = Array.isArray(gameId) ? gameId[0] : gameId;
-    if (!gid) {
-      const raw = await AsyncStorage.getItem('currentGamePlayers');
-      if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
+    // Use resolvedGameId instead of re-resolving
+    const gid = resolvedGameId;
+
+    // If we're in a multiplayer flow but gid hasn't resolved yet, wait.
+    if ((gameId || resolvedGameId) && !gid) {
+      console.log("⏳ [CourseView] Waiting for resolvedGameId before building scoreboard");
+      return;
     }
 
-    // Resolve baseIds (participants if game, else selected/playerIds)
+    // Resolve baseIds (authoritative: DB participants for multiplayer)
     let baseIds: string[] = [];
+
     if (gid) {
-      const { data: parts, error: perr } = await supabase
-        .from('game_participants')
-        .select('player_id')
-        .eq('game_id', gid);
-      if (!perr && parts) baseIds = parts.map(p => p.player_id);
-    } else {
-      try {
-        if (playerIds) {
-          const raw = Array.isArray(playerIds) ? playerIds[0] : playerIds;
-          const parsed = JSON.parse(String(raw));
-          if (Array.isArray(parsed)) baseIds = parsed.filter(Boolean);
-        }
-      } catch {}
-      if (baseIds.length === 0 && user?.id) baseIds = [user.id];
+      const { data: parts, error: partErr } = await supabase
+        .from('game_participantsv2')
+        .select('user_id')
+        .eq('game_id', gid)
+        .eq('status', 'accepted');
+
+      if (partErr) {
+        console.warn('❌ [CourseView] failed to load game participants for scoreboard', partErr);
+        return;
+      }
+
+      baseIds = (parts || []).map((p: any) => p.user_id).filter(Boolean);
+
+      if (baseIds.length === 0) {
+        console.warn('⏳ [CourseView] no participants found for game', gid);
+        return;
+      }
+    } else if (user?.id) {
+      // Solo play fallback
+      baseIds = [user.id];
     }
 
-    // Fetch scores (hybrid: both course-only and game-based)
-    let rows: { player_id: string | null; team_id: string | null; hole_number: number; score: number | null }[] = [];
+    // Fetch scores (SOLO-aligned: player rows only; same uniqueness as modal)
+    // - If gid exists: only rows for that game_id
+    // - Else: only course_id rows from today with game_id null
+    // - Always ignore team rows (team_id must be null)
+    let rows: { player_id: string; hole_number: number; score: number | null; putts: number | null }[] = [];
     try {
       let q = supabase
         .from('scores')
-        .select('player_id, team_id, hole_number, score, game_id, course_id')
+        .select('player_id, hole_number, score, putts, game_id, course_id, team_id, inserted_at')
+        .is('team_id', null)
+        .not('player_id', 'is', null);
 
       if (gid) {
-        q = q.or(`game_id.eq.${gid},and(game_id.is.null,course_id.eq.${selectedCourse})`);
+        q = q.eq('game_id', gid);
       } else {
-        q = q.eq('course_id', selectedCourse);
+        q = q
+          .eq('course_id', selectedCourse)
+          .is('game_id', null);
       }
 
-      // Limit to today when not in a game (prevents old scores inflating totals)
-      if (!gid) {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        // If your table uses a different timestamp column, change 'created_at' accordingly.
-        q = q.gte('created_at', start.toISOString());
+      if (baseIds.length > 0) {
+        q = q.in('player_id', baseIds);
       }
 
-      let { data, error } = await q;
+      const { data, error } = await q;
       if (error) throw error;
-    // --- NEW TEAM-SAFE FILTERING FIX (ORDER CORRECTED) --- //
-    // Collect team IDs from score rows so we never miss a scramble team
-    const teamIdsFromRows =
-      Array.from(new Set((data || []).map((r: any) => r.team_id).filter(Boolean)));
 
-    // Collect team IDs from scrambleTeams (if loaded)
-    const teamIdsFromTeams =
-      (scrambleTeams ?? [])
-        .map(t => t.team_id)
-        .filter((id): id is string => typeof id === "string");
-
-    // Merge both sources so filter NEVER excludes valid team score rows
-    const allTeamIds = Array.from(new Set([...teamIdsFromRows, ...teamIdsFromTeams]));
-
-    // Merge players + teams
-    const allKeys = Array.from(
-      new Set([
-        ...baseIds.filter(Boolean),
-        ...allTeamIds
-      ])
-    );
-
-    // Re-run the filter ONLY when we have keys
-    if (allKeys.length > 0) {
-      // Rebuild query safely now that data exists
-      let q2 = supabase
-        .from('scores')
-        .select('player_id, team_id, hole_number, score, game_id, course_id');
-
-      if (gid) {
-        q2 = q2.or(`game_id.eq.${gid},and(game_id.is.null,course_id.eq.${selectedCourse})`);
-      } else {
-        q2 = q2.eq('course_id', selectedCourse);
-      }
-
-      if (!gid) {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        q2 = q2.gte('created_at', start.toISOString());
-      }
-
-      q2 = q2.or(
-        `player_id.in.(${allKeys.join(",")}),team_id.in.(${allKeys.join(",")})`
-      );
-
-      const { data: data2, error: err2 } = await q2;
-      if (!err2) {
-        data = data2; // overwrite original with filtered rows
-      }
-    }
-    // --- END NEW FIX --- //
-      // Map to the new row type (strip extra fields)
       rows = (data || []).map((r: any) => ({
-        player_id: r.player_id ?? null,
-        team_id: r.team_id ?? null,
-        hole_number: r.hole_number,
-        score: r.score,
+        player_id: String(r.player_id),
+        hole_number: Number(r.hole_number),
+        score: r.score ?? null,
+        putts: r.putts ?? null,
       }));
     } catch (e) {
       console.warn('Scoreboard fetch error:', e);
     }
 
-    // Include anyone who already has rows (e.g., you added a friend’s score)
-    const idsFromRows = Array.from(new Set((rows || []).map(r => r.player_id)));
-    baseIds = Array.from(
-      new Set([
-        ...baseIds,
-        ...idsFromRows.filter((id): id is string => typeof id === "string")
-      ])
-    );
-
-    // Build per-player/team per-hole map (latest score per hole assumed by upsert uniqueness)
-    const rowsByPlayer = new Map<string, Map<number, number>>(); // key (player_id or team_id) -> (hole -> score)
+    // Build per-player per-hole map (SOLO only)
+    const rowsByPlayer = new Map<string, Map<number, number>>();
     for (const r of rows) {
       if (r.score == null) continue;
-      const key = r.team_id ?? r.player_id;
-      if (!key) continue;
-      if (!rowsByPlayer.has(key)) rowsByPlayer.set(key, new Map());
-      rowsByPlayer.get(key)!.set(r.hole_number, r.score);
+      if (!r.player_id) continue;
+      if (!rowsByPlayer.has(r.player_id)) rowsByPlayer.set(r.player_id, new Map());
+      rowsByPlayer.get(r.player_id)!.set(r.hole_number, r.score);
     }
 
-    const teamIds = Array.from(new Set(rows.map(r => r.team_id).filter(Boolean))) as string[];
+    const items = baseIds.map(pid => {
+      const holeMap = rowsByPlayer.get(pid) ?? new Map<number, number>();
+      let strokes = 0;
+      let parSum = 0;
+      let holesPlayed = 0;
+      let holesWithPar = 0;
 
-    const items = [
-      ...(isScrambleMode
-        ? teamIds.map(tid => {
-            const holeMap = rowsByPlayer.get(tid) ?? new Map<number, number>();
-            let strokes = 0;
-            let parSum = 0;
-            let holesPlayed = 0;
+      for (const [holeNo, sc] of holeMap.entries()) {
+        // Always count strokes/holes for any entered score
+        strokes += sc;
+        holesPlayed++;
 
-            for (const [holeNo, sc] of holeMap.entries()) {
-              const par = parByHole.get(holeNo);
-              if (Number.isFinite(par)) {
-                strokes += sc;
-                parSum += par!;
-                holesPlayed++;
-              }
-            }
-
-            return {
-              team_id: tid,
-              player_id: null,
-              name: 'Team',
-              avatar_url: null,
-              strokes,
-              toPar: holesPlayed ? strokes - parSum : 0,
-              holesPlayed,
-            };
-          })
-        : []),
-
-      ...baseIds.map(pid => {
-        const holeMap = rowsByPlayer.get(pid) ?? new Map<number, number>();
-        let strokes = 0;
-        let parSum = 0;
-        let holesPlayed = 0;
-
-        for (const [holeNo, sc] of holeMap.entries()) {
-          const par = parByHole.get(holeNo);
-          if (Number.isFinite(par)) {
-            strokes += sc;
-            parSum += par!;
-            holesPlayed++;
-          }
+        const par = parByHole.get(holeNo);
+        if (Number.isFinite(par)) {
+          parSum += par!;
+          holesWithPar++;
         }
+      }
 
-        return {
-          team_id: null,
-          player_id: pid,
-          name: 'Unknown',
-          avatar_url: null,
-          strokes,
-          toPar: holesPlayed ? strokes - parSum : 0,
-          holesPlayed,
-        };
-      })
-    ];
+      return {
+        team_id: null,
+        player_id: pid,
+        name: 'Unknown',
+        avatar_url: null,
+        strokes,
+        // Only compute toPar when we have par info; otherwise keep it neutral
+        toPar: holesWithPar ? strokes - parSum : 0,
+        holesPlayed,
+      };
+    });
 
     // Profiles
     if (baseIds.length) {
@@ -1353,7 +1476,7 @@ const refreshScoreboard = React.useCallback(async () => {
 
     items.sort((a, b) => a.toPar - b.toPar || b.holesPlayed - a.holesPlayed);
     setScoreboard(items);
-  }, [selectedCourse, parByHole, playerIds, gameId, user?.id]);
+  }, [selectedCourse, parByHole, playerIds, resolvedGameId, user?.id, gameId]);
 
   useEffect(() => {
     (async () => {
@@ -1380,11 +1503,7 @@ const refreshScoreboard = React.useCallback(async () => {
   useEffect(() => {
     let active = true;
     (async () => {
-      let gid = Array.isArray(gameId) ? gameId[0] : gameId;
-      if (!gid) {
-        const raw = await AsyncStorage.getItem('currentGamePlayers');
-        if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
-      }
+      const gid = resolvedGameId;
       if (!active || !selectedCourse) return;
       const channel = supabase
         .channel(`scores_live_${gid ?? selectedCourse}`)
@@ -1393,13 +1512,16 @@ const refreshScoreboard = React.useCallback(async () => {
           gid
             ? { event: "*", schema: "public", table: "scores", filter: `game_id=eq.${gid}` }
             : { event: "*", schema: "public", table: "scores", filter: `course_id=eq.${selectedCourse}` },
-          () => refreshScoreboard()
+          () => {
+            console.log("🔁 [CourseView] score change detected → refreshing scoreboard");
+            refreshScoreboardRef.current?.();
+          }
         )
         .subscribe();
       return () => supabase.removeChannel(channel);
     })();
     return () => { active = false; };
-  }, [selectedCourse, gameId, refreshScoreboard]);
+  }, [selectedCourse, resolvedGameId, refreshScoreboard]);
 
   // Ensure initialization on mount
   useFocusEffect(
@@ -1421,6 +1543,13 @@ const refreshScoreboard = React.useCallback(async () => {
   useEffect(() => {
     refreshScoreboardRef.current = () => { refreshScoreboard(); };
   }, [refreshScoreboard]);
+
+  // When multiplayer context resolves (game + course), refresh the scoreboard
+  useEffect(() => {
+    if (!selectedCourse) return;
+    if (!resolvedGameId && gameId) return;
+    refreshScoreboardRef.current?.();
+  }, [selectedCourse, resolvedGameId, gameId]);
 
   // If pars load/change later, recompute toPar
   useEffect(() => {
@@ -1701,12 +1830,20 @@ const refreshScoreboard = React.useCallback(async () => {
     return false;
   }, [teams, scrambleTeams]);
 
+  useEffect(() => {
+  if (!isScrambleMode && scrambleTeams && scrambleTeams.length > 0) {
+    console.log("🧹 Clearing stale scrambleTeams (stroke play)");
+    setScrambleTeams(null);
+  }
+}, [isScrambleMode]);
+
     const showTeamScoreboard =
-    scrambleTeams &&
-    Array.isArray(scrambleTeams) &&
-    scrambleTeams.some(
-      (t: any) => Array.isArray(t.players) && t.players.length > 0
-    );
+  isScrambleMode === true &&
+  scrambleTeams != null &&
+  Array.isArray(scrambleTeams) &&
+  scrambleTeams.some(
+    (t: any) => Array.isArray(t.players) && t.players.length > 0
+  );
 
   // ------------------- COURSE VIEW UI -------------------------
   return (
@@ -1946,12 +2083,8 @@ const refreshScoreboard = React.useCallback(async () => {
                   const selectedHole = holes.find(h => h.hole_number === selectedHoleNumber);
                   if (!selectedHole) return;
 
-                  // Resolve gameId for game-based scoring
-                  let gid = Array.isArray(gameId) ? gameId[0] : gameId;
-                  if (!gid) {
-                    const raw = await AsyncStorage.getItem('currentGamePlayers');
-                    if (raw) { try { gid = JSON.parse(raw)?.gameId; } catch {} }
-                  }
+                  // Always use the resolved multiplayer gameId if available
+                  const gid = resolvedGameId ?? (Array.isArray(gameId) ? gameId[0] : gameId) ?? null;
 
                   let payload: any = {
                     course_id: selectedCourse!,
@@ -2574,7 +2707,9 @@ const refreshScoreboard = React.useCallback(async () => {
         >
           <View style={S.sbGrid}>
             {showTeamScoreboard ? (
-              scrambleTeams!.map((team: any, idx: number) => {
+              scrambleTeams!
+              .filter((team: any) => Array.isArray(team.players) && team.players.length > 0)
+              .map((team: any, idx: number) => {
                 const sbTeam = scoreboard.find((s: any) => s.team_id === team.team_id);
 
                 const strokes = sbTeam?.strokes ?? 0;
@@ -2642,25 +2777,30 @@ const refreshScoreboard = React.useCallback(async () => {
                 );
               })
             ) : (
-              scoreboard.map((p: any) => {
-                const first = (p.name || "").trim().split(" ")[0] || "Player";
+              players.map((pl: PlayerRow) => {
+                const sb = scoreboard.find(s => s.player_id === pl.id);
+
+                const first = pl.name || "Player";
                 const initials = first.slice(0, 1).toUpperCase();
-                const total = p.strokes ?? 0;
+                const total = sb?.strokes ?? 0;
+                const toPar = sb?.toPar ?? 0;
                 const toParDisplay =
-                  p.toPar === 0 ? "E" : p.toPar > 0 ? `+${p.toPar}` : `${p.toPar}`;
+                  toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : `${toPar}`;
+
 
                 return (
-                  <View key={p.player_id} style={S.sbTile}>
+                  <View key={pl.id} style={S.sbTile}>
                     <Pressable
                       onPress={() => {
-                        setActivePlayer(p);
+                        if (!sb) return;
+                        setActivePlayer(sb);
                         setTempScore(0);
                         setTempPutts(0);
                         setScoreModalVisible(true);
                       }}
                     >
-                      {p.avatar_url ? (
-                        <Image source={{ uri: p.avatar_url }} style={S.sbAvatarCircleImg} />
+                      {pl.avatar_url ? (
+                        <Image source={{ uri: pl.avatar_url }} style={S.sbAvatarCircleImg} />
                       ) : (
                         <View style={S.sbAvatarCircle}>
                           <Text style={S.sbAvatarCircleText}>{initials}</Text>

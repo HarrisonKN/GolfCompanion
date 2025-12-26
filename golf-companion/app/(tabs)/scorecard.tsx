@@ -13,7 +13,7 @@ import { supabase } from "@/components/supabase";
 import { useTheme } from "@/components/ThemeContext";
 import * as MediaLibrary from 'expo-media-library';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -113,6 +113,31 @@ export default function Scorecard() {
 
   const [saveModalVisible, setSaveModalVisible] = useState(false);
 
+  // --- DB-backed game mode (single source of truth) ---
+const [dbGameMode, setDbGameMode] = useState<string | null>(null);
+const [dbMatchPlayType, setDbMatchPlayType] = useState<string | null>(null);
+
+// --- DB-backed teams ---
+const [dbTeams, setDbTeams] = useState<any[]>([]);
+const [dbScrambleTeams, setDbScrambleTeams] = useState<any[]>([]);
+
+const safeSelectGameMeta = useCallback(async (gid: string) => {
+  const attempt = await supabase
+    .from("golf_rounds")
+    .select("course_id, game_mode, match_play_type")
+    .eq("id", gid)
+    .single();
+
+  if (!attempt.error) return attempt;
+
+  // Fallback for older schema
+  return supabase
+    .from("golf_rounds")
+    .select("course_id")
+    .eq("id", gid)
+    .single();
+}, []);
+
   // --- When gameId is present, we always load players from game_participantsv2 ---
   const [forceGameParticipantLoad, setForceGameParticipantLoad] = useState(false);
 
@@ -133,6 +158,10 @@ export default function Scorecard() {
   const normalizedGameMode = Array.isArray(gameMode) ? gameMode[0] : gameMode;
   const { matchPlayType } = useLocalSearchParams();
   const normalizedMatchPlayType = Array.isArray(matchPlayType) ? matchPlayType[0] : matchPlayType;
+
+  // Prefer DB-backed mode if available (prevents stale route params/old state forcing teams)
+  const effectiveGameMode = (dbGameMode ?? normalizedGameMode ?? "stroke") as string;
+  const effectiveMatchPlayType = (dbMatchPlayType ?? normalizedMatchPlayType ?? null) as string | null;
 
   const scrambleTeams = useMemo(() => {
     if (!teamParam) return null;
@@ -168,19 +197,25 @@ export default function Scorecard() {
     (async () => {
       // Ensure we have the correct course selected for this game
       try {
-        const { data: gameRow, error: gameErr } = await supabase
-          .from("golf_rounds")
-          .select("course_id")
-          .eq("id", gid)
-          .single();
+        const { data: gameRow, error: gameErr } = await safeSelectGameMeta(gid);
 
         if (gameErr) {
-          console.warn("Failed to load game for course_id", gameErr);
-        } else if (gameRow?.course_id && gameRow.course_id !== selectedCourse) {
-          setSelectedCourse(gameRow.course_id);
+          console.warn("Failed to load game meta", gameErr);
+        } else {
+          // course_id
+          if (gameRow?.course_id && gameRow.course_id !== selectedCourse) {
+            setSelectedCourse(gameRow.course_id);
+          }
+
+          // game_mode + match_play_type (may not exist on older schemas)
+          const gm = (gameRow as any)?.game_mode;
+          const mpt = (gameRow as any)?.match_play_type;
+
+          if (typeof gm === "string" && gm.length > 0) setDbGameMode(gm);
+          if (typeof mpt === "string" && mpt.length > 0) setDbMatchPlayType(mpt);
         }
       } catch (e) {
-        console.warn("Error fetching game row for participants load", e);
+        console.warn("Error fetching game meta for participants load", e);
       }
 
       // Load all participants for this game
@@ -223,14 +258,11 @@ export default function Scorecard() {
       console.log("✅ Loaded game participants:", rows);
       setPlayers(rows);
     })();
-  }, [gameId]);
+  }, [gameId, safeSelectGameMeta]);
 
-  const isScramble = normalizedGameMode === 'scramble';
-  const isMatchPlay = normalizedGameMode === 'match';
-  const isMatchPlayTeams =
-  isMatchPlay && normalizedMatchPlayType === "teams";
-  const [dbTeams, setDbTeams] = useState<any[]>([]);           
-  const [dbScrambleTeams, setDbScrambleTeams] = useState<any[]>([]);
+  const isScramble = effectiveGameMode === "scramble";
+  const isMatchPlay = effectiveGameMode === "match";
+  const isMatchPlayTeams = isMatchPlay && effectiveMatchPlayType === "teams";
 
   // ✅ Single source of truth for team rows:
   // - If we have a gameId, we render teams from DB (dbScrambleTeams)
@@ -354,6 +386,14 @@ useEffect(() => {
     setDbScrambleTeams(normalized);
   })();
 }, [isScramble, isMatchPlayTeams, gameId]);
+
+// If DB says not a team mode, clear any stale team state to prevent phantom team rows.
+useEffect(() => {
+  if (!isScramble && !isMatchPlayTeams) {
+    if (dbScrambleTeams.length) setDbScrambleTeams([]);
+    if (Object.keys(teamScores).length) setTeamScores({});
+  }
+}, [isScramble, isMatchPlayTeams]);
 
   useEffect(() => {
     if (courseId && typeof courseId === 'string') setSelectedCourse(courseId);
@@ -2109,7 +2149,7 @@ const styles = (palette: any) => StyleSheet.create({
   },
   confirmButton: {
     backgroundColor: palette.primary,
-    paddingVertical: 12,
+    paddingVertical: 12, 
     paddingHorizontal: 16,
     borderRadius:999,
     alignItems: 'center',
